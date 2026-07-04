@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>White Van Ops — Field Operations Software You Actually Own</title>
+<meta name="description" content="Self-hosted field operations management: scheduling, fleet, inventory, time tracking. One installer, database included. Your data never leaves your building." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* warm stone ramp — matches the product's remapped palette */
+    --zinc-50:#fafaf9; --zinc-100:#f5f5f4; --zinc-200:#e7e5e4; --zinc-300:#d6d3d1;
+    --zinc-400:#a8a29e; --zinc-500:#78716c; --zinc-600:#57534e; --zinc-700:#44403c;
+    --zinc-800:#292524; --zinc-900:#1c1917; --zinc-950:#0c0a09;
+    --blue:#1d4ed8; --blue-600:#1e40af; --blue-400:#3b82f6;
+    --emerald:#059669; --amber:#d97706; --red:#dc2626;
+    --paper:var(--zinc-50); --ink:var(--zinc-900); --line:var(--zinc-300);
+    --display:'Barlow Condensed','Arial Narrow',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    font-family:'IBM Plex Sans',-apple-system,sans-serif;
+    background:var(--paper); color:var(--ink);
+    line-height:1.6; overflow-x:hidden;
+  }
+  ::selection { background:var(--blue); color:#fff; }
+
+  /* SEC. labels — mono index number, hairline rule, crosshair tick */
+  .kicker {
+    display:flex; align-items:center; gap:.7rem; margin-bottom:1rem;
+    font-family:var(--mono); font-size:.66rem; letter-spacing:.22em;
+    text-transform:uppercase; color:var(--zinc-600); font-weight:500;
+  }
+  .kicker::before {
+    content:''; width:9px; height:9px; flex-shrink:0;
+    background:
+      linear-gradient(var(--blue),var(--blue)) center/9px 1px no-repeat,
+      linear-gradient(var(--blue),var(--blue)) center/1px 9px no-repeat;
+  }
+  .kicker .no { color:var(--blue); }
+  .kicker::after { content:''; flex:1; max-width:120px; height:1px; background:var(--line); }
+
+  h1,h2,h3 { font-family:var(--display); font-weight:700; letter-spacing:.015em; line-height:1.08; text-transform:uppercase; }
+  h2 { font-size:clamp(1.8rem,4.4vw,2.8rem); margin-bottom:1rem; }
+  h2::after { content:''; display:block; width:56px; height:3px; background:var(--blue); margin-top:.8rem; }
+  .muted { color:var(--zinc-600); }
+  .container { max-width:1120px; margin:0 auto; padding:0 24px; }
+  section { padding:96px 0; border-top:1px solid var(--line); }
+
+  .btn {
+    display:inline-block; padding:.85rem 1.8rem; border-radius:2px; border:1px solid transparent;
+    font-family:inherit; font-size:.72rem; font-weight:700; letter-spacing:.18em;
+    text-transform:uppercase; cursor:pointer; text-decoration:none; transition:all .15s;
+  }
+  .btn-primary { background:var(--blue); color:#fff; }
+  .btn-primary:hover { background:var(--blue-600); }
+  .btn-blue { background:var(--blue); color:#fff; }
+  .btn-blue:hover { background:var(--blue-600); }
+  .btn-ghost { background:transparent; color:var(--ink); border:1px solid var(--zinc-400); }
+  .btn-ghost:hover { border-color:var(--ink); }
+
+  /* ---------- Nav ---------- */
+  nav {
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    background:rgba(250,250,249,.92); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner { display:flex; align-items:center; justify-content:space-between; height:64px; }
+  .brand { display:flex; align-items:center; gap:.7rem; text-decoration:none; }
+  .brand svg { height:36px; width:36px; }
+  .brand-text { display:flex; flex-direction:column; }
+  .brand-text .k { font-size:.55rem; letter-spacing:.25em; color:var(--zinc-500); font-weight:700; text-transform:uppercase; }
+  .brand-text .n { font-family:var(--display); font-size:1rem; font-weight:700; color:var(--ink); letter-spacing:.04em; text-transform:uppercase; line-height:1; }
+  .nav-links { display:flex; gap:1.8rem; align-items:center; }
+  .nav-links a:not(.btn) {
+    color:var(--zinc-600); text-decoration:none; font-size:.7rem; font-weight:600;
+    letter-spacing:.15em; text-transform:uppercase; transition:color .15s;
+  }
+  .nav-links a:not(.btn):hover { color:var(--ink); }
+  .nav-links .btn { padding:.55rem 1.2rem; }
+  @media (max-width:820px){ .nav-links a:not(.btn){ display:none; } }
+
+  /* ---------- Hero ---------- */
+  .hero { padding:150px 0 90px; position:relative; background:#fff; border-bottom:1px solid var(--line); }
+  .hero-grid { display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center; }
+  @media (max-width:960px){ .hero-grid { grid-template-columns:1fr; } }
+  .hero h1 { font-size:clamp(2.6rem,6vw,4.2rem); margin-bottom:1.25rem; }
+  .hero h1 .accent { color:var(--blue); }
+  .hero p.lead { font-size:1.05rem; color:var(--zinc-600); max-width:34rem; margin-bottom:2rem; }
+  .hero p.lead b { color:var(--ink); }
+  .hero-ctas { display:flex; gap:.9rem; flex-wrap:wrap; margin-bottom:2.2rem; }
+  .hero-stats { display:flex; gap:2.4rem; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:1.4rem; }
+  .stat .v { font-family:var(--mono); font-size:1.5rem; font-weight:500; color:var(--ink); }
+  .stat .l { font-size:.62rem; letter-spacing:.2em; text-transform:uppercase; color:var(--zinc-500); font-weight:700; }
+
+  /* mini dashboard mock in hero — light panel, ruled title bar */
+  .mock {
+    background:#fff; border:1px solid var(--line); border-radius:2px;
+    overflow:hidden;
+  }
+  .mock-bar { display:flex; gap:6px; padding:10px 14px; background:var(--zinc-100); border-bottom:1px solid var(--line); }
+  .mock-bar i { width:10px; height:10px; border-radius:50%; background:var(--zinc-300); display:block; }
+  .mock-body { display:grid; grid-template-columns:118px 1fr; min-height:300px; }
+  .mock-side { background:var(--zinc-900); border-right:1px solid var(--zinc-800); padding:12px 8px; }
+  .mock-side .it {
+    font-size:.5rem; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    color:var(--zinc-500); padding:7px 9px; border-radius:2px; margin-bottom:2px; border-left:2px solid transparent;
+  }
+  .mock-side .it.on { background:var(--zinc-800); color:#fff; border-left-color:var(--blue-400); }
+  .mock-main { background:var(--zinc-100); padding:14px; }
+  .mock-main .ttl { font-family:var(--display); font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--zinc-800); margin-bottom:10px; }
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
+  .kpi { background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:10px; }
+  .kpi .kl { font-size:.44rem; letter-spacing:.13em; text-transform:uppercase; font-weight:700; color:var(--zinc-500); }
+  .kpi .kv { font-family:var(--mono); font-size:1.15rem; font-weight:500; color:var(--zinc-900); }
+  .rowline { display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:8px 10px; margin-bottom:6px; }
+  .rowline .jn { font-size:.55rem; font-weight:700; color:var(--zinc-800); }
+  .rowline .jc { font-size:.46rem; color:var(--zinc-500); }
+  .pill { font-size:.42rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:99px; border:1px solid; }
+  .pill.p1 { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
+  .pill.p2 { background:#fffbeb; color:#b45309; border-color:#fde68a; }
+  .pill.p3 { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+
+  /* ---------- Data ownership — the one dark band ---------- */
+  .own { background:var(--zinc-900); color:var(--zinc-100); border-top:none; }
+  .own .kicker { color:var(--zinc-400); }
+  .own .kicker::after { background:var(--zinc-700); }
+  .own h2 { color:#fff; }
+  .own h2 .accent { color:var(--blue-400); }
+  .own .muted { color:var(--zinc-400); }
+  .own-grid { display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; }
+  @media (max-width:960px){ .own-grid { grid-template-columns:1fr; } }
+  .own-points { list-style:none; margin-top:1.6rem; }
+  .own-points li { display:flex; gap:.9rem; margin-bottom:1.15rem; }
+  .own-points .ic {
+    flex-shrink:0; width:34px; height:34px; border-radius:2px; background:var(--zinc-800);
+    border:1px solid var(--zinc-700); display:flex; align-items:center; justify-content:center;
+    color:var(--blue-400);
+  }
+  .own-points .ic svg { width:16px; height:16px; }
+  .own-points b { color:#fff; display:block; font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; }
+  .own-points span { color:var(--zinc-400); font-size:.9rem; }
+
+  .server-card {
+    background:var(--zinc-950); border:1px solid var(--zinc-700); border-radius:2px; padding:26px;
+    font-family:var(--mono);
+  }
+  .server-card .hd { display:flex; align-items:center; gap:.6rem; margin-bottom:1.1rem; }
+  .server-card .dot { width:9px; height:9px; border-radius:50%; background:var(--emerald); animation:pulse 2s infinite; }
+  @keyframes pulse { 50% { opacity:.4; } }
+  .server-card .hd b { font-size:.68rem; letter-spacing:.18em; text-transform:uppercase; color:var(--zinc-300); }
+  .tline { font-size:.74rem; color:var(--zinc-500); padding:.32rem 0; border-bottom:1px dashed var(--zinc-800); display:flex; justify-content:space-between; gap:1rem; }
+  .tline:last-child { border-bottom:none; }
+  .tline .ok { color:var(--emerald); }
+  .tline .path { color:var(--zinc-300); }
+  .server-card .cloudless {
+    margin-top:1.2rem; padding:.85rem 1rem; border:1px solid var(--blue-400); border-radius:2px;
+    font-size:.72rem; color:var(--blue-400); text-align:center;
+    letter-spacing:.1em; text-transform:uppercase; font-weight:700; font-family:'IBM Plex Sans',sans-serif;
+    display:flex; align-items:center; justify-content:center; gap:.6rem;
+  }
+  .cloudless svg { width:16px; height:16px; flex-shrink:0; }
+
+  /* ---------- Features ---------- */
+  .features-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:2.6rem; }
+  @media (max-width:960px){ .features-grid { grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:640px){ .features-grid { grid-template-columns:1fr;} }
+  .fcard {
+    background:#fff; border:1px solid var(--line); border-radius:2px; padding:24px;
+    transition:border-color .2s;
+  }
+  .fcard:hover { border-color:var(--zinc-500); }
+  .fcard .fi {
+    width:38px; height:38px; border-radius:2px; background:var(--zinc-100); color:var(--blue);
+    border:1px solid var(--zinc-200);
+    display:flex; align-items:center; justify-content:center; margin-bottom:1rem;
+  }
+  .fcard .fi svg { width:18px; height:18px; }
+  .fcard b { display:block; font-family:var(--display); font-size:.95rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); margin-bottom:.4rem; }
+  .fcard p { font-size:.85rem; color:var(--zinc-600); }
+
+  /* ---------- Demo section ---------- */
+  .demo { background:var(--zinc-100); }
+  .demo-grid { display:grid; grid-template-columns:1fr 340px; gap:56px; align-items:start; margin-top:2.4rem; }
+  @media (max-width:960px){ .demo-grid { grid-template-columns:1fr; } }
+  .demo-tabs { display:flex; gap:.4rem; margin-bottom:1.1rem; flex-wrap:wrap; }
+  .demo-tab {
+    padding:.5rem 1rem; border-radius:2px; border:1px solid var(--zinc-400); background:transparent;
+    color:var(--zinc-600); font-family:inherit; font-size:.62rem; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase; cursor:pointer; transition:all .15s;
+  }
+  .demo-tab.on { background:var(--blue); color:#fff; border-color:var(--blue); }
+  .demo-pane { background:var(--zinc-50); border-radius:2px; border:1px solid var(--line); overflow:hidden; min-height:380px; }
+  .dp-head { padding:14px 18px; border-bottom:2px solid var(--zinc-900); background:#fff; display:flex; justify-content:space-between; align-items:center; }
+  .dp-head b { font-family:var(--display); font-size:.85rem; letter-spacing:.1em; text-transform:uppercase; color:var(--zinc-800); font-weight:700; }
+  .dp-body { padding:16px 18px; }
+  .dp-note { font-size:.62rem; color:var(--zinc-500); font-style:italic; }
+
+  table.dt { width:100%; border-collapse:collapse; background:#fff; overflow:hidden; border:1px solid var(--zinc-200); font-variant-numeric:tabular-nums; }
+  .dt th { font-size:.52rem; letter-spacing:.12em; text-transform:uppercase; color:var(--zinc-500); text-align:left; padding:9px 12px; background:var(--zinc-50); border-bottom:1px solid var(--zinc-200); }
+  .dt td { padding:9px 12px; font-size:.72rem; color:var(--zinc-800); border-bottom:1px solid var(--zinc-100); }
+  .dt tr:last-child td { border-bottom:none; }
+  .dt tr.clickable { cursor:pointer; transition:background .1s; }
+  .dt tr.clickable:hover { background:var(--zinc-50); }
+
+  .bar-wrap { background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:16px; margin-top:12px; }
+  .bar-wrap .bl { font-size:.52rem; letter-spacing:.12em; text-transform:uppercase; color:var(--zinc-500); font-weight:700; margin-bottom:10px; }
+  .bars { display:flex; align-items:flex-end; gap:10px; height:110px; }
+  .bars .b { flex:1; background:var(--zinc-200); position:relative; transition:height .6s cubic-bezier(.2,.8,.2,1); min-height:4px; }
+  .bars .b.hl { background:var(--blue); }
+  .bars .b span { position:absolute; bottom:-18px; left:0; right:0; text-align:center; font-size:.5rem; color:var(--zinc-500); font-family:var(--mono); }
+
+  /* phone demo — the field module really is dark, so the phone stays dark */
+  .phone {
+    width:300px; margin:0 auto; background:var(--zinc-950); border-radius:34px; padding:12px;
+    border:1px solid var(--zinc-400);
+  }
+  .phone-notch { width:110px; height:20px; background:var(--zinc-950); border-radius:0 0 14px 14px; margin:0 auto 6px; }
+  .phone-screen { background:var(--zinc-900); border-radius:22px; overflow:hidden; height:470px; display:flex; flex-direction:column; }
+  .ps-head { padding:14px 16px 10px; border-bottom:1px solid var(--zinc-800); }
+  .ps-head .t { font-family:var(--display); font-size:.9rem; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.05em; }
+  .ps-head .s { font-size:.58rem; color:var(--zinc-500); }
+  .ps-body { flex:1; overflow-y:auto; padding:12px; }
+  .job-card { background:var(--zinc-800); border:1px solid var(--zinc-700); border-radius:2px; padding:12px; margin-bottom:10px; }
+  .job-card .jt { font-size:.7rem; font-weight:700; color:#fff; }
+  .job-card .jm { font-size:.56rem; color:var(--zinc-400); margin:2px 0 8px; }
+  .jstatus { font-size:.48rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:99px; display:inline-block; margin-bottom:8px; border:1px solid; }
+  .js-sched { background:rgba(59,130,246,.12); color:var(--blue-400); border-color:rgba(59,130,246,.35); }
+  .js-prog { background:rgba(217,119,6,.12); color:#f59e0b; border-color:rgba(217,119,6,.35); }
+  .js-done { background:rgba(5,150,105,.12); color:#10b981; border-color:rgba(5,150,105,.35); }
+  .job-actions { display:flex; gap:6px; }
+  .jbtn {
+    flex:1; padding:.5rem; border-radius:2px; border:none; font-family:inherit;
+    font-size:.52rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; cursor:pointer;
+  }
+  .jbtn.start { background:var(--blue); color:#fff; }
+  .jbtn.done { background:var(--emerald); color:#fff; }
+  .jbtn.time { background:var(--zinc-700); color:var(--zinc-200); }
+  .jbtn:disabled { opacity:.35; cursor:default; }
+  .toast {
+    position:absolute; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+    background:#fff; color:var(--zinc-900); font-size:.6rem; font-weight:700; letter-spacing:.08em;
+    text-transform:uppercase; padding:.55rem 1rem; border-radius:2px; border:1px solid var(--line);
+    opacity:0; transition:all .3s; pointer-events:none; white-space:nowrap;
+  }
+  .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .phone-wrap { position:relative; }
+  .phone-cap { text-align:center; margin-top:1rem; font-size:.62rem; color:var(--zinc-500); letter-spacing:.1em; text-transform:uppercase; font-weight:700; }
+
+  /* ---------- How it works ---------- */
+  .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:2.6rem; }
+  @media (max-width:820px){ .steps { grid-template-columns:1fr; } }
+  .step { background:#fff; border:1px solid var(--line); border-radius:2px; padding:26px; position:relative; }
+  .step .n {
+    font-family:var(--mono); font-size:1.6rem; font-weight:500; color:var(--zinc-300);
+    position:absolute; top:16px; right:20px;
+  }
+  .step b { display:block; font-family:var(--display); font-size:1rem; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); margin-bottom:.5rem; }
+  .step p { font-size:.85rem; color:var(--zinc-600); }
+  .step .tag { display:inline-block; margin-top:.9rem; font-family:var(--mono); font-size:.55rem; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--blue); border:1px solid var(--blue); border-radius:2px; padding:3px 10px; }
+
+  /* ---------- Pricing ---------- */
+  .price-grid { display:grid; grid-template-columns:repeat(2,minmax(0,420px)); gap:20px; justify-content:center; margin-top:2.6rem; }
+  @media (max-width:820px){ .price-grid { grid-template-columns:1fr; } }
+  .pcard { background:#fff; border:1px solid var(--line); border-radius:2px; padding:32px; }
+  .pcard.featured { border:2px solid var(--blue); }
+  .pcard .pn { font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; font-weight:700; color:var(--zinc-500); }
+  .pcard .pv { font-family:var(--mono); font-size:2.1rem; font-weight:500; color:var(--ink); margin:.4rem 0 .2rem; }
+  .pcard .pv small { font-size:.85rem; color:var(--zinc-500); font-weight:400; font-family:'IBM Plex Sans',sans-serif; }
+  .pcard ul { list-style:none; margin:1.4rem 0 1.8rem; }
+  .pcard li { font-size:.85rem; color:var(--zinc-700); padding:.42rem 0 .42rem 1.5rem; border-bottom:1px dashed var(--zinc-200); position:relative; }
+  .pcard li::before {
+    content:''; position:absolute; left:0; top:.72rem; width:14px; height:14px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d4ed8' stroke-width='3' stroke-linecap='square'%3E%3Cpath d='M4 12l5 5L20 6'/%3E%3C/svg%3E");
+    background-size:contain; background-repeat:no-repeat;
+  }
+  .ph-mark { color:var(--amber); font-size:.68rem; letter-spacing:.06em; }
+
+  /* ---------- Contact ---------- */
+  .contact { background:#fff; }
+  .contact-grid { display:grid; grid-template-columns:1fr 1fr; gap:56px; margin-top:2.4rem; }
+  @media (max-width:820px){ .contact-grid { grid-template-columns:1fr; } }
+  .cinfo .row { display:flex; gap:1rem; margin-bottom:1.3rem; align-items:flex-start; }
+  .cinfo .ic { width:38px; height:38px; border-radius:2px; background:var(--zinc-100); border:1px solid var(--zinc-200); color:var(--blue); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .cinfo .ic svg { width:16px; height:16px; }
+  .cinfo b { display:block; font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; color:var(--zinc-500); }
+  .cinfo span { color:var(--ink); font-size:.95rem; }
+  form.cform { display:flex; flex-direction:column; gap:.9rem; }
+  .cform label { font-size:.62rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--zinc-500); }
+  .cform input, .cform textarea, .cform select {
+    background:#fff; border:1px solid var(--zinc-300); border-radius:2px; padding:.75rem .9rem;
+    color:var(--ink); font-family:inherit; font-size:.9rem; width:100%;
+  }
+  .cform input:focus, .cform textarea:focus, .cform select:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
+  .form-ok { display:none; background:#ecfdf5; border:1px solid #a7f3d0; color:var(--emerald); border-radius:2px; padding:1rem; font-size:.8rem; }
+
+  footer { padding:44px 0; background:var(--zinc-900); color:var(--zinc-400); }
+  footer .brand-text .n { color:#fff; }
+  .foot { display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap; }
+  .foot .fine { font-size:.68rem; color:var(--zinc-500); }
+
+  .reveal { opacity:0; transform:translateY(22px); transition:opacity .6s, transform .6s; }
+  .reveal.in { opacity:1; transform:none; }
+
+  /* inline stroke icons */
+  .icon { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:square; stroke-linejoin:miter; }
+</style>
+</head>
+<body>
+
+<!-- ===================== NAV ===================== -->
+<nav>
+  <div class="container nav-inner">
+    <a href="#" class="brand">
+      <svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" aria-label="White Van Ops logo">
+        <defs>
+          <linearGradient id="lb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#292524"/><stop offset="1" stop-color="#1c1917"/></linearGradient>
+          <linearGradient id="lv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d6d3d1"/></linearGradient>
+        </defs>
+        <rect x="16" y="16" width="480" height="480" rx="56" fill="url(#lb)"/>
+        <rect x="16" y="16" width="480" height="480" rx="56" fill="none" stroke="#44403c" stroke-width="8"/>
+        <rect x="52" y="208" width="72" height="20" rx="10" fill="#3b82f6"/>
+        <rect x="76" y="248" width="48" height="20" rx="10" fill="#2563eb"/>
+        <path fill="url(#lv)" d="M148 328 V204 q0 -20 20 -20 h158 q22 0 34 18 l40 60 q12 18 12 40 v26 q0 20 -20 20 h-224 q-20 0 -20 -20 Z"/>
+        <path fill="#1c1917" d="M330 208 q10 0 16 9 l30 46 q4 7 -5 7 h-49 q-8 0 -8 -8 v-46 q0 -8 8 -8 Z"/>
+        <rect x="148" y="296" width="264" height="16" fill="#3b82f6"/>
+        <circle cx="212" cy="348" r="36" fill="#0c0a09" stroke="#57534e" stroke-width="6"/><circle cx="212" cy="348" r="14" fill="#e7e5e4"/>
+        <circle cx="356" cy="348" r="36" fill="#0c0a09" stroke="#57534e" stroke-width="6"/><circle cx="356" cy="348" r="14" fill="#e7e5e4"/>
+      </svg>
+      <span class="brand-text"><span class="k">Fleet Operations</span><span class="n">White Van Ops</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="#ownership">Data Ownership</a>
+      <a href="#features">Features</a>
+      <a href="#demo">Live Demo</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#contact" class="btn btn-blue">Book a Demo</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <div class="container hero-grid">
+    <div>
+      <span class="kicker"><span class="no">Field Operations Management</span></span>
+      <h1>Run your fleet.<br/>Own your data.<br/><span class="accent">No cloud required.</span></h1>
+      <p class="lead">
+        Scheduling, fleet &amp; service, inventory, time tracking and QuickBooks-ready exports —
+        installed from a single <b>.exe</b> with the database built in.
+        Your operations data lives on <b>your</b> machine, not someone else's server.
+      </p>
+      <div class="hero-ctas">
+        <a href="#demo" class="btn btn-primary">Try the Demo</a>
+        <a href="#ownership" class="btn btn-ghost">Why Self-Hosted?</a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><div class="v" data-count="1">0</div><div class="l">Installer, DB included</div></div>
+        <div class="stat"><div class="v" data-count="0">0</div><div class="l">Monthly cloud fees</div></div>
+        <div class="stat"><div class="v" data-count="100" data-suffix="%">0</div><div class="l">Of your data, yours</div></div>
+      </div>
+    </div>
+
+    <div class="mock reveal">
+      <div class="mock-bar"><i></i><i></i><i></i></div>
+      <div class="mock-body">
+        <div class="mock-side">
+          <div class="it on">Overview</div>
+          <div class="it">Clients &amp; Jobs</div>
+          <div class="it">Scheduling</div>
+          <div class="it">Personnel &amp; Time</div>
+          <div class="it">Fleet &amp; Service</div>
+          <div class="it">Inventory Control</div>
+          <div class="it">QuickBooks Sync</div>
+        </div>
+        <div class="mock-main">
+          <div class="ttl">Operations Overview</div>
+          <div class="kpis">
+            <div class="kpi"><div class="kl">Fleet Deployment</div><div class="kv">86%</div></div>
+            <div class="kpi"><div class="kl">Active Jobs</div><div class="kv">12</div></div>
+            <div class="kpi"><div class="kl">Overdue</div><div class="kv">1</div></div>
+          </div>
+          <div class="rowline"><div><div class="jn">HVAC Quarterly Service — Lakeside Mall</div><div class="jc">Van 03 · Ortiz, Chen</div></div><span class="pill p2">In Progress</span></div>
+          <div class="rowline"><div><div class="jn">Generator Install — Reyes Dental</div><div class="jc">Van 01 · Kowalski</div></div><span class="pill p1">Scheduled</span></div>
+          <div class="rowline"><div><div class="jn">Rooftop Unit Repair — Hilltop Foods</div><div class="jc">Van 02 · Chen</div></div><span class="pill p3">Completed</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== DATA OWNERSHIP ===================== -->
+<section class="own" id="ownership">
+  <div class="container own-grid">
+    <div class="reveal">
+      <span class="kicker"><span class="no">Sec. 01</span> The part everyone else gets wrong</span>
+      <h2>Your data. Your hardware.<br/><span class="accent">Full stop.</span></h2>
+      <p class="muted">
+        Every "modern" field-service platform wants your job history, client list and pricing
+        living in their cloud, behind their subscription, on their terms. White Van Ops takes the
+        opposite bet: the entire system — application, web server and PostgreSQL database —
+        installs on a computer you own.
+      </p>
+      <ul class="own-points">
+        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div><b>The database ships in the installer</b><span>Industrial-grade PostgreSQL is bundled and configured automatically on first launch. No IT project, no separate download, no DBA.</span></div></li>
+        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.97A7 7 0 0 1 19.8 10.4 4.5 4.5 0 0 1 18.5 18H7z"/><path d="M4 4l16 16"/></svg></div><div><b>No cloud dependency</b><span>Internet down? Vendor "sunsets" a product? Price hike email? None of it can touch a system running in your own office.</span></div></li>
+        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M12 17V4"/><path d="M6 10l6-6 6 6"/><path d="M4 21h16"/></svg></div><div><b>Leave anytime, take everything</b><span>Your data sits in a standard PostgreSQL database with CSV exports built in. No export fees, no ransom, no proprietary lock-in.</span></div></li>
+        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><div><b>Private by architecture</b><span>Every install gets its own unique encryption secret and database credentials, generated on your machine. Field access runs over your own encrypted tunnel — not our servers.</span></div></li>
+      </ul>
+    </div>
+
+    <div class="server-card reveal">
+      <div class="hd"><span class="dot"></span><b>Your Office PC — localhost</b></div>
+      <div class="tline"><span class="path">WhiteVanOps.exe</span><span class="ok">RUNNING</span></div>
+      <div class="tline"><span class="path">PostgreSQL 17 (bundled)</span><span class="ok">RUNNING · 127.0.0.1</span></div>
+      <div class="tline"><span class="path">%APPDATA%\whitevanops\pgdata</span><span class="ok">2,148 records</span></div>
+      <div class="tline"><span class="path">Session secret</span><span class="ok">UNIQUE TO THIS INSTALL</span></div>
+      <div class="tline"><span class="path">Outbound data to vendor cloud</span><span style="color:var(--red)">0 BYTES — EVER</span></div>
+      <div class="cloudless"><svg class="icon" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.97A7 7 0 0 1 19.8 10.4 4.5 4.5 0 0 1 18.5 18H7z"/><path d="M4 4l16 16"/></svg>Nothing leaves this building</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FEATURES ===================== -->
+<section id="features">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 02</span> Everything a service fleet runs on</span>
+    <h2>Seven modules. One dashboard.</h2>
+    <p class="muted" style="max-width:40rem">Built for HVAC, electrical, plumbing and specialty trade contractors running 2–25 vans.</p>
+    <div class="features-grid">
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></svg></div><b>Scheduling &amp; Jobs</b><p>Job ledger with clients, line items, crew assignment and recurring job templates that generate themselves.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M2 17V7h11v10"/><path d="M13 10h4l3 4v3h-3"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg></div><b>Fleet &amp; Service</b><p>Track every van, its maintenance history and repair reports. Know which vehicle is due before it breaks down.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div><b>Inventory Control</b><p>Warehouse and per-van stock levels with minimum thresholds. Completing a job deducts parts from the right van automatically.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><b>Time Tracking</b><p>Techs log hours against jobs from their phone. Admins see labor cost per job in real time.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h13"/><path d="M14 3l4 4-4 4"/><path d="M20 17H7"/><path d="M10 13l-4 4 4 4"/></svg></div><b>QuickBooks-Ready Export</b><p>One-click CSV exports for invoices and time, with a sync-lock so nothing gets double-billed.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></svg></div><b>Roles &amp; Audit Log</b><p>Superuser, admin and tech roles with forced password changes and a full audit trail of every change.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DEMO ===================== -->
+<section class="demo" id="demo">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 03</span> Interactive demo</span>
+    <h2>Click around. It's your data anyway.</h2>
+    <p class="muted" style="max-width:40rem">A taste of the real product — the admin dashboard your office runs, and the field module your techs install on their phones by scanning a QR code.</p>
+
+    <div class="demo-grid">
+      <!-- dashboard demo -->
+      <div>
+        <div class="demo-tabs" role="tablist">
+          <button class="demo-tab on" data-pane="jobs">Clients &amp; Jobs</button>
+          <button class="demo-tab" data-pane="inventory">Inventory</button>
+          <button class="demo-tab" data-pane="accounting">Accounting</button>
+        </div>
+
+        <div class="demo-pane">
+          <div class="dp-head"><b id="dp-title">Clients &amp; Jobs Ledger</b><span class="dp-note" id="dp-note">Click a job to change its status</span></div>
+          <div class="dp-body" id="dp-body"><!-- js renders --></div>
+        </div>
+      </div>
+
+      <!-- phone demo -->
+      <div class="phone-wrap">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="ps-head">
+              <div class="t">Field Module</div>
+              <div class="s">Signed in as M. Ortiz · installed from QR code</div>
+            </div>
+            <div class="ps-body" id="ps-body"><!-- js renders --></div>
+          </div>
+          <div class="toast" id="toast">Time logged</div>
+        </div>
+        <div class="phone-cap">← Techs scan a QR, tap "Add to Home Screen", done.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== HOW IT WORKS ===================== -->
+<section id="how">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 04</span> Deployment</span>
+    <h2>Live in an afternoon</h2>
+    <div class="steps">
+      <div class="step reveal"><span class="n">01</span><b>Run one installer</b><p>Double-click the .exe on any Windows PC. It installs the app, web server and PostgreSQL database, then bootstraps your admin account — automatically.</p><span class="tag">~5 minutes</span></div>
+      <div class="step reveal"><span class="n">02</span><b>Scan the QR</b><p>Open the Field Access QR from the dashboard. Techs point their phone camera at it, sign in and add the field module to their home screen like an app.</p><span class="tag">~2 minutes per tech</span></div>
+      <div class="step reveal"><span class="n">03</span><b>Dispatch</b><p>Schedule jobs, assign vans and crews, track parts and hours. Export to QuickBooks when the books need it. That's the whole workflow.</p><span class="tag">Day one</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PRICING ===================== -->
+<section id="pricing">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 05</span> Pricing</span>
+    <h2>Buy it once. It's yours.</h2>
+    <p class="muted">No per-seat rent. No data hostage fees. <span class="ph-mark">[Placeholder pricing — final numbers TBD]</span></p>
+    <div class="price-grid">
+      <div class="pcard reveal">
+        <div class="pn">Single Office</div>
+        <div class="pv">$X,XXX <small>one-time</small></div>
+        <ul>
+          <li>Unlimited users &amp; vans</li>
+          <li>Bundled PostgreSQL database</li>
+          <li>Admin dashboard + field module</li>
+          <li>QuickBooks CSV export</li>
+          <li>1 year of updates</li>
+        </ul>
+        <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
+      </div>
+      <div class="pcard featured reveal">
+        <div class="pn" style="color:var(--blue)">Office + White Glove</div>
+        <div class="pv">$X,XXX <small>one-time + setup</small></div>
+        <ul>
+          <li>Everything in Single Office</li>
+          <li>On-site or remote installation</li>
+          <li>Secure field-access tunnel setup</li>
+          <li>Data migration from spreadsheets</li>
+          <li>Priority support · <span class="ph-mark">[SLA TBD]</span></li>
+        </ul>
+        <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Book a Demo</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CONTACT ===================== -->
+<section class="contact" id="contact">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 06</span> Talk to a human</span>
+    <h2>See it running on your own machine</h2>
+    <div class="contact-grid">
+      <div class="cinfo reveal">
+        <p class="muted" style="margin-bottom:1.8rem">We'll do a 20-minute screen share, install it on a spare PC while you watch, and leave the demo data with you. Because it's your computer.</p>
+        <div class="row"><div class="ic"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14"/><path d="M3 7l9 6 9-6"/></svg></div><div><b>Sales</b><span>[sales@yourcompany.com]</span></div></div>
+        <div class="row"><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M5 4h4l2 5-3 2a13 13 0 0 0 5 5l2-3 5 2v4c0 1-1 2-2 2A17 17 0 0 1 3 6c0-1 1-2 2-2z"/></svg></div><div><b>Phone</b><span>[+1 (555) 000-0000]</span></div></div>
+        <div class="row"><div class="ic"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div><b>Hours</b><span>[Mon–Fri, 8am–6pm CT]</span></div></div>
+        <div class="row"><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/></svg></div><div><b>Office</b><span>[Street Address · City, ST]</span></div></div>
+      </div>
+      <form class="cform reveal" id="contact-form">
+        <div><label for="cf-name">Name</label><input id="cf-name" type="text" placeholder="Jane Contractor" required /></div>
+        <div><label for="cf-email">Work Email</label><input id="cf-email" type="email" placeholder="jane@yourcompany.com" required /></div>
+        <div><label for="cf-fleet">Fleet Size</label>
+          <select id="cf-fleet"><option>1–3 vans</option><option>4–10 vans</option><option>11–25 vans</option><option>25+ vans</option></select>
+        </div>
+        <div><label for="cf-msg">What are you running on today?</label><textarea id="cf-msg" rows="3" placeholder="Spreadsheets, whiteboards, a cloud tool we're tired of…"></textarea></div>
+        <button type="submit" class="btn btn-primary">Request a Demo</button>
+        <div class="form-ok" id="form-ok">Thanks! This demo form isn't wired to a backend yet — <b>[connect to your CRM or email service here]</b>.</div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container foot">
+    <a href="#" class="brand" style="opacity:.85">
+      <span class="brand-text"><span class="k">Fleet Operations</span><span class="n">White Van Ops</span></span>
+    </a>
+    <div class="fine">© 2026 [Your Company Name]. Your data stays yours. &nbsp;·&nbsp; [Privacy Policy] &nbsp;·&nbsp; [Terms]</div>
+  </div>
+</footer>
+
+<script>
+// ------------------------------------------------------------------
+// Scroll reveal
+// ------------------------------------------------------------------
+const io = new IntersectionObserver((es) => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), { threshold:.12 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// ------------------------------------------------------------------
+// Hero stat counters
+// ------------------------------------------------------------------
+const cio = new IntersectionObserver((es) => {
+  es.forEach(e => {
+    if (!e.isIntersecting || e.target.dataset.done) return;
+    e.target.dataset.done = 1;
+    const end = +e.target.dataset.count, suf = e.target.dataset.suffix || '';
+    let cur = 0; const steps = Math.max(end, 1);
+    const t = setInterval(() => {
+      cur++;
+      e.target.textContent = Math.min(cur, end) + suf;
+      if (cur >= end) clearInterval(t);
+    }, 900 / steps);
+    if (end === 0) e.target.textContent = '0' + suf;
+  });
+}, { threshold:.6 });
+document.querySelectorAll('[data-count]').forEach(el => cio.observe(el));
+
+// ------------------------------------------------------------------
+// Dashboard demo — three panes with playable state
+// ------------------------------------------------------------------
+const STATUS_FLOW = { 'Scheduled':'In Progress', 'In Progress':'Completed', 'Completed':'Scheduled' };
+const pillCls = s => s === 'Scheduled' ? 'p1' : s === 'In Progress' ? 'p2' : 'p3';
+
+const demo = {
+  jobs: [
+    { id:'JOB-1042', client:'Lakeside Mall',  desc:'HVAC Quarterly Service', van:'Van 03', status:'In Progress' },
+    { id:'JOB-1043', client:'Reyes Dental',   desc:'Generator Install',      van:'Van 01', status:'Scheduled' },
+    { id:'JOB-1044', client:'Hilltop Foods',  desc:'Rooftop Unit Repair',    van:'Van 02', status:'Completed' },
+    { id:'JOB-1045', client:'Marina Storage', desc:'Panel Upgrade 200A',     van:'Van 01', status:'Scheduled' },
+  ],
+  inventory: [
+    { item:'Refrigerant R-410A (25lb)', wh:6,  van:2, min:4 },
+    { item:'Contactor 40A 24V',         wh:14, van:5, min:6 },
+    { item:'Capacitor 45/5 µF',         wh:3,  van:1, min:5 },
+    { item:'Filter-Drier 3/8"',         wh:22, van:8, min:10 },
+  ],
+};
+
+const dpBody = document.getElementById('dp-body');
+const dpTitle = document.getElementById('dp-title');
+const dpNote = document.getElementById('dp-note');
+
+function renderJobs() {
+  dpTitle.textContent = 'Clients & Jobs Ledger';
+  dpNote.textContent = 'Click a job to change its status';
+  dpBody.innerHTML = `<table class="dt"><thead><tr><th>Job</th><th>Client / Work</th><th>Van</th><th>Status</th></tr></thead><tbody>` +
+    demo.jobs.map((j,i) => `<tr class="clickable" data-i="${i}">
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:.62rem">${j.id}</td>
+      <td><b>${j.client}</b><br/><span style="color:var(--zinc-500);font-size:.62rem">${j.desc}</span></td>
+      <td>${j.van}</td>
+      <td><span class="pill ${pillCls(j.status)}">${j.status}</span></td></tr>`).join('') +
+    `</tbody></table>
+     <p class="dp-note" style="margin-top:10px">In the real app, completing a job auto-deducts its parts from the assigned van's stock and queues it for QuickBooks export.</p>`;
+  dpBody.querySelectorAll('tr.clickable').forEach(tr => tr.addEventListener('click', () => {
+    const j = demo.jobs[+tr.dataset.i];
+    j.status = STATUS_FLOW[j.status];
+    renderJobs(); syncPhone();
+  }));
+}
+
+function renderInventory() {
+  dpTitle.textContent = 'Inventory Control';
+  dpNote.textContent = 'Warehouse + per-van stock levels';
+  dpBody.innerHTML = `<table class="dt"><thead><tr><th>Item</th><th>Warehouse</th><th>Van Stock</th><th>Status</th></tr></thead><tbody>` +
+    demo.inventory.map(r => {
+      const low = (r.wh + r.van) <= r.min;
+      return `<tr><td><b>${r.item}</b></td><td>${r.wh}</td><td>${r.van}</td>
+        <td><span class="pill ${low ? 'p2' : 'p3'}">${low ? 'Reorder' : 'OK'}</span></td></tr>`;
+    }).join('') + `</tbody></table>
+    <p class="dp-note" style="margin-top:10px">Minimum thresholds trigger reorder alerts on the dashboard bell — no more discovering an empty van at the job site.</p>`;
+}
+
+function renderAccounting() {
+  dpTitle.textContent = 'QuickBooks Sync';
+  dpNote.textContent = 'CSV export + one-way sync lock';
+  const done = demo.jobs.filter(j => j.status === 'Completed').length;
+  const hours = [6,8,5,9,7];
+  dpBody.innerHTML = `
+    <div class="kpis" style="grid-template-columns:repeat(2,1fr)">
+      <div class="kpi"><div class="kl">Completed jobs pending export</div><div class="kv">${done}</div></div>
+      <div class="kpi"><div class="kl">Unexported time entries</div><div class="kv">${done * 3 + 2}</div></div>
+    </div>
+    <div class="bar-wrap"><div class="bl">Labor hours this week</div>
+      <div class="bars">${hours.map((h,i) => `<div class="b ${i===3?'hl':''}" style="height:${h*10}%"><span>${'MTWTF'[i]}</span></div>`).join('')}</div>
+    </div>
+    <p class="dp-note" style="margin-top:22px">Export invoices &amp; hours as CSV, then "Mark Synced" locks them so nothing double-bills. Your accountant gets files, not another login.</p>`;
+  requestAnimationFrame(() => dpBody.querySelectorAll('.bars .b').forEach((b,i) => b.style.height = (hours[i]*10) + '%'));
+}
+
+const panes = { jobs:renderJobs, inventory:renderInventory, accounting:renderAccounting };
+document.querySelectorAll('.demo-tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.demo-tab').forEach(x => x.classList.remove('on'));
+  t.classList.add('on');
+  panes[t.dataset.pane]();
+}));
+renderJobs();
+
+// ------------------------------------------------------------------
+// Phone demo — field module mirror of the same job data
+// ------------------------------------------------------------------
+const psBody = document.getElementById('ps-body');
+const toast = document.getElementById('toast');
+let toastT;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function syncPhone() {
+  const mine = demo.jobs.filter((_,i) => i < 3); // Ortiz's assignments
+  psBody.innerHTML = mine.map((j,i) => {
+    const cls = j.status === 'Scheduled' ? 'js-sched' : j.status === 'In Progress' ? 'js-prog' : 'js-done';
+    return `<div class="job-card">
+      <span class="jstatus ${cls}">${j.status}</span>
+      <div class="jt">${j.desc}</div>
+      <div class="jm">${j.client} · ${j.van}</div>
+      <div class="job-actions">
+        <button class="jbtn start" data-a="start" data-i="${i}" ${j.status!=='Scheduled'?'disabled':''}>Start</button>
+        <button class="jbtn time"  data-a="time"  data-i="${i}" ${j.status==='Completed'?'disabled':''}>Log Time</button>
+        <button class="jbtn done"  data-a="done"  data-i="${i}" ${j.status!=='In Progress'?'disabled':''}>Complete</button>
+      </div>
+    </div>`;
+  }).join('');
+  psBody.querySelectorAll('.jbtn').forEach(b => b.addEventListener('click', () => {
+    const j = demo.jobs[+b.dataset.i];
+    if (b.dataset.a === 'start') { j.status = 'In Progress'; showToast('Job started'); }
+    if (b.dataset.a === 'done')  { j.status = 'Completed';  showToast('Job completed — parts deducted'); }
+    if (b.dataset.a === 'time')  { showToast('2.5 hrs logged to ' + j.client); }
+    syncPhone(); renderIfJobs();
+  }));
+}
+function renderIfJobs() {
+  if (document.querySelector('.demo-tab.on')?.dataset.pane === 'jobs') renderJobs();
+}
+syncPhone();
+
+// ------------------------------------------------------------------
+// Contact form (placeholder — no backend)
+// ------------------------------------------------------------------
+document.getElementById('contact-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  document.getElementById('form-ok').style.display = 'block';
+});
+</script>
+</body>
+</html>
