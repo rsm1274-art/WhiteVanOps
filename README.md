@@ -12,7 +12,7 @@ Search `index.html` for `[` — every bracketed value is a placeholder:
 
 | Placeholder | Where |
 |---|---|
-| `[sales@yourcompany.com]`, `[+1 (555) 000-0000]`, `[Mon–Fri, 8am–6pm CT]`, `[Street Address · City, ST]` | Contact section |
+| `[sales@yourcompany.com]`, `[+1 (555) 000-0000]`, `[Mon–Fri, 8am–6pm CT]` | Contact section |
 | `[Your Company Name]`, `[Privacy Policy]`, `[Terms]` | Footer |
 | Demo form backend | `#contact-form` submit handler shows a notice instead of sending — wire it to your CRM/email service |
 
