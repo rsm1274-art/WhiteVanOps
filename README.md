@@ -4,6 +4,8 @@ A single self-contained static page (`index.html`) — no build step, no depende
 
 **Preview locally:** `npx serve marketing -l 4173` (also wired into `.claude/launch.json` as the `marketing` config).
 
+**Live deployment:** GitHub Pages at <https://rsm1274-art.github.io/WhiteVanOps/>, served from the `main` branch of [rsm1274-art/WhiteVanOps](https://github.com/rsm1274-art/WhiteVanOps). This `marketing/` folder is itself the git checkout of that repo — to publish changes, commit here and `git push` (credentials are handled by Git Credential Manager).
+
 ## Placeholders to fill in before going live
 
 Search `index.html` for `[` — every bracketed value is a placeholder:
