@@ -102,7 +102,7 @@
 
   /* ---------- Hero ---------- */
   .hero { padding:150px 0 90px; position:relative; background:#fff; border-bottom:1px solid var(--line); }
-  .hero-grid { display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center; }
+  .hero-grid { display:grid; grid-template-columns:1fr 1.15fr; gap:64px; align-items:center; }
   @media (max-width:960px){ .hero-grid { grid-template-columns:1fr; } }
   .hero h1 { font-size:clamp(2.6rem,6vw,4.2rem); margin-bottom:1.25rem; }
   .hero h1 .accent { color:var(--blue); }
@@ -116,26 +116,28 @@
   /* mini dashboard mock in hero — light panel, ruled title bar */
   .mock {
     background:#fff; border:1px solid var(--line); border-radius:2px;
-    overflow:hidden;
+    overflow:hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.08);
   }
   .mock-bar { display:flex; gap:6px; padding:10px 14px; background:var(--zinc-100); border-bottom:1px solid var(--line); }
   .mock-bar i { width:10px; height:10px; border-radius:50%; background:var(--zinc-300); display:block; }
-  .mock-body { display:grid; grid-template-columns:118px 1fr; min-height:300px; }
+  .mock-body { display:grid; grid-template-columns:130px 1fr; min-height:320px; }
   .mock-side { background:var(--zinc-900); border-right:1px solid var(--zinc-800); padding:12px 8px; }
   .mock-side .it {
-    font-size:.5rem; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
-    color:var(--zinc-500); padding:7px 9px; border-radius:2px; margin-bottom:2px; border-left:2px solid transparent;
+    font-size:.55rem; letter-spacing:.14em; text-transform:uppercase; font-weight:700;
+    color:var(--zinc-500); padding:9px 10px; border-radius:2px; margin-bottom:2px; border-left:2px solid transparent;
+    cursor:pointer; transition:all .15s;
   }
+  .mock-side .it:hover { background:var(--zinc-800); color:var(--zinc-300); }
   .mock-side .it.on { background:var(--zinc-800); color:#fff; border-left-color:var(--blue-400); }
-  .mock-main { background:var(--zinc-100); padding:14px; }
-  .mock-main .ttl { font-family:var(--display); font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--zinc-800); margin-bottom:10px; }
+  .mock-main { background:var(--zinc-100); padding:20px; }
+  .mock-main .ttl { font-family:var(--display); font-size:.85rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--zinc-800); margin-bottom:14px; }
   .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:10px; }
   .kpi { background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:10px; }
   .kpi .kl { font-size:.44rem; letter-spacing:.13em; text-transform:uppercase; font-weight:700; color:var(--zinc-500); }
   .kpi .kv { font-family:var(--mono); font-size:1.15rem; font-weight:500; color:var(--zinc-900); }
-  .rowline { display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:8px 10px; margin-bottom:6px; }
-  .rowline .jn { font-size:.55rem; font-weight:700; color:var(--zinc-800); }
-  .rowline .jc { font-size:.46rem; color:var(--zinc-500); }
+  .rowline { display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid var(--zinc-200); border-radius:2px; padding:10px 12px; margin-bottom:8px; }
+  .rowline .jn { font-size:.6rem; font-weight:700; color:var(--zinc-800); }
+  .rowline .jc { font-size:.5rem; color:var(--zinc-500); }
   .pill { font-size:.42rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:99px; border:1px solid; }
   .pill.p1 { background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; }
   .pill.p2 { background:#fffbeb; color:#b45309; border-color:#fde68a; }
@@ -384,16 +386,16 @@
     <div class="mock reveal">
       <div class="mock-bar"><i></i><i></i><i></i></div>
       <div class="mock-body">
-        <div class="mock-side">
-          <div class="it on">Overview</div>
-          <div class="it">Clients &amp; Jobs</div>
-          <div class="it">Scheduling</div>
-          <div class="it">Personnel &amp; Time</div>
-          <div class="it">Fleet &amp; Service</div>
-          <div class="it">Inventory Control</div>
-          <div class="it">QuickBooks Sync</div>
+        <div class="mock-side" id="hero-tabs">
+          <div class="it on" data-view="overview">Overview</div>
+          <div class="it" data-view="jobs">Clients &amp; Jobs</div>
+          <div class="it" data-view="scheduling">Scheduling</div>
+          <div class="it" data-view="time">Personnel &amp; Time</div>
+          <div class="it" data-view="fleet">Fleet &amp; Service</div>
+          <div class="it" data-view="inventory">Inventory Control</div>
+          <div class="it" data-view="qb">QuickBooks Sync</div>
         </div>
-        <div class="mock-main">
+        <div class="mock-main" id="hero-main">
           <div class="ttl">Operations Overview</div>
           <div class="kpis">
             <div class="kpi"><div class="kl">Fleet Deployment</div><div class="kv">86%</div></div>
@@ -719,21 +721,93 @@ function syncPhone() {
     const j = demo.jobs[+b.dataset.i];
     if (b.dataset.a === 'start') { j.status = 'In Progress'; showToast('Job started'); }
     if (b.dataset.a === 'done')  { j.status = 'Completed';  showToast('Job completed — parts deducted'); }
-    if (b.dataset.a === 'time')  { showToast('2.5 hrs logged to ' + j.client); }
-    syncPhone(); renderIfJobs();
+    if (b.dataset.a === 'time')  { showToast('Time logged for this job'); }
+    syncPhone();
   }));
-}
-function renderIfJobs() {
-  if (document.querySelector('.demo-tab.on')?.dataset.pane === 'jobs') renderJobs();
 }
 syncPhone();
 
 // ------------------------------------------------------------------
-// Contact form (placeholder — no backend)
 // ------------------------------------------------------------------
 document.getElementById('contact-form').addEventListener('submit', (e) => {
   e.preventDefault();
   document.getElementById('form-ok').style.display = 'block';
+});
+
+// ------------------------------------------------------------------
+// Hero Interactive Mock
+// ------------------------------------------------------------------
+const heroViews = {
+  overview: `
+    <div class="ttl">Operations Overview</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Fleet Deployment</div><div class="kv">86%</div></div>
+      <div class="kpi"><div class="kl">Active Jobs</div><div class="kv">12</div></div>
+      <div class="kpi"><div class="kl">Overdue</div><div class="kv">1</div></div>
+    </div>
+    <div class="rowline"><div><div class="jn">HVAC Quarterly Service — Lakeside Mall</div><div class="jc">Van 03 · Ortiz, Chen</div></div><span class="pill p2">In Progress</span></div>
+    <div class="rowline"><div><div class="jn">Generator Install — Reyes Dental</div><div class="jc">Van 01 · Kowalski</div></div><span class="pill p1">Scheduled</span></div>
+    <div class="rowline"><div><div class="jn">Rooftop Unit Repair — Hilltop Foods</div><div class="jc">Van 02 · Chen</div></div><span class="pill p3">Completed</span></div>
+  `,
+  jobs: `
+    <div class="ttl">Clients &amp; Jobs</div>
+    <div class="rowline"><div><div class="jn">Marina Storage</div><div class="jc">Panel Upgrade 200A</div></div><span class="pill p1">Scheduled</span></div>
+    <div class="rowline"><div><div class="jn">Lakeside Mall</div><div class="jc">HVAC Quarterly Service</div></div><span class="pill p2">In Progress</span></div>
+    <div class="rowline"><div><div class="jn">Reyes Dental</div><div class="jc">Generator Install</div></div><span class="pill p1">Scheduled</span></div>
+    <div class="rowline"><div><div class="jn">Hilltop Foods</div><div class="jc">Rooftop Unit Repair</div></div><span class="pill p3">Completed</span></div>
+  `,
+  scheduling: `
+    <div class="ttl">Scheduling</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Today</div><div class="kv">5 Jobs</div></div>
+      <div class="kpi"><div class="kl">Tomorrow</div><div class="kv">8 Jobs</div></div>
+      <div class="kpi"><div class="kl">Unassigned</div><div class="kv">2 Jobs</div></div>
+    </div>
+    <div class="rowline"><div><div class="jn">Today 08:00 AM</div><div class="jc">Generator Install (Van 01)</div></div><span class="pill p1">Scheduled</span></div>
+    <div class="rowline"><div><div class="jn">Today 11:30 AM</div><div class="jc">HVAC Quarterly Service (Van 03)</div></div><span class="pill p2">In Progress</span></div>
+  `,
+  time: `
+    <div class="ttl">Personnel &amp; Time</div>
+    <div class="rowline"><div><div class="jn">Ortiz, M.</div><div class="jc">HVAC Quarterly Service</div></div><span class="pill p2" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">On Clock (4h 12m)</span></div>
+    <div class="rowline"><div><div class="jn">Chen, A.</div><div class="jc">HVAC Quarterly Service</div></div><span class="pill p2" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;">On Clock (4h 12m)</span></div>
+    <div class="rowline"><div><div class="jn">Kowalski, J.</div><div class="jc">Off Duty</div></div><span class="pill p3" style="background:#f5f5f4;color:#78716c;border-color:#d6d3d1;">Clocked Out</span></div>
+  `,
+  fleet: `
+    <div class="ttl">Fleet &amp; Service</div>
+    <div class="rowline"><div><div class="jn">Van 01 (Ford Transit)</div><div class="jc">Next service: 5,200 mi</div></div><span class="pill p3">Active</span></div>
+    <div class="rowline"><div><div class="jn">Van 02 (Chevy Express)</div><div class="jc">Next service: 1,100 mi</div></div><span class="pill p3">Active</span></div>
+    <div class="rowline"><div><div class="jn">Van 03 (Mercedes Sprinter)</div><div class="jc">Tire replacement due</div></div><span class="pill p2">Needs Service</span></div>
+  `,
+  inventory: `
+    <div class="ttl">Inventory Control</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Items</div><div class="kv">1,204</div></div>
+      <div class="kpi"><div class="kl">Low Stock</div><div class="kv">4</div></div>
+      <div class="kpi"><div class="kl">Value</div><div class="kv">$42k</div></div>
+    </div>
+    <div class="rowline"><div><div class="jn">Refrigerant R-410A (25lb)</div><div class="jc">Warehouse: 6 · Vans: 2</div></div><span class="pill p3">OK</span></div>
+    <div class="rowline"><div><div class="jn">Capacitor 45/5 µF</div><div class="jc">Warehouse: 3 · Vans: 1 (Min: 5)</div></div><span class="pill p2">Reorder</span></div>
+    <div class="rowline"><div><div class="jn">Filter-Drier 3/8"</div><div class="jc">Warehouse: 22 · Vans: 8</div></div><span class="pill p3">OK</span></div>
+  `,
+  qb: `
+    <div class="ttl">QuickBooks Sync</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Pending Invoices</div><div class="kv">4</div></div>
+      <div class="kpi"><div class="kl">Pending Time</div><div class="kv">12</div></div>
+    </div>
+    <div class="rowline" style="margin-top:20px; justify-content:center; padding:16px;">
+      <button class="btn btn-primary" style="font-size:.6rem;">Export CSV to QuickBooks</button>
+    </div>
+  `
+};
+
+const heroMain = document.getElementById('hero-main');
+document.querySelectorAll('#hero-tabs .it').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('#hero-tabs .it').forEach(t => t.classList.remove('on'));
+    tab.classList.add('on');
+    if(heroMain) heroMain.innerHTML = heroViews[tab.dataset.view] || heroViews.overview;
+  });
 });
 </script>
 </body>
