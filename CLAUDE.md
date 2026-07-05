@@ -22,6 +22,10 @@ npx prisma generate                     # Regenerate client after schema changes
 npx prisma db seed                      # Seed with mock data (uses prisma/seed.ts via tsx)
 npx prisma studio                       # Visual DB browser
 npx tsx prisma/bootstrap.ts            # Create/reset the initial admin superuser (admin/admin, forced password change)
+
+# Onboarding data import (migrating a customer's existing data — see MANUAL_Setup_Installation.md)
+npx tsx scripts/import/analyze.ts <data-dir>   # Propose <data-dir>/mapping.json from customer CSV/Excel files
+npx tsx scripts/import/run.ts <data-dir>       # Validate + dry-run report; add --commit to import (fresh DB only)
 ```
 
 **Env files — two files serve different consumers:**
@@ -149,6 +153,16 @@ All dates are stored as UTC `DateTime` in Postgres. The app parses them as **loc
 ### QuickBooks sync
 
 `/api/sync` (POST) is the bulk lock route — it marks completed jobs and time entries as `"Exported"` (`qbInvoiceSyncStatus` / `qbTimeSyncStatus`). This is a one-way, irreversible operation. The Accounting tab in the dashboard exposes CSV export buttons (client-side only, no API call) followed by a "Mark Synced" confirmation that calls this route. Requires `admin` or `superuser` role.
+
+### Onboarding data import
+
+`scripts/import/analyze.ts` + `scripts/import/run.ts` (both `npx tsx`) migrate a new
+customer's spreadsheets into a fresh database. All logic is in pure modules under
+`src/lib/import/` (relative imports only — no `@/` alias, so tsx resolves them; nothing
+there imports `src/lib/db.ts` — the executor takes the DB as a parameter). The
+`mapping.json` proposed by analyze and reviewed by hand is the contract; `run.ts` is
+dry-run by default, all-or-nothing on `--commit`, and refuses a non-empty database.
+Spec: `docs/superpowers/specs/2026-07-05-data-migration-engine-design.md`.
 
 ### Field page
 

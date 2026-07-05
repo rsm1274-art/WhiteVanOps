@@ -304,4 +304,38 @@ Launch WhiteVanOps on the new machine. Your accounts, historical data, and confi
 
 ---
 
+## 14. Onboarding Data Import (migrating a customer's existing data)
+
+Imports a new customer's master data (clients, personnel, vehicles, equipment,
+inventory, stock) and open/scheduled jobs from CSV/Excel files into a fresh
+WhiteVanOps database. Run from a project checkout on the machine that can
+reach the customer's database (`DATABASE_URL` in `.env`, same as the Prisma
+CLI). Completed/cancelled job history is intentionally not imported.
+
+1. **Collect the data** into one folder as `.csv`/`.xlsx`. Convert PDFs or
+   other FSM exports to spreadsheets first.
+2. **Analyze:** `npx tsx scripts/import/analyze.ts <folder>` — writes
+   `<folder>/mapping.json` (which file feeds which entity, column mappings,
+   date formats, status translations).
+3. **Review `mapping.json`.** The import refuses to run while any
+   `"unresolved"` entries or `"UNRESOLVED"` valueMap values remain — map a
+   column, add a `"defaults"` entry, or translate the value. Low-confidence
+   guesses are marked `"confidence": "low"`; verify them.
+4. **Dry-run:** `npx tsx scripts/import/run.ts <folder>` — writes
+   `<folder>/import-report.json` listing what would be imported, every
+   rejected row with its file:row and reason, and out-of-scope skips
+   (completed/cancelled jobs). No database access needed for a dry run.
+5. **Commit:** `npx tsx scripts/import/run.ts <folder> --commit` — refuses if
+   the database is not empty or if any rows were rejected (pass
+   `--skip-rejected` to import only the clean rows). Runs as a single
+   all-or-nothing transaction.
+6. **If a run goes wrong:** `npx prisma migrate reset`, then
+   `npx tsx prisma/bootstrap.ts`, fix the data or mapping, and rerun.
+
+Keep `mapping.json` and `import-report.json` with the customer's onboarding
+records — they are the audit trail of what was imported. Design details:
+`docs/superpowers/specs/2026-07-05-data-migration-engine-design.md`.
+
+---
+
 *End of Setup & Installation Manual*
