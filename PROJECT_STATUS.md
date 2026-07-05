@@ -1,6 +1,6 @@
 # WhiteVanOps — Project Status Summary
 
-*As of June 28, 2026*
+*As of July 5, 2026*
 
 ---
 
@@ -101,6 +101,24 @@ Three end-user manuals maintained alongside the codebase:
 - `MANUAL_Administrator.md` — every tab, modal, and workflow available to admin/superuser
 - `MANUAL_Field_Tech.md` — field module UI, job status transitions, time logging
 
+### Phase 9 — Security Hardening & Git Hygiene (July 4–5, 2026)
+
+A full-folder security review (`CODE_REVIEW_2026-07-04.md`) turned up a live Firebase admin credential in the repo and several real vulnerabilities; all were fixed and verified end-to-end, not just patched:
+
+- **Firebase service-account key rotated and relocated** out of the project folder (`%APPDATA%\whitevanops-secrets\`), referenced via `WVO_FIREBASE_SERVICE_ACCOUNT`; `scripts/license-manager.js` now loads it via `dotenv`
+- **App is now a private git repository** (`github.com/rsm1274-art/whitevanops-app`) — separate from the public marketing-site repo — with a `husky` + `scripts/scan-secrets.js` pre-commit hook as a secret-scanning backstop
+- **Session cookie `Secure` flag divergence fixed**: `login`, `change-password`, and `logout` now issue the cookie through shared helpers in `src/lib/auth.ts` so the three routes can't drift out of sync again
+- **Backup route command injection fixed**: `src/app/api/settings/backup/route.ts` switched from `exec()` with a shell string to `execFile()` with an argument array; also fixed a separate bug (unrelated to the injection issue) where `pg_dump` rejected Prisma's `?schema=` query parameter, which had made the backup feature non-functional
+- **Login brute-force protection added**: per-account lockout (5 failed attempts → 15-minute lock, persisted on `User.failedLoginAttempts`/`lockedUntil`) plus a per-IP rate limit (`src/lib/rateLimit.ts`)
+- **Authorization bug fixed**: a tech account with no linked `personnelId` could previously update the status of *any* job, not just their own assignments (`src/app/api/jobs/route.ts`)
+- **Password validation centralized**: `src/lib/password.ts` now enforces a minimum-strength rule on self-service password changes *and* admin-created/reset user passwords (previously the admin path had no validation at all)
+- **Removed the FRP (Fast Reverse Proxy) tunnel feature entirely** — it auto-started on every launch with a hardcoded secret, was never actually wired into the production build (no `extraResources` entry shipped it into the installer), and had drifted out of sync with the manuals, which already documented Port Forwarding + Dynamic DNS as the real field-access path. `MANUAL_Setup_Installation.md` §7 was rewritten as a complete, step-by-step per-customer guide (CGNAT detection, DHCP reservation, port forwarding, Windows Firewall, DuckDNS with a Scheduled Task updater, and the correct off-LAN verification method) — the plain-HTTP tradeoff this implies is documented explicitly, not left implicit
+- **Removed the stale Docker deployment scaffold** (`docker-compose.yml`, `Dockerfile`, `deploy/`) — a half-finished path from before real user auth existed, fully superseded by the Electron installer + native PostgreSQL path and the built-in backup feature
+
+### Phase 10 — Automated Test Coverage (July 5, 2026)
+
+Added Vitest (`vitest.config.ts`) with 36 tests across the pure-logic `src/lib/` modules: `dateUtils` (local-noon date parsing), `recurrence` (weekly/biweekly/monthly cadence advancement), `jobConflicts` (all six conflict branches plus edit-exclusion scoping, with `@/lib/db` mocked), and `auth` (cookie security options, JWT sign/verify round trip, role enforcement, with `next/headers` mocked). This is a starting baseline, not comprehensive coverage — there is still no coverage of the API routes themselves, no component tests, and no end-to-end tests. Run via `npm test`.
+
 ---
 
 ## Current State (What Works)
@@ -109,15 +127,17 @@ Three end-user manuals maintained alongside the codebase:
 |---|---|
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
-| Auth / roles | Complete — login, JWT, role enforcement, forced password change |
+| Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
 | Audit logging | Complete — every write action recorded |
 | Field tech module | Complete — mobile-optimized, auto-selects linked tech |
 | QuickBooks CSV export | Complete — Invoice and Time exports, sync-lock via `/api/sync` |
 | Fleet & equipment | Complete — vehicles, maintenance logs, repair records, equipment assets |
 | Personnel | Complete — qualifications, time-off, user account linking |
 | Inventory | Complete — multi-location stock levels, low-stock alerts, job deduction on completion |
-| Network & Access | Complete — Port Forwarding and Dynamic DNS enabled for direct field device connection, bypassing cloud |
-| Backup & Recovery | Complete — Built-in Target Directory Mirror executing nightly automated pg_dump local backups |
+| Network & Access | Complete — Port Forwarding + Dynamic DNS for direct field device connection, no cloud relay. Documented as plain `http://` by deliberate choice (avoids subscription costs); see `MANUAL_Setup_Installation.md` §7 for the full per-customer setup and the accepted tradeoff |
+| Backup & Recovery | Complete — Built-in Target Directory Mirror executing nightly automated `pg_dump` local backups; verified end-to-end producing a valid, restorable archive |
+| Security & Git | Complete — private git repo with pre-commit secret scanning; command injection, cookie-flag, and job-authorization bugs fixed; see Phase 9 |
+| Automated tests | Started — 36 Vitest tests on pure-logic modules; see Phase 10. Not comprehensive (no API route, component, or e2e tests yet) |
 | Offline / PWA | Complete — IndexedDB cache and Service Worker sync queue. Field module functions fully offline |
 | Electron desktop app | Complete — dev and production build pipelines, NSIS installer |
 | End-user manuals | Complete — three manuals covering setup, admin, and field roles |
@@ -170,9 +190,11 @@ The items below are either known gaps, enhancements discussed but not yet built,
 
 ## Lint / Type-Check Status
 
-As of 2026-07-02: `npx tsc --noEmit` and `npm run lint` (`eslint .`, project-wide) both pass with zero errors and zero warnings.
+As of 2026-07-02: `npx tsc --noEmit` and `npm run lint` (`eslint .`, project-wide) both passed with zero errors and zero warnings.
 
-Notable fix: `eslint.config.mjs` was missing `dist-electron/**` from its ignore list, so ESLint was linting the compiled/minified Next.js standalone server bundled inside `dist-electron/win-unpacked/resources/nextjs/.next/` as if it were source — this alone produced ~4400 false-positive problems. Real, fixable issues in actual source were a much smaller set (14 errors, 7 warnings): unused imports/vars, `require()` flagged in the plain-CommonJS Electron/build scripts (now allowed via a scoped eslint override, since those files aren't part of the ESM Next.js app), an `<a>` that should have been `next/link`, a raw `<img>` converted to `next/image`, and three `react-hooks/set-state-in-effect` warnings on intentional "fetch on mount, expose reload for later" hooks — suppressed with scoped, justified `eslint-disable-next-line` comments rather than restructured, since the pattern is correct and reused elsewhere.
+Notable fix at that time: `eslint.config.mjs` was missing `dist-electron/**` from its ignore list, so ESLint was linting the compiled/minified Next.js standalone server bundled inside `dist-electron/win-unpacked/resources/nextjs/.next/` as if it were source — this alone produced ~4400 false-positive problems. Real, fixable issues in actual source were a much smaller set (14 errors, 7 warnings): unused imports/vars, `require()` flagged in the plain-CommonJS Electron/build scripts (now allowed via a scoped eslint override, since those files aren't part of the ESM Next.js app), an `<a>` that should have been `next/link`, a raw `<img>` converted to `next/image`, and three `react-hooks/set-state-in-effect` warnings on intentional "fetch on mount, expose reload for later" hooks — suppressed with scoped, justified `eslint-disable-next-line` comments rather than restructured, since the pattern is correct and reused elsewhere.
+
+**As of 2026-07-05:** `npx tsc --noEmit` is still clean. `npm run lint` is **not** currently clean project-wide — the offline-PWA/backup-feature work added between 2026-07-02 and 2026-07-04 (`src/components/tabs/SettingsTab.tsx`, `src/lib/idb.ts`, `src/app/field/page.tsx`) introduced 9 errors (mostly `@typescript-eslint/no-explicit-any`) and a few warnings (a `react-hooks/set-state-in-effect` violation and a missing `useEffect` dependency) that were never linted project-wide until this pass. None of these were touched during the July 4–5 security/testing work — flagged here as a known, not-yet-fixed gap rather than fixed opportunistically, since they weren't part of that work's scope.
 
 ---
 
