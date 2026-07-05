@@ -26,10 +26,6 @@ The codebase audit found two things worth fixing before you build the installer.
 
 - [x] ✅ **`.env.example` rewritten to match reality.** It previously listed `APP_USERNAME`/`APP_PASSWORD` as if they controlled login (leftover from an old, unused deployment path) — now it lists only the two variables the app actually reads, `DATABASE_URL` and `SESSION_SECRET`, with the correct port (5433) and a note on where each value is used, matching `MANUAL_Setup_Installation.md` section 9.
 
-- [ ] 🧑 **Note: ignore `docker-compose.yml` and the `deploy/` folder.** (0 min, just awareness) This repo has an old, half-finished Docker deployment path from an earlier version of the app, before real user accounts existed — it still assumes a single hardcoded `APP_USERNAME`/`APP_PASSWORD` login, which the app hasn't used since real auth was added. It is **not** the path this checklist follows and will not work correctly if you try it as-is. The path below (Windows installer + PostgreSQL) is the current, documented, working one. If you ever want a cloud-hosted version later, that Docker setup would need to be rebuilt against the real `User` table first — treat it as a future project, not part of this launch.
-
-- [ ] 🧑 **Note: ignore `docker-compose.yml` and the `deploy/` folder.** (0 min, just awareness) This repo has an old, half-finished Docker deployment path from an earlier version of the app, before real user accounts existed — it still assumes a single hardcoded `APP_USERNAME`/`APP_PASSWORD` login, which the app hasn't used since real auth was added. It is **not** the path this checklist follows and will not work correctly if you try it as-is. The path below (Windows installer + PostgreSQL) is the current, documented, working one. If you ever want a cloud-hosted version later, that Docker setup would need to be rebuilt against the real `User` table first — treat it as a future project, not part of this launch.
-
 ---
 
 ## Phase 1 — Accounts and prerequisites
@@ -145,7 +141,7 @@ Don't call it launched until you've done this end to end, on the real production
 
 ## Phase 7 — After launch
 
-- [ ] 🧑 **Set up regular database backups.** (20 min) This is the single most important post-launch step — if this database is lost with no backup, you lose every job, client, and time record. At minimum, schedule a nightly `pg_dump` of the `white_van_ops` database to a separate drive or cloud storage folder (a `deploy/backup.sh` script already exists in this repo as a starting point, though it was written for the old Docker path and will need adjusting for the native PostgreSQL install — ask your agent to adapt it).
+- [ ] 🧑 **Set up regular database backups.** (5 min) This is the single most important post-launch step — if this database is lost with no backup, you lose every job, client, and time record. The app has this built in: **Settings → Database Backup & Recovery**, set a **Target Directory Mirror** (an external drive, NAS, or synced folder like OneDrive/Google Drive). Once configured, a nightly `pg_dump` runs automatically at 2:00 AM (`electron/backup.js`); use "Run Backup Now" to test it immediately.
 
   **You'll know it worked when:** you have at least one backup file sitting somewhere other than the server machine's C: drive, dated within the last 24 hours.
 
