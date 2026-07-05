@@ -83,11 +83,14 @@ export async function PUT(request: Request) {
       if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      // Verify they are assigned to this job
-      if (user.personnelId) {
-        const assignment = await prisma.jobAssignment.findFirst({ where: { jobId, personnelId: user.personnelId } });
-        if (!assignment) return NextResponse.json({ error: "You are not assigned to this job" }, { status: 403 });
+      // Verify they are assigned to this job. A tech account not linked to a
+      // Personnel record has no assignments to check against, so it must be
+      // rejected outright rather than silently skipping the check.
+      if (!user.personnelId) {
+        return NextResponse.json({ error: "Your account is not linked to a personnel record" }, { status: 403 });
       }
+      const assignment = await prisma.jobAssignment.findFirst({ where: { jobId, personnelId: user.personnelId } });
+      if (!assignment) return NextResponse.json({ error: "You are not assigned to this job" }, { status: 403 });
     }
 
     const currentJob = await prisma.job.findUnique({
