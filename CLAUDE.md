@@ -24,7 +24,7 @@ npx prisma studio                       # Visual DB browser
 npx tsx prisma/bootstrap.ts            # Create/reset the initial admin superuser (admin/admin, forced password change)
 
 # Onboarding data import (migrating a customer's existing data — see MANUAL_Setup_Installation.md)
-npx tsx scripts/import/analyze.ts <data-dir>   # Propose <data-dir>/mapping.json from customer CSV/Excel files
+npx tsx scripts/import/analyze.ts <data-dir>   # Propose <data-dir>/mapping.json from customer CSV/Excel files (--force to overwrite an existing one)
 npx tsx scripts/import/run.ts <data-dir>       # Validate + dry-run report; add --commit to import (fresh DB only)
 ```
 

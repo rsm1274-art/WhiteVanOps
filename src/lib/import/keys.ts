@@ -5,6 +5,9 @@ export function normKey(s: string): string {
   return s.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+// Only reads `data`, never `refs` — fine for entities like StockLevel whose
+// natural key fields are FK-based (they live in `refs`, not `data`) because
+// nothing ever resolves to StockLevel as a target.
 export function naturalKeyOf(entity: EntityName, data: Record<string, unknown>): string | null {
   const nk = ENTITY_META[entity].naturalKey;
   if (!nk) return null;

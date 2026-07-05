@@ -312,11 +312,16 @@ WhiteVanOps database. Run from a project checkout on the machine that can
 reach the customer's database (`DATABASE_URL` in `.env`, same as the Prisma
 CLI). Completed/cancelled job history is intentionally not imported.
 
+This section is for importing a brand-new customer's external spreadsheet
+data; if you're instead moving an existing WhiteVanOps installation and its
+database to new hardware, see §13 (Hardware Upgrades and Transfers).
+
 1. **Collect the data** into one folder as `.csv`/`.xlsx`. Convert PDFs or
    other FSM exports to spreadsheets first.
 2. **Analyze:** `npx tsx scripts/import/analyze.ts <folder>` — writes
    `<folder>/mapping.json` (which file feeds which entity, column mappings,
-   date formats, status translations).
+   date formats, status translations). Re-running this after adding new
+   source files requires `--force` to overwrite an existing `mapping.json`.
 3. **Review `mapping.json`.** The import refuses to run while any
    `"unresolved"` entries or `"UNRESOLVED"` valueMap values remain — map a
    column, add a `"defaults"` entry, or translate the value. Low-confidence
