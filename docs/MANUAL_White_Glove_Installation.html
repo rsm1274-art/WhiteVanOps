@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White Van Ops — White Glove Installation</title>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; color: #1c1917; background-color: #fafaf9; max-width: 800px; margin: 0 auto; padding: 2rem; }
+        h1, h2, h3 { font-family: 'Arial Narrow', sans-serif; text-transform: uppercase; color: #1d4ed8; }
+        h1 { border-bottom: 3px solid #1d4ed8; padding-bottom: 0.5rem; }
+        h2 { border-bottom: 1px solid #d6d3d1; padding-bottom: 0.25rem; margin-top: 2rem; }
+        .highlight { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+        .troubleshooting { background-color: #fffbeb; border-left: 4px solid #d97706; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+        ul { padding-left: 1.5rem; }
+        li { margin-bottom: 0.5rem; }
+        code { background-color: #e7e5e4; padding: 0.1rem 0.3rem; border-radius: 3px; font-family: monospace; }
+        input[type="checkbox"] { margin-right: 0.5rem; }
+    </style>
+</head>
+<body>
+
+    <h1>White Van Ops — White Glove Installation Manual</h1>
+    <p><strong>Objective</strong>: Execute a flawless on-site or remote installation of White Van Ops, configuring network tunnels, backups, and user training.</p>
+
+    <h2>1. Preparation (Before Arrival)</h2>
+    <div class="highlight">
+        <strong>What to Bring (Physical or Digital):</strong>
+        <ul>
+            <li>USB Flash Drive (for local backup setup if the client doesn't have one).</li>
+            <li>Latest <code>WhiteVanOps Setup x.x.x.exe</code>.</li>
+            <li>Latest <code>frpc.exe</code> and a pre-configured <code>frpc.toml</code> template.</li>
+            <li>Administrator credentials (admin / admin).</li>
+        </ul>
+    </div>
+    <p><strong>Client Prerequisites (Confirm beforehand):</strong></p>
+    <ul>
+        <li>A dedicated Windows PC (Windows 10/11) that stays powered on 24/7.</li>
+        <li>Administrator access on that PC.</li>
+    </ul>
+
+    <h2>2. On-Site Installation Procedure</h2>
+    
+    <h3>Phase A: Core Software Installation</h3>
+    <ol>
+        <li>Log into the dedicated office PC. Ensure Windows Sleep settings are set to "Never Sleep" (Monitor off is fine, PC sleep is not).</li>
+        <li>Run <code>WhiteVanOps Setup x.x.x.exe</code>.</li>
+        <li>Allow the installer to complete and launch the application.</li>
+        <li><strong>First Launch</strong>: Wait for the application to initialize the database automatically.</li>
+        <li>Log in with <code>admin</code> / <code>admin</code>. Immediately change the password to a secure one provided by the owner.</li>
+    </ol>
+
+    <h3>Phase B: FRP (Fast Reverse Proxy) Network Setup</h3>
+    <ol>
+        <li>Extract <code>frpc.exe</code> to a permanent location (e.g., <code>C:\WhiteVanOps_FRP\</code>).</li>
+        <li>Edit <code>frpc.toml</code> with the specific peer-to-peer credentials for this client.</li>
+        <li>Configure <code>frpc.exe</code> to run as a background service or a scheduled task on startup.<br>
+            <em>Tip: Use Task Scheduler -> "Create Task" -> Trigger "At Startup" -> Action "Start a program" -> <code>frpc.exe</code> with argument <code>-c frpc.toml</code>.</em></li>
+        <li>Verify the FRP tunnel is active and the remote URL is generated.</li>
+    </ol>
+
+    <h3>Phase C: Target Directory Mirror (Backup)</h3>
+    <ol>
+        <li>Plug in the dedicated USB Drive or set up a shared network NAS folder.</li>
+        <li>Inside White Van Ops, navigate to the <strong>Settings</strong> tab.</li>
+        <li>Enter the absolute path to the backup folder (e.g., <code>E:\WVO_Backups\</code>).</li>
+        <li>Click <strong>Run Manual Backup Now</strong> to verify the <code>.sql.gz</code> file is created successfully.</li>
+    </ol>
+
+    <h3>Phase D: Field Tech Provisioning</h3>
+    <ol>
+        <li>Click <strong>Field Access QR</strong> in the dashboard and paste the FRP Tunnel URL.</li>
+        <li>Have each field technician scan the QR code with their mobile device.</li>
+        <li>Instruct them to tap <strong>Share -> Add to Home Screen</strong> (iOS) or <strong>Add to Home screen</strong> (Android).</li>
+        <li>Verify the app opens full-screen without URL bars.</li>
+        <li>Have them sign in with their tech credentials.</li>
+    </ol>
+
+    <h2>3. Data Migration & Training</h2>
+    <h3>Migration</h3>
+    <p>If they have a spreadsheet of clients and inventory, spend 30 minutes manually entering their top 20 active clients and core inventory to get them started and comfortable with the system.</p>
+
+    <h3>Admin Training Checklist</h3>
+    <ul style="list-style-type: none; padding-left: 0;">
+        <li><label><input type="checkbox"> How to schedule a job and avoid conflicts.</label></li>
+        <li><label><input type="checkbox"> How to add a new employee or vehicle.</label></li>
+        <li><label><input type="checkbox"> How to review time entries and complete a job.</label></li>
+        <li><label><input type="checkbox"> How to export to QuickBooks and mark as synced.</label></li>
+    </ul>
+
+    <h3>Tech Training Checklist</h3>
+    <ul style="list-style-type: none; padding-left: 0;">
+        <li><label><input type="checkbox"> How to open the PWA from the home screen.</label></li>
+        <li><label><input type="checkbox"> How to start a job, add materials, and log time.</label></li>
+        <li><label><input type="checkbox"> Demonstrate Offline Mode (turn off WiFi/Cellular, log time, turn back on).</label></li>
+    </ul>
+
+    <h2>4. Troubleshooting Roadblocks</h2>
+
+    <div class="troubleshooting">
+        <strong>Roadblock: The FRP tunnel isn't connecting or QR code won't load on phones.</strong><br>
+        <em>Fix:</em> Check the Windows Defender Firewall. Ensure inbound connections to port <code>3000</code> are permitted for the Node.js/Electron executable. Check if the client's ISP restricts outbound UDP traffic (rare, but happens).
+    </div>
+
+    <div class="troubleshooting">
+        <strong>Roadblock: The PC went to sleep and techs can't sync.</strong><br>
+        <em>Fix:</em> Windows 11 hides the deep sleep settings. Go to Control Panel -> Power Options -> Change plan settings -> Put the computer to sleep: <strong>Never</strong>.
+    </div>
+
+    <div class="troubleshooting">
+        <strong>Roadblock: "I forgot my admin password."</strong><br>
+        <em>Fix:</em> Since the DB is bundled, you can run a script against the local PostgreSQL instance on port 5433 to forcibly reset the password hash. (Keep a recovery SQL script handy).
+    </div>
+
+    <div class="troubleshooting">
+        <strong>Roadblock: The PWA won't install on an older iPhone.</strong><br>
+        <em>Fix:</em> Ensure they are using Safari (Chrome on iOS sometimes restricts PWA installation). Ensure iOS is updated. The app functions in the browser regardless, but the Home Screen experience requires Safari.
+    </div>
+
+</body>
+</html>

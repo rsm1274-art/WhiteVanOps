@@ -1,0 +1,306 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Client {
+  id              String                 @id @default(cuid())
+  name            String
+  contactName     String
+  locationAddress String
+  paymentTerms    String                 // E.g., "Net 30", "Net 15", "Due on Receipt"
+  jobs            Job[]
+  recurringJobs   RecurringJobTemplate[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+}
+
+model Personnel {
+  id                  String                   @id @default(cuid())
+  firstName           String
+  lastName            String
+  role                String                   // "Technician", "Dispatcher"
+  certifications      String?                  // Legacy free-text field
+  assignments         JobAssignment[]
+  timeEntries         TimeEntry[]
+  qualifications      PersonnelQualification[]
+  timeOff             PersonnelTimeOff[]
+  recurringAssignments RecurringJobPersonnel[]
+  user                User?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+}
+
+model PersonnelQualification {
+  id          String    @id @default(cuid())
+  personnelId String
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  tag         String    // e.g. "AWS D1.1 Welding", "CDL Class A"
+  category    String    // "Certification" | "License" | "Skill" | "Other"
+  issuedBy    String?
+  expiresAt   DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model PersonnelTimeOff {
+  id          String    @id @default(cuid())
+  personnelId String
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  type        String    // "Sick" | "Vacation" | "Personal" | "Other"
+  startDate   DateTime
+  endDate     DateTime
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model Vehicle {
+  id              String                 @id @default(cuid())
+  vin             String                 @unique
+  make            String
+  model           String
+  status          String                 // "Active", "In Maintenance", "Retired"
+  maintenanceLogs MaintenanceLog[]
+  jobs            Job[]
+  recurringJobs   RecurringJobTemplate[]
+  stockLocation   StockLocation?
+  repairRecords   RepairRecord[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+}
+
+model RepairRecord {
+  id              String     @id @default(cuid())
+  vehicleId       String?
+  vehicle         Vehicle?   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  equipmentId     String?
+  equipment       Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  description     String
+  repairType      String     // "On-Site" | "Off-Site"
+  location        String?    // Shop name / address (off-site only)
+  serviceProvider String?    // Company or contact name
+  servicePhone    String?
+  ticketNumber    String?    // Service / PO / ticket number
+  startDate       DateTime
+  resolvedDate    DateTime?  // null = repair still open
+  notes           String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model MaintenanceLog {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  date        DateTime
+  cost        Float
+  description String
+  odometer    Int
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model InventoryItem {
+  id           String        @id @default(cuid())
+  name         String
+  category     String
+  subCategory  String
+  defaultRate  Float
+  stockLevels  StockLevel[]
+  jobLineItems JobLineItem[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model StockLocation {
+  id          String       @id @default(cuid())
+  name        String       // E.g., "Main Warehouse", "Van 12"
+  type        String       // "Warehouse", "Vehicle"
+  vehicleId   String?      @unique
+  vehicle     Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  stockLevels StockLevel[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model StockLevel {
+  id              String        @id @default(cuid())
+  inventoryItemId String
+  stockLocationId String
+  quantity        Int
+  minThreshold    Int
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([inventoryItemId, stockLocationId])
+}
+
+model Equipment {
+  id                   String                  @id @default(cuid())
+  name                 String
+  serialNumber         String                  @unique
+  status               String                  // "Active", "In Use", "Maintenance"
+  jobAssignments       JobEquipment[]
+  repairRecords        RepairRecord[]
+  recurringAssignments RecurringJobEquipment[]
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+}
+
+model Job {
+  id                  String                @id @default(cuid())
+  clientId            String
+  assignedVehicleId   String?
+  status              String                // "Scheduled", "In Progress", "Completed", "Cancelled"
+  scheduledDate       DateTime
+  completionDate      DateTime?
+  notes               String?               // Scope of work / technician instructions
+  qbInvoiceSyncStatus String                @default("Pending") // "Pending", "Exported"
+  recurringTemplateId String?               // Set when this job was auto-generated from a RecurringJobTemplate
+  client              Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  vehicle             Vehicle?              @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
+  recurringTemplate   RecurringJobTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
+  assignments         JobAssignment[]
+  lineItems           JobLineItem[]
+  timeEntries         TimeEntry[]
+  equipment           JobEquipment[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Recurring Jobs — a template an admin defines once (client, vehicle, crew,
+// equipment, notes, cadence). "Generate Jobs" on the template creates real
+// Job rows going forward, running the same double-booking/repair/time-off
+// checks as a normal job creation, and skipping any occurrence that
+// conflicts (reported back to the user rather than silently dropped).
+// ---------------------------------------------------------------------------
+model RecurringJobTemplate {
+  id                 String                  @id @default(cuid())
+  clientId           String
+  assignedVehicleId  String?
+  notes              String?
+  frequency          String                  // "Weekly" | "Biweekly" | "Monthly"
+  startDate          DateTime                // first occurrence date
+  endDate            DateTime?               // null = no end date
+  active             Boolean                 @default(true)
+  lastGeneratedDate  DateTime?               // scheduledDate of the most recently generated job
+  client             Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  vehicle            Vehicle?                @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
+  personnel          RecurringJobPersonnel[]
+  equipment          RecurringJobEquipment[]
+  generatedJobs      Job[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+}
+
+model RecurringJobPersonnel {
+  id          String               @id @default(cuid())
+  templateId  String
+  personnelId String
+  template    RecurringJobTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  personnel   Personnel            @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+
+  @@unique([templateId, personnelId])
+}
+
+model RecurringJobEquipment {
+  id          String               @id @default(cuid())
+  templateId  String
+  equipmentId String
+  template    RecurringJobTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  equipment   Equipment            @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime             @default(now())
+
+  @@unique([templateId, equipmentId])
+}
+
+model JobAssignment {
+  id          String    @id @default(cuid())
+  jobId       String
+  personnelId String
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([jobId, personnelId])
+}
+
+model JobEquipment {
+  id          String    @id @default(cuid())
+  jobId       String
+  equipmentId String
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([jobId, equipmentId])
+}
+
+model JobLineItem {
+  id              String        @id @default(cuid())
+  jobId           String
+  inventoryItemId String
+  quantity        Int
+  rate            Float
+  description     String
+  job             Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  username           String     @unique
+  passwordHash       String
+  displayName        String
+  role               String     // "superuser" | "admin" | "tech"
+  personnelId        String?    @unique
+  personnel          Personnel? @relation(fields: [personnelId], references: [id], onDelete: SetNull)
+  active             Boolean    @default(true)
+  mustChangePassword Boolean    @default(false)
+  auditLogs          AuditLog[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   // "CREATE" | "UPDATE" | "DELETE"
+  entity    String   // "Job" | "TimeEntry" | "Client" | etc.
+  entityId  String
+  details   String?  // JSON
+  createdAt DateTime @default(now())
+}
+
+model TimeEntry {
+  id               String    @id @default(cuid())
+  jobId            String
+  personnelId      String
+  date             DateTime
+  duration         String    // HH:MM text format (e.g. "08:30")
+  serviceItem      String    // E.g. "Field Labor"
+  payrollItem      String    // E.g. "Regular Pay", "Overtime"
+  qbTimeSyncStatus String    @default("Pending") // "Pending", "Exported"
+  job              Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  personnel        Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model SystemSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}

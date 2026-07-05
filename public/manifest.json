@@ -1,0 +1,17 @@
+{
+  "name": "White Van Ops Field",
+  "short_name": "WVO Field",
+  "description": "Field operations management for White Van Ops",
+  "start_url": "/field",
+  "display": "standalone",
+  "background_color": "#1c1917",
+  "theme_color": "#1c1917",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

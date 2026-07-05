@@ -1,0 +1,68 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# secrets / credentials — NEVER commit these
+firebase-service-account.json
+*service-account*.json
+*serviceaccount*.json
+*.key.json
+license.json
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+/src/generated/prisma
+
+# electron packaging
+/dist-electron
+# portable PostgreSQL binaries bundled into the installer (see MANUAL_Setup_Installation.md)
+/pgsql
+# local database cluster
+/pg_data
+
+# marketing/ is its own separate git checkout (public GitHub Pages repo) —
+# never nest it inside this private app repo
+/marketing
+
+# FRP tunnel configs contain live auth tokens/secret keys — never commit
+electron/frp/frpc_field.toml
+electron/frp/frpc_office.toml
+# downloaded FRP binaries — same category as pgsql/, don't bloat the repo
+electron/frp/frp.zip
+electron/frp/frpc.exe

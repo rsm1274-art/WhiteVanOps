@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WhiteVanOps Activation</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 {
+      color: #111827;
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #4b5563;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 16px;
+      box-sizing: border-box;
+      text-align: center;
+      font-family: monospace;
+      letter-spacing: 2px;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    button:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+    #error {
+      color: #dc2626;
+      font-size: 14px;
+      margin-top: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Activate WhiteVanOps</h1>
+    <p>Please enter your license key to activate this installation.</p>
+    <input type="text" id="licenseKey" placeholder="WVO-XXXX-XXXX-XXXX-XXXX" />
+    <button id="activateBtn">Activate</button>
+    <div id="error"></div>
+  </div>
+
+  <script>
+    // Node is not exposed to this window; the activation-preload.js bridge
+    // provides the only two calls we need.
+    const activateBtn = document.getElementById('activateBtn');
+    const licenseInput = document.getElementById('licenseKey');
+    const errorDiv = document.getElementById('error');
+
+    activateBtn.addEventListener('click', () => {
+      const key = licenseInput.value.trim();
+      if (!key) return;
+
+      activateBtn.disabled = true;
+      activateBtn.innerText = 'Verifying...';
+      errorDiv.style.display = 'none';
+
+      window.wvoActivation.verify(key);
+    });
+
+    window.wvoActivation.onResult((result) => {
+      activateBtn.disabled = false;
+      activateBtn.innerText = 'Activate';
+
+      if (result.success) {
+        document.body.innerHTML = '<div class="container"><h1>Activated Successfully!</h1><p>Starting WhiteVanOps...</p></div>';
+      } else {
+        errorDiv.innerText = result.error;
+        errorDiv.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

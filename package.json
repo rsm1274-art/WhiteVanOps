@@ -1,0 +1,105 @@
+{
+  "name": "white-van-ops",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "electron:dev": "node scripts/electron-dev.js",
+    "electron:build": "node scripts/electron-build.js",
+    "prepare": "husky"
+  },
+  "build": {
+    "appId": "com.whitevanops.app",
+    "productName": "WhiteVanOps",
+    "copyright": "Copyright © 2026",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "nextjs"
+      },
+      {
+        "from": ".next/standalone/node_modules",
+        "to": "nextjs/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "pgsql",
+        "to": "pgsql"
+      },
+      {
+        "from": ".next/db",
+        "to": "db"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "src/app/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WhiteVanOps"
+    }
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
+    "firebase": "^12.15.0",
+    "firebase-admin": "^14.1.0",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.21.0",
+    "next": "16.2.4",
+    "node-cron": "^4.5.0",
+    "node-machine-id": "^1.1.12",
+    "pg": "^8.22.0",
+    "qrcode": "^1.5.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "husky": "^9.1.7",
+    "png-to-ico": "^3.0.1",
+    "prisma": "^7.8.0",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "prisma": {
+    "seed": "npx tsx prisma/seed.ts"
+  }
+}

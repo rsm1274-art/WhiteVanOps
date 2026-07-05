@@ -1,0 +1,383 @@
+// ---------------------------------------------------------------------------
+// Domain models — match Prisma schema exactly
+// ---------------------------------------------------------------------------
+
+export interface Client {
+  id: string;
+  name: string;
+  contactName: string;
+  locationAddress: string;
+  paymentTerms: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonnelQualification {
+  id: string;
+  personnelId: string;
+  tag: string;
+  category: string;
+  issuedBy: string | null;
+  expiresAt: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface PersonnelTimeOff {
+  id: string;
+  personnelId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface Personnel {
+  id: string;
+  firstName: string;
+  lastName: string;
+  role: "Technician" | "Dispatcher";
+  certifications: string | null;
+  qualifications: PersonnelQualification[];
+  timeOff: PersonnelTimeOff[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepairRecord {
+  id: string;
+  vehicleId: string | null;
+  equipmentId: string | null;
+  description: string;
+  repairType: string;
+  location: string | null;
+  serviceProvider: string | null;
+  servicePhone: string | null;
+  ticketNumber: string | null;
+  startDate: string;
+  resolvedDate: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface Vehicle {
+  id: string;
+  vin: string;
+  make: string;
+  model: string;
+  status: "Active" | "In Maintenance" | "Retired";
+  repairRecords: RepairRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceLog {
+  id: string;
+  vehicleId: string;
+  vehicle: Vehicle;
+  date: string;
+  cost: number;
+  description: string;
+  odometer: number;
+  createdAt: string;
+}
+
+export interface Equipment {
+  id: string;
+  name: string;
+  serialNumber: string;
+  status: "Active" | "In Use" | "Maintenance";
+  repairRecords: RepairRecord[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: string;
+  subCategory: string;
+  defaultRate: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockLevel {
+  id: string;
+  inventoryItemId: string;
+  inventoryItem: InventoryItem;
+  stockLocationId: string;
+  quantity: number;
+  minThreshold: number;
+}
+
+export interface StockLocation {
+  id: string;
+  name: string;
+  type: "Warehouse" | "Vehicle";
+  vehicleId: string | null;
+  vehicle: Vehicle | null;
+  stockLevels: StockLevel[];
+}
+
+export interface JobAssignment {
+  id: string;
+  jobId: string;
+  personnelId: string;
+  personnel: Personnel;
+}
+
+export interface JobEquipment {
+  id: string;
+  jobId: string;
+  equipmentId: string;
+  equipment: Equipment;
+}
+
+export interface JobLineItem {
+  id: string;
+  jobId: string;
+  inventoryItemId: string;
+  inventoryItem: InventoryItem;
+  quantity: number;
+  rate: number;
+  description: string;
+}
+
+export type JobStatus = "Scheduled" | "In Progress" | "Completed" | "Cancelled";
+export type SyncStatus = "Pending" | "Exported";
+
+export interface Job {
+  id: string;
+  clientId: string;
+  client: Client;
+  assignedVehicleId: string | null;
+  vehicle: Vehicle | null;
+  status: JobStatus;
+  notes: string | null;
+  scheduledDate: string;
+  completionDate: string | null;
+  qbInvoiceSyncStatus: SyncStatus;
+  recurringTemplateId: string | null;
+  assignments: JobAssignment[];
+  equipment: JobEquipment[];
+  lineItems: JobLineItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RecurrenceFrequency = "Weekly" | "Biweekly" | "Monthly";
+
+export interface RecurringJobPersonnel {
+  id: string;
+  templateId: string;
+  personnelId: string;
+  personnel: Personnel;
+}
+
+export interface RecurringJobEquipment {
+  id: string;
+  templateId: string;
+  equipmentId: string;
+  equipment: Equipment;
+}
+
+export interface RecurringJobTemplate {
+  id: string;
+  clientId: string;
+  client: Client;
+  assignedVehicleId: string | null;
+  vehicle: Vehicle | null;
+  notes: string | null;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate: string | null;
+  active: boolean;
+  lastGeneratedDate: string | null;
+  personnel: RecurringJobPersonnel[];
+  equipment: RecurringJobEquipment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  jobId: string;
+  job: { id: string; client: Client };
+  personnelId: string;
+  personnel: Personnel;
+  date: string;
+  duration: string;
+  serviceItem: string;
+  payrollItem: string;
+  qbTimeSyncStatus: SyncStatus;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard aggregate
+// ---------------------------------------------------------------------------
+
+export interface DashboardData {
+  clients: Client[];
+  personnel: Personnel[];
+  vehicles: Vehicle[];
+  equipment: Equipment[];
+  stockLocations: StockLocation[];
+  inventoryItems: InventoryItem[];
+  jobs: Job[];
+  timeEntries: TimeEntry[];
+  maintenanceLogs: MaintenanceLog[];
+  recurringJobTemplates: RecurringJobTemplate[];
+}
+
+// ---------------------------------------------------------------------------
+// Form state types
+// ---------------------------------------------------------------------------
+
+export interface NewJobForm {
+  clientId: string;
+  assignedVehicleId: string;
+  scheduledDate: string;
+  notes: string;
+  personnelIds: string[];
+  equipmentIds: string[];
+}
+
+export interface NewRecurringJobForm {
+  clientId: string;
+  assignedVehicleId: string;
+  notes: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate: string;
+  personnelIds: string[];
+  equipmentIds: string[];
+}
+
+export interface NewTimeForm {
+  jobId: string;
+  personnelId: string;
+  date: string;
+  hours: string;
+  minutes: string;
+  serviceItem: string;
+  payrollItem: string;
+}
+
+export interface NewClientForm {
+  name: string;
+  contactName: string;
+  locationAddress: string;
+  paymentTerms: string;
+}
+
+export interface NewPersonnelForm {
+  firstName: string;
+  lastName: string;
+  role: string;
+  certifications: string;
+}
+
+export interface NewVehicleForm {
+  vin: string;
+  make: string;
+  model: string;
+  status: string;
+}
+
+export interface NewMaintenanceForm {
+  date: string;
+  cost: string;
+  description: string;
+  odometer: string;
+}
+
+export interface NewItemForm {
+  name: string;
+  category: string;
+  subCategory: string;
+  defaultRate: string;
+}
+
+export interface AdjustedStockForm {
+  quantity: string;
+  minThreshold: string;
+}
+
+export interface NewEquipmentForm {
+  name: string;
+  serialNumber: string;
+  status: string;
+}
+
+export interface JobPartLine {
+  inventoryItemId: string;
+  quantity: number | string;
+  rate: number | string;
+  description: string;
+}
+
+// ---------------------------------------------------------------------------
+// Modal state
+// ---------------------------------------------------------------------------
+
+export type ModalType =
+  | "addJob"
+  | "editJob"
+  | "addRecurringJob"
+  | "editRecurringJob"
+  | "logTime"
+  | "addParts"
+  | "addClient"
+  | "addPersonnel"
+  | "addVehicle"
+  | "addMaintenance"
+  | "addItem"
+  | "adjustStock"
+  | "addEquipment"
+  | "jobCosts"
+  | "editPersonnel"
+  | "reportRepair"
+  | "manageUsers"
+  | "fieldAccess"
+  | null;
+
+// ---------------------------------------------------------------------------
+// Auth / user management
+// ---------------------------------------------------------------------------
+
+export type UserRole = "superuser" | "admin" | "tech";
+
+export interface AppUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  personnelId: string | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepairContext {
+  assetId: string;
+  assetType: "vehicle" | "equipment";
+  assetName: string;
+}
+
+export interface AdjustStockContext {
+  itemId: string;
+  locationId: string;
+  itemName: string;
+  locationName: string;
+  currentQty: number;
+  currentMin: number;
+}
+
+export interface AddPartsContext {
+  jobId: string;
+  existingParts: JobPartLine[];
+  existingEquipmentIds: string[];
+}

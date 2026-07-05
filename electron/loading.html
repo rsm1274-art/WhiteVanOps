@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhiteVanOps</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: #fafaf9;
+      color: #1c1917;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-app-region: drag;
+      border: 1px solid #d6d3d1;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      margin-bottom: 1rem;
+    }
+    .kicker {
+      font-size: 0.6rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #78716c;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    h1 {
+      font-family: 'Arial Narrow', 'Segoe UI', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 1.25rem;
+      color: #1c1917;
+      text-transform: uppercase;
+    }
+    .bar {
+      width: 180px;
+      height: 3px;
+      background: #e7e5e4;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar::after {
+      content: '';
+      position: absolute;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: #1d4ed8;
+      animation: slide 1.4s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { left: -40%; }
+      100% { left: 100%; }
+    }
+    .status {
+      margin-top: 0.9rem;
+      font-size: 0.72rem;
+      color: #78716c;
+    }
+  </style>
+</head>
+<body>
+  <svg class="logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="badge" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#292524"/>
+        <stop offset="1" stop-color="#1c1917"/>
+      </linearGradient>
+      <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffffff"/>
+        <stop offset="1" stop-color="#d6d3d1"/>
+      </linearGradient>
+    </defs>
+    <rect x="16" y="16" width="480" height="480" rx="56" fill="url(#badge)"/>
+    <rect x="16" y="16" width="480" height="480" rx="56" fill="none" stroke="#44403c" stroke-width="8"/>
+    <rect x="52" y="208" width="72" height="20" rx="10" fill="#3b82f6"/>
+    <rect x="76" y="248" width="48" height="20" rx="10" fill="#2563eb"/>
+    <path fill="url(#body)" d="M148 328 V204 q0 -20 20 -20 h158 q22 0 34 18 l40 60 q12 18 12 40 v26 q0 20 -20 20 h-224 q-20 0 -20 -20 Z"/>
+    <path fill="#1c1917" d="M330 208 q10 0 16 9 l30 46 q4 7 -5 7 h-49 q-8 0 -8 -8 v-46 q0 -8 8 -8 Z"/>
+    <rect x="148" y="296" width="264" height="16" fill="#3b82f6"/>
+    <circle cx="212" cy="348" r="36" fill="#0c0a09" stroke="#57534e" stroke-width="6"/>
+    <circle cx="212" cy="348" r="14" fill="#e7e5e4"/>
+    <circle cx="356" cy="348" r="36" fill="#0c0a09" stroke="#57534e" stroke-width="6"/>
+    <circle cx="356" cy="348" r="14" fill="#e7e5e4"/>
+  </svg>
+  <p class="kicker">Fleet Operations</p>
+  <h1>White Van Ops</h1>
+  <div class="bar"></div>
+  <p class="status">Starting application&hellip;</p>
+</body>
+</html>

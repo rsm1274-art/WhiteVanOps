@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White Van Ops — Live Demo Playbook</title>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; color: #1c1917; background-color: #fafaf9; max-width: 800px; margin: 0 auto; padding: 2rem; }
+        h1, h2, h3 { font-family: 'Arial Narrow', sans-serif; text-transform: uppercase; color: #1d4ed8; }
+        h1 { border-bottom: 3px solid #1d4ed8; padding-bottom: 0.5rem; }
+        h2 { border-bottom: 1px solid #d6d3d1; padding-bottom: 0.25rem; margin-top: 2rem; }
+        .highlight { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+        .question { font-weight: bold; color: #44403c; margin-top: 1.5rem; }
+        .answer { margin-left: 1rem; color: #57534e; border-left: 2px solid #d6d3d1; padding-left: 1rem; font-style: italic; }
+        ul { padding-left: 1.5rem; }
+        li { margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+
+    <h1>White Van Ops — Live Demo Playbook</h1>
+    <p><strong>Objective</strong>: Convert a prospect into a buyer by demonstrating that White Van Ops is simple, fast, and completely owned by them.</p>
+
+    <h2>1. Pre-Demo Preparation</h2>
+    <h3>1.1 The Environment</h3>
+    <ul>
+        <li>Ensure you have a clean installation of the latest <code>WhiteVanOps Setup x.x.x.exe</code>.</li>
+        <li><strong>Demo Data is Crucial</strong>: Have a few fake clients, vehicles, and jobs pre-populated. (Use names like "Lakeside Mall" or "Reyes Dental").</li>
+        <li>Have your phone ready with the screen mirrored to your PC or held up to the camera so they can see the mobile experience.</li>
+    </ul>
+    
+    <div class="highlight">
+        <strong>The Pitch:</strong> "You pay once. The software runs on your hardware. No cloud subscriptions. No one else has your data."
+    </div>
+
+    <h2>2. The Demo Flow (20 Minutes)</h2>
+    
+    <h3>Step 1: The Office Dashboard (5 mins)</h3>
+    <ul>
+        <li><strong>Start at the Overview Tab</strong>: Show them the high-level KPIs (Fleet Deployment, Active Jobs, Overdue).</li>
+        <li><strong>Scheduling</strong>: Show how easy it is to schedule a job and allocate a vehicle and crew. Highlight the <em>conflict warnings</em> — demonstrate trying to double-book a technician or a van and show how the system immediately catches it.</li>
+        <li><strong>Inventory</strong>: Briefly show the warehouse and van stock levels. Mention that completing a job automatically deducts the inventory.</li>
+    </ul>
+
+    <h3>Step 2: The Field Tech Experience (5 mins)</h3>
+    <ul>
+        <li><strong>The "Aha" Moment</strong>: Click "Field Access QR" on the dashboard. Hold up your phone to the camera and scan the QR code.</li>
+        <li>Walk them through adding it to the Home Screen (PWA). Emphasize that it acts exactly like a native app, but doesn't require going through the Apple/Google App Store.</li>
+        <li>Show the field view: The tech only sees what they need.</li>
+        <li><strong>Log Time & Complete</strong>: Tap into a job, log 2 hours of time, and hit Complete.</li>
+        <li><em>Switch back to the Office Dashboard and refresh to show the real-time update.</em></li>
+    </ul>
+
+    <h3>Step 3: The Offline Magic & Backups (5 mins)</h3>
+    <ul>
+        <li><strong>Offline Demo</strong>: Put your phone in Airplane mode. Open the field app, log some time or change a status. Point out the red "OFFLINE" badge. Explain that the app <em>did not crash or show an error</em>.</li>
+        <li>Turn off Airplane mode. Show the amber "SYNCING..." badge appear and disappear. Explain that the data just safely pushed to the office.</li>
+        <li><strong>Backups</strong>: Open the Settings Tab. Show the "Target Directory Mirror". Explain that every night at 2:00 AM, the system zips up their entire database and drops it onto their chosen USB drive or NAS.</li>
+    </ul>
+
+    <h3>Step 4: Closing & Questions (5 mins)</h3>
+    <ul>
+        <li>Remind them of the price: $250 one-time, or $500 for the white-glove installation where you set everything up for them.</li>
+        <li>Ask for the sale: <em>"Does this look like something that would simplify your dispatching tomorrow?"</em></li>
+    </ul>
+
+    <h2>3. Anticipated Roadblocks & Rebuttals</h2>
+
+    <div class="question">"What happens if my office PC dies?"</div>
+    <div class="answer">"That's exactly why we built the Target Directory Mirror. As long as you have that USB drive or NAS, we can install the software on a new PC, import your backup, and you are back up and running in 10 minutes without losing a single job."</div>
+
+    <div class="question">"Is it hard for my older techs to use the mobile app?"</div>
+    <div class="answer">"It's intentionally minimalist. They scan a QR code once. They press a big button to 'Start Job' and another to 'Complete Job'. There is zero clutter."</div>
+
+    <div class="question">"How does the phone talk to the office if it's not in the cloud?"</div>
+    <div class="answer">"We use a secure Peer-to-Peer tunnel. It's like a direct, encrypted walkie-talkie channel between the phone and the office PC. No middleman server ever holds your data."</div>
+
+    <div class="question">"Do you integrate with QuickBooks?"</div>
+    <div class="answer">"Yes, via CSV export. You export invoices and time entries with one click, and they are marked 'Synced' so you never double-bill. We intentionally avoid a direct live sync because QuickBooks API updates frequently break live connections."</div>
+
+</body>
+</html>

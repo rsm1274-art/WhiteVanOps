@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White Van Ops — Golden State Demo</title>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; color: #1c1917; background-color: #fafaf9; max-width: 800px; margin: 0 auto; padding: 2rem; }
+        h1, h2, h3 { font-family: 'Arial Narrow', sans-serif; text-transform: uppercase; color: #1d4ed8; }
+        h1 { border-bottom: 3px solid #1d4ed8; padding-bottom: 0.5rem; }
+        h2 { border-bottom: 1px solid #d6d3d1; padding-bottom: 0.25rem; margin-top: 2rem; }
+        .highlight { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+        .code-block { background-color: #292524; color: #f5f5f4; padding: 1rem; border-radius: 4px; font-family: 'Courier New', Courier, monospace; overflow-x: auto; }
+        ul, ol { padding-left: 1.5rem; }
+        li { margin-bottom: 0.5rem; }
+        code { background-color: #e7e5e4; padding: 0.1rem 0.3rem; border-radius: 3px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <h1>White Van Ops — Golden State Demo Manual</h1>
+    <p><strong>Objective</strong>: Ensure your sales demos always start from a perfectly clean, pre-populated state. Avoid having to manually enter demo data for every client, and prevent Client B from seeing the test data you created during a demo for Client A.</p>
+    
+    <div class="highlight">
+        Because White Van Ops runs entirely locally, you can physically copy the database folder to save a "Golden State" snapshot, and then paste it back to instantly reset the system.
+    </div>
+
+    <h2>1. Creating the Golden State (Do this once)</h2>
+
+    <h3>Step 1: Build the Perfect Demo Environment</h3>
+    <ol>
+        <li>Launch White Van Ops on your dedicated demo laptop.</li>
+        <li>Manually enter your ideal demo dataset. This should include:
+            <ul>
+                <li><strong>Clients</strong>: 2-3 realistic businesses (e.g., "Lakeside Mall", "Reyes Dental").</li>
+                <li><strong>Vehicles</strong>: 3 vans (e.g., Van 01, Van 02, Van 03).</li>
+                <li><strong>Inventory</strong>: Core items (e.g., Refrigerant, Capacitors) with stock assigned to the warehouse and the vans.</li>
+                <li><strong>Personnel</strong>: 2 technicians and 1 dispatcher.</li>
+                <li><strong>Jobs</strong>: 4-5 jobs (some Scheduled, some In Progress, some Completed).</li>
+            </ul>
+        </li>
+        <li>Verify the dashboard looks populated and impressive.</li>
+    </ol>
+
+    <h3>Step 2: Stop the Application</h3>
+    <ol>
+        <li>Close the White Van Ops application completely.</li>
+        <li>Check your Windows System Tray (bottom right corner) to ensure the app isn't running in the background. If it is, right-click and exit.</li>
+    </ol>
+
+    <h3>Step 3: Copy the Database Folder</h3>
+    <ol>
+        <li>Open the Windows File Explorer.</li>
+        <li>In the address bar at the top, type <code>%APPDATA%\whitevanops</code> and press Enter. <em>(Note: If you are running the development build, this will be in your project folder under <code>pg_data</code>).</em></li>
+        <li>You will see a folder named <code>pgdata</code>. This folder contains your entire PostgreSQL database and the perfect demo data you just created.</li>
+        <li><strong>Copy</strong> the <code>pgdata</code> folder.</li>
+        <li>Go to your Desktop (or a dedicated folder), <strong>Paste</strong> it, and rename it to <code>pgdata_GOLDEN_DEMO</code>.</li>
+    </ol>
+    <p><em>You now have an untainted snapshot of your perfect demo instance.</em></p>
+
+    <h2>2. Resetting Before a New Demo (Takes 10 seconds)</h2>
+    <p>Follow this procedure immediately before walking into a new client's office or hopping on a Zoom demo.</p>
+
+    <ol>
+        <li><strong>Close White Van Ops</strong>: Ensure the application is completely shut down.</li>
+        <li><strong>Delete the Current Data</strong>:
+            <ul>
+                <li>Open File Explorer and go to <code>%APPDATA%\whitevanops</code>.</li>
+                <li><strong>Delete</strong> the existing <code>pgdata</code> folder. <em>(This wipes out all the messy test data you generated during your last demo).</em></li>
+            </ul>
+        </li>
+        <li><strong>Restore the Golden State</strong>:
+            <ul>
+                <li>Copy your <code>pgdata_GOLDEN_DEMO</code> folder from your Desktop.</li>
+                <li>Paste it into <code>%APPDATA%\whitevanops</code>.</li>
+                <li>Rename it to <code>pgdata</code>.</li>
+            </ul>
+        </li>
+        <li><strong>Launch White Van Ops</strong>. You are now back at the exact starting line.</li>
+    </ol>
+
+    <h2>3. Advanced: The 1-Click Reset Script</h2>
+    <p>If you want to look like a wizard and reset your demo environment with a single double-click, you can create a simple Windows Batch script on your desktop.</p>
+
+    <ol>
+        <li>Right-click on your Desktop -> New -> Text Document.</li>
+        <li>Name it <code>Reset_WVO_Demo.bat</code> (make sure you delete the <code>.txt</code> extension).</li>
+        <li>Right-click the file and select <strong>Edit</strong>.</li>
+        <li>Paste the following code into the file:</li>
+    </ol>
+
+    <div class="code-block">
+<pre>
+@echo off
+echo ==========================================
+echo   White Van Ops - Golden State Reset
+echo ==========================================
+echo.
+echo Make sure White Van Ops is completely closed!
+pause
+
+echo.
+echo Wiping old demo data...
+rmdir /S /Q "%APPDATA%\whitevanops\pgdata"
+
+echo Restoring Golden State...
+xcopy /E /I /H /Y "%USERPROFILE%\Desktop\pgdata_GOLDEN_DEMO" "%APPDATA%\whitevanops\pgdata"
+
+echo.
+echo Reset Complete! You can now launch White Van Ops.
+pause
+</pre>
+    </div>
+
+    <ol start="5">
+        <li>Save and close the file.</li>
+        <li>Now, before any demo, just double-click <code>Reset_WVO_Demo.bat</code>. It will instantly delete the dirty database and copy your pristine golden database back into place.</li>
+    </ol>
+
+</body>
+</html>
