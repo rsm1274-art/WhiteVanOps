@@ -33,7 +33,8 @@ src/lib/import/
   readers.ts        # CSV (papaparse) + Excel (exceljs) → uniform rows with provenance (file, sheet, row #)
   detect.ts         # entity detection + column matching (synonym dictionary, value-shape detection)
   mappingSchema.ts  # mapping.json TypeScript types + validator
-  transforms.ts     # named transforms: date normalization, HH:MM duration, currency→float, trim, valueMaps
+  transforms.ts     # named transforms: date normalization, currency→float, int, trim, valueMaps
+  keys.ts           # natural-key normalization helpers shared by resolve + execute
   resolve.ts        # in-memory FK resolution via natural keys
   execute.ts        # dependency-ordered inserts inside one prisma.$transaction (imports @/lib/db)
 ```
@@ -184,9 +185,11 @@ Vitest, following the existing `src/lib/` conventions:
 
 - `readers`, `detect`, `transforms`, `mappingSchema`, `resolve` — pure modules
   tested directly with fixture CSV/Excel files and inline row data.
-- `execute` — `@/lib/db` mocked with `vi.mock` (never imported for real),
-  per the `jobConflicts.ts` convention; assert insert order, transaction
-  boundaries, empty-DB guard, and `--skip-rejected` behavior.
+- `execute` — takes the database as a structurally-typed parameter
+  (`ImportDb`, which the real `PrismaClient` satisfies), so tests pass a
+  plain fake object — no `vi.mock` needed and `src/lib/db.ts` is never
+  imported anywhere in `src/lib/import/`. Assert insert order, transaction
+  boundaries, ref wiring, and the empty-DB guard.
 - Fixture files live under `src/lib/import/__fixtures__/`. Keep fixture
   values short / non-secret-shaped to stay clear of `scripts/scan-secrets.js`.
 
