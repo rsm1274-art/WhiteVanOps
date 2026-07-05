@@ -268,6 +268,8 @@ model User {
   personnel          Personnel? @relation(fields: [personnelId], references: [id], onDelete: SetNull)
   active             Boolean    @default(true)
   mustChangePassword Boolean    @default(false)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil        DateTime?
   auditLogs          AuditLog[]
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt

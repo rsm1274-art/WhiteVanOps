@@ -17,6 +17,8 @@ Open the **WhiteVanOps** application from your desktop shortcut or Start Menu. T
 
 The initial superuser account is **admin / admin**. On first login you will be immediately redirected to a password change screen — you cannot access any part of the application until a new password is set (minimum 8 characters). After setting your password you land on the dashboard. Create accounts for all other staff from the Manage Users modal before distributing the app.
 
+**Account lockout:** after 5 consecutive failed login attempts on an account, that account is locked for 15 minutes (even with the correct password) as protection against password-guessing. The lockout clears automatically once the 15 minutes pass, or resets immediately on the next successful login. There is no admin override to unlock an account early — if a staff member is locked out and it's urgent, wait out the window rather than repeatedly retrying.
+
 ---
 
 ## Dashboard Layout
