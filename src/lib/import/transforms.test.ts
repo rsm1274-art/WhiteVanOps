@@ -17,6 +17,10 @@ describe("date transforms", () => {
     expect(applyTransform("date-mdy", "2/30/2026").ok).toBe(false);
     expect(applyTransform("date-iso", "soon").ok).toBe(false);
   });
+  it("labels calendar-invalid dates with the transform's format", () => {
+    const r = applyTransform("date-mdy", "13/45/2026");
+    expect(r).toEqual({ ok: false, reason: '"13/45/2026" is not a M/D/Y date' });
+  });
 });
 
 describe("currency and int", () => {

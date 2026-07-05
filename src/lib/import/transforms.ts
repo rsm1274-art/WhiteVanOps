@@ -19,17 +19,17 @@ export function applyTransform(name: TransformName, raw: string): TransformResul
     case "date-iso": {
       const m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
       if (!m) return fail(`"${v}" is not an ISO date (YYYY-MM-DD)`);
-      return toYmd(+m[1], +m[2], +m[3], v);
+      return toYmd(+m[1], +m[2], +m[3], v, "YYYY-MM-DD");
     }
     case "date-mdy": {
       const m = v.match(SLASH_DATE);
       if (!m) return fail(`"${v}" is not a M/D/Y date`);
-      return toYmd(expandYear(+m[3]), +m[1], +m[2], v);
+      return toYmd(expandYear(+m[3]), +m[1], +m[2], v, "M/D/Y");
     }
     case "date-dmy": {
       const m = v.match(SLASH_DATE);
       if (!m) return fail(`"${v}" is not a D/M/Y date`);
-      return toYmd(expandYear(+m[3]), +m[2], +m[1], v);
+      return toYmd(expandYear(+m[3]), +m[2], +m[1], v, "D/M/Y");
     }
     case "currency": {
       const n = Number(v.replace(/[$,\s]/g, ""));
@@ -48,9 +48,10 @@ function expandYear(y: number): number {
   return y < 100 ? 2000 + y : y;
 }
 
-function toYmd(y: number, mo: number, d: number, raw: string): TransformResult {
+function toYmd(y: number, mo: number, d: number, raw: string, format?: string): TransformResult {
   const dt = new Date(Date.UTC(y, mo - 1, d));
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) {
+    if (format) return fail(`"${raw}" is not a ${format} date`);
     return fail(`"${raw}" is not a real calendar date`);
   }
   return ok(`${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
