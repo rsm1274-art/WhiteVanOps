@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import path from "path";
 import fs from "fs";
 import { promisify } from "util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export async function POST() {
   const user = await getSessionUser();
@@ -48,21 +48,30 @@ export async function POST() {
     const fileName = `WhiteVanOps_Backup_${dateStr}.sql`;
     const filePath = path.join(targetDir, fileName);
 
-    const dbUrl = process.env.DATABASE_URL;
-    if (!dbUrl) {
+    const rawDbUrl = process.env.DATABASE_URL;
+    if (!rawDbUrl) {
       return NextResponse.json({ error: "DATABASE_URL not configured." }, { status: 500 });
     }
 
-    // Run pg_dump
-    const cmd = `"${pgDumpExe}" --dbname="${dbUrl}" --file="${filePath}" --format=c --compress=9`;
-    
-    // We don't await because it might take a while, but it's okay to await for a small DB
-    // To prevent Vercel/Next timeout, we can fire and forget, but local standalone server has no strict timeout.
-    await execAsync(cmd);
+    // Prisma's DATABASE_URL includes a `?schema=` query param that libpq/pg_dump
+    // doesn't understand ("invalid URI query parameter"). Strip it before use.
+    const dbUrl = new URL(rawDbUrl);
+    dbUrl.searchParams.delete("schema");
+
+    // Run pg_dump with args passed as an array (not a shell string) so nothing
+    // in targetDir/dbUrl/filePath can be interpreted as shell syntax.
+    await execFileAsync(pgDumpExe, [
+      "--dbname",
+      dbUrl.toString(),
+      "--file",
+      filePath,
+      "--format=c",
+      "--compress=9",
+    ]);
 
     return NextResponse.json({ success: true, file: filePath });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Backup failed:", error);
-    return NextResponse.json({ error: "Backup process failed: " + error.message }, { status: 500 });
+    return NextResponse.json({ error: "Backup process failed. Check server logs for details." }, { status: 500 });
   }
 }

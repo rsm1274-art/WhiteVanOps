@@ -82,7 +82,12 @@ async function runBackupNow(isDev, resourcesPath) {
     return;
   }
 
-  const proc = spawn(pgDumpExe, ['--dbname', dbUrl, '--file', filePath, '--format=c', '--compress=9']);
+  // Prisma's DATABASE_URL includes a `?schema=` query param that libpq/pg_dump
+  // doesn't understand ("invalid URI query parameter"). Strip it before use.
+  const pgDumpUrl = new URL(dbUrl);
+  pgDumpUrl.searchParams.delete('schema');
+
+  const proc = spawn(pgDumpExe, ['--dbname', pgDumpUrl.toString(), '--file', filePath, '--format=c', '--compress=9']);
   
   proc.stdout.on('data', (data) => console.log(`[backup] ${data}`));
   proc.stderr.on('data', (data) => console.error(`[backup err] ${data}`));
