@@ -55,7 +55,6 @@ function isServerUp() {
 async function startServer() {
   if (isDev) {
     // electron-dev.js already started next dev — nothing to do here.
-    startFrp();
     return;
   }
 
@@ -64,7 +63,6 @@ async function startServer() {
   // same port, and booting a second one here just stalls startup. Only spin up
   // our own inline standalone server when nothing is already answering.
   if (await isServerUp()) {
-    startFrp();
     return;
   }
 
@@ -77,38 +75,8 @@ async function startServer() {
   process.env.PORT = String(PORT);
   process.env.HOSTNAME = 'localhost';
   require(serverPath);
-  
-  startFrp();
-  startBackupScheduler(PORT, isDev, process.resourcesPath);
-}
 
-let frpProcess;
-function startFrp() {
-  const { spawn } = require('child_process');
-  const fs = require('fs');
-  // Determine mode, default to office
-  const mode = process.env.WVO_MODE || 'OFFICE';
-  const frpDir = isDev ? path.join(__dirname, 'frp') : path.join(process.resourcesPath, 'frp');
-  const frpExe = path.join(frpDir, 'frpc.exe');
-  
-  if (!fs.existsSync(frpExe)) {
-    console.warn('[startup] frpc.exe not found at', frpExe);
-    return;
-  }
-  
-  const configFile = mode === 'FIELD' ? 'frpc_field.toml' : 'frpc_office.toml';
-  const configPath = path.join(frpDir, configFile);
-  
-  console.log(`[startup] Starting FRP in ${mode} mode using ${configPath}`);
-  try {
-    frpProcess = spawn(frpExe, ['-c', configPath], { stdio: 'ignore' });
-    
-    frpProcess.on('error', (err) => {
-      console.error('[startup] Failed to start FRP:', err);
-    });
-  } catch (err) {
-    console.error(`[startup] Synchronous error spawning FRP:`, err.message);
-  }
+  startBackupScheduler(PORT, isDev, process.resourcesPath);
 }
 
 function createLoadingWindow() {
@@ -303,13 +271,11 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (serverProcess) serverProcess.kill();
-  if (frpProcess) frpProcess.kill();
   app.quit();
 });
 
 app.on('will-quit', () => {
   if (postgres.managed) postgres.stop();
-  if (frpProcess) frpProcess.kill();
 });
 
 app.on('activate', () => {

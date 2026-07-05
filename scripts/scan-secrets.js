@@ -27,7 +27,14 @@ const CONTENT_PATTERNS = [
   // pattern can't distinguish from a real leaked value. Code/config files
   // still get scanned — real secrets don't belong in either, but false
   // positives here were specifically drowning out real findings in docs.
-  { name: "Generic long secret/token assignment", re: /(secret|password|token|api_?key)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{20,}['"]/i, skipExtensions: [".md"] },
+  //
+  // "apiKey" is deliberately excluded from the keyword list below: unlike
+  // "secret"/"password"/"token", it's commonly a value meant to be public
+  // (Firebase web config, Google Maps JS keys, Stripe publishable keys all
+  // match this exact shape). Real secret API keys have their own dedicated
+  // patterns above (AWS, Slack, etc.) — this catch-all doesn't need to also
+  // cover "apiKey" and gain nothing but noise from doing so.
+  { name: "Generic long secret/token assignment", re: /(secret|password|token)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{20,}['"]/i, skipExtensions: [".md"] },
   { name: "Slack token", re: /xox[baprs]-[0-9A-Za-z-]{10,}/ },
 ];
 

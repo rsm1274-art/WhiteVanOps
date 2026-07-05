@@ -10,6 +10,7 @@
         h1 { border-bottom: 3px solid #1d4ed8; padding-bottom: 0.5rem; }
         h2 { border-bottom: 1px solid #d6d3d1; padding-bottom: 0.25rem; margin-top: 2rem; }
         .highlight { background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+        .warning { background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
         .troubleshooting { background-color: #fffbeb; border-left: 4px solid #d97706; padding: 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
         ul { padding-left: 1.5rem; }
         li { margin-bottom: 0.5rem; }
@@ -20,7 +21,7 @@
 <body>
 
     <h1>White Van Ops — White Glove Installation Manual</h1>
-    <p><strong>Objective</strong>: Execute a flawless on-site or remote installation of White Van Ops, configuring network tunnels, backups, and user training.</p>
+    <p><strong>Objective</strong>: Execute a flawless on-site or remote installation of White Van Ops, configuring network port forwarding, backups, and user training.</p>
 
     <h2>1. Preparation (Before Arrival)</h2>
     <div class="highlight">
@@ -28,7 +29,7 @@
         <ul>
             <li>USB Flash Drive (for local backup setup if the client doesn't have one).</li>
             <li>Latest <code>WhiteVanOps Setup x.x.x.exe</code>.</li>
-            <li>Latest <code>frpc.exe</code> and a pre-configured <code>frpc.toml</code> template.</li>
+            <li>Router login credentials (if available).</li>
             <li>Administrator credentials (admin / admin).</li>
         </ul>
     </div>
@@ -39,7 +40,7 @@
     </ul>
 
     <h2>2. On-Site Installation Procedure</h2>
-    
+
     <h3>Phase A: Core Software Installation</h3>
     <ol>
         <li>Log into the dedicated office PC. Ensure Windows Sleep settings are set to "Never Sleep" (Monitor off is fine, PC sleep is not).</li>
@@ -49,13 +50,18 @@
         <li>Log in with <code>admin</code> / <code>admin</code>. Immediately change the password to a secure one provided by the owner.</li>
     </ol>
 
-    <h3>Phase B: FRP (Fast Reverse Proxy) Network Setup</h3>
+    <h3>Phase B: Network Port Forwarding &amp; Dynamic DNS</h3>
+    <div class="warning">
+        <strong>Heads up before you start:</strong> this path is plain <code>http://</code>, not <code>https://</code> — credentials travel unencrypted once they leave the office LAN. This is the accepted tradeoff for zero-subscription-cost remote access (see full explanation and CGNAT/firewall/DDNS detail in <code>MANUAL_Setup_Installation.md</code> §7). If a client specifically needs encrypted transport, that's a separate reverse-proxy setup, not covered here.
+    </div>
     <ol>
-        <li>Extract <code>frpc.exe</code> to a permanent location (e.g., <code>C:\WhiteVanOps_FRP\</code>).</li>
-        <li>Edit <code>frpc.toml</code> with the specific peer-to-peer credentials for this client.</li>
-        <li>Configure <code>frpc.exe</code> to run as a background service or a scheduled task on startup.<br>
-            <em>Tip: Use Task Scheduler -> "Create Task" -> Trigger "At Startup" -> Action "Start a program" -> <code>frpc.exe</code> with argument <code>-c frpc.toml</code>.</em></li>
-        <li>Verify the FRP tunnel is active and the remote URL is generated.</li>
+        <li><strong>Check for CGNAT first</strong> — on an office computer, compare the IP shown by <code>whatismyip.com</code> to the router's "WAN IP"/"Internet Status" page. If they don't match, this ISP doesn't hand out a real public IP and port forwarding is impossible until they upgrade to a static-IP plan. Don't proceed past this step until confirmed.</li>
+        <li>Reserve a fixed local IP for the office PC via the router's <strong>DHCP Reservation</strong> (by the PC's MAC address, from <code>ipconfig /all</code>) — not just a manually-set static IP on the PC, which the router doesn't know about and could still hand to another device.</li>
+        <li>Log into the client's office internet router (usually <code>http://192.168.1.1</code> or <code>http://192.168.0.1</code>).</li>
+        <li>Set up <strong>Port Forwarding</strong> (may be labeled "Virtual Server" or "NAT Forwarding"): forward external port <code>3000</code> → the office PC's reserved IP → internal port <code>3000</code>, protocol TCP.</li>
+        <li>Add a Windows Firewall inbound rule allowing TCP port 3000 (Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port). Don't rely solely on the one-time "Allow app" popup.</li>
+        <li>Set up <strong>DuckDNS</strong>: create a subdomain at duckdns.org, then install their Windows updater as a Scheduled Task (follow duckdns.org's own Windows install instructions) so the hostname keeps tracking the office's public IP automatically.</li>
+        <li><strong>Test correctly</strong>: on a phone, turn <strong>WiFi off</strong> (use cellular data) and visit <code>http://your-client.duckdns.org:3000/field</code>. Testing while still connected to the office WiFi does not prove anything — that traffic never leaves the LAN.</li>
     </ol>
 
     <h3>Phase C: Target Directory Mirror (Backup)</h3>
@@ -68,7 +74,7 @@
 
     <h3>Phase D: Field Tech Provisioning</h3>
     <ol>
-        <li>Click <strong>Field Access QR</strong> in the dashboard and paste the FRP Tunnel URL.</li>
+        <li>Click <strong>Field Access QR</strong> in the dashboard and paste the Dynamic DNS URL (e.g., <code>http://your-client.duckdns.org:3000/field</code>).</li>
         <li>Have each field technician scan the QR code with their mobile device.</li>
         <li>Instruct them to tap <strong>Share -> Add to Home Screen</strong> (iOS) or <strong>Add to Home screen</strong> (Android).</li>
         <li>Verify the app opens full-screen without URL bars.</li>
@@ -97,8 +103,8 @@
     <h2>4. Troubleshooting Roadblocks</h2>
 
     <div class="troubleshooting">
-        <strong>Roadblock: The FRP tunnel isn't connecting or QR code won't load on phones.</strong><br>
-        <em>Fix:</em> Check the Windows Defender Firewall. Ensure inbound connections to port <code>3000</code> are permitted for the Node.js/Electron executable. Check if the client's ISP restricts outbound UDP traffic (rare, but happens).
+        <strong>Roadblock: The QR code won't load on phones off the office Wi-Fi.</strong><br>
+        <em>Fix:</em> Check in this order — (1) CGNAT: compare <code>whatismyip.com</code> to the router's WAN IP, if they differ nothing else here will work until the ISP fixes it; (2) the port-forward rule is pointing at the PC's <em>current</em> local IP (did the DHCP reservation actually take?); (3) Windows Firewall allows inbound TCP 3000; (4) the DDNS hostname resolves to the correct current IP (<code>nslookup</code>, check the Task Scheduler updater's last run). Full detail and exact steps: <code>MANUAL_Setup_Installation.md</code> §7 and §11.
     </div>
 
     <div class="troubleshooting">

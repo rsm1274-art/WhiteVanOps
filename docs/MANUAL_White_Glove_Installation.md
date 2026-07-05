@@ -26,11 +26,16 @@
 5. Log in with `admin` / `admin`. Immediately change the password to a secure one provided by the owner.
 
 ### Phase B: Network Port Forwarding & Dynamic DNS
-1. Ensure the office PC has a static local IP address (configured in Windows or via the router's DHCP reservation).
-2. Log into the client's office internet router.
-3. Set up **Port Forwarding**: Forward external port `3000` to the office PC's local IP address on internal port `3000`.
-4. Set up a free **Dynamic DNS (DDNS)** service (like DuckDNS) on the router or via a small background updater on the PC. This ensures the public URL stays fixed even if their ISP changes their external IP.
-5. Test the connection from a mobile device (not on the office Wi-Fi) by visiting `http://your-client.duckdns.org:3000/field`.
+
+**Heads up before you start:** this path is plain `http://`, not `https://` — credentials travel unencrypted once they leave the office LAN. This is the accepted tradeoff for zero-subscription-cost remote access (see full explanation and CGNAT/firewall/DDNS detail in `MANUAL_Setup_Installation.md` §7). If a client specifically needs encrypted transport, that's a separate reverse-proxy setup, not covered here.
+
+1. **Check for CGNAT first** — on an office computer, compare the IP shown by `whatismyip.com` to the router's "WAN IP"/"Internet Status" page. If they don't match, this ISP doesn't hand out a real public IP and port forwarding is impossible until they upgrade to a static-IP plan. Don't proceed past this step until confirmed.
+2. Reserve a fixed local IP for the office PC via the router's **DHCP Reservation** (by the PC's MAC address, from `ipconfig /all`) — not just a manually-set static IP on the PC, which the router doesn't know about and could still hand to another device.
+3. Log into the client's office internet router (usually `http://192.168.1.1` or `http://192.168.0.1`).
+4. Set up **Port Forwarding** (may be labeled "Virtual Server" or "NAT Forwarding"): forward external port `3000` → the office PC's reserved IP → internal port `3000`, protocol TCP.
+5. Add a Windows Firewall inbound rule allowing TCP port 3000 (Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port). Don't rely solely on the one-time "Allow app" popup.
+6. Set up **DuckDNS**: create a subdomain at duckdns.org, then install their Windows updater as a Scheduled Task (follow duckdns.org's own Windows install instructions) so the hostname keeps tracking the office's public IP automatically.
+7. **Test correctly**: on a phone, turn **WiFi off** (use cellular data) and visit `http://your-client.duckdns.org:3000/field`. Testing while still connected to the office WiFi does not prove anything — that traffic never leaves the LAN.
 
 ### Phase C: Target Directory Mirror (Backup)
 1. Plug in the dedicated USB Drive or set up a shared network NAS folder.
@@ -68,7 +73,7 @@
 ## 4. Troubleshooting Roadblocks
 
 **Roadblock: The QR code won't load on phones off the office Wi-Fi.**
-- *Fix*: Check the Windows Defender Firewall. Ensure inbound connections to port `3000` are permitted for the Node.js/Electron executable. Verify the Port Forwarding rules in the router are correctly pointing to the PC's current local IP. Verify the DDNS address is actively pointing to the correct external IP. Check if the ISP uses Carrier-Grade NAT (CGNAT), which breaks traditional port forwarding.
+- *Fix*: Check in this order — (1) CGNAT: compare `whatismyip.com` to the router's WAN IP, if they differ nothing else here will work until the ISP fixes it; (2) the port-forward rule is pointing at the PC's *current* local IP (did the DHCP reservation actually take?); (3) Windows Firewall allows inbound TCP 3000; (4) the DDNS hostname resolves to the correct current IP (`nslookup`, check the Task Scheduler updater's last run). Full detail and exact steps: `MANUAL_Setup_Installation.md` §7 and §11.
 
 **Roadblock: The PC went to sleep and techs can't sync.**
 - *Fix*: Windows 11 hides the deep sleep settings. Go to Control Panel -> Power Options -> Change plan settings -> Put the computer to sleep: **Never**.

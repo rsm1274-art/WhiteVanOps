@@ -149,17 +149,46 @@ Distribute this `.exe` to office staff. The installer creates a desktop shortcut
 
 ## 7. Field Tech Browser Access
 
-Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets. The Next.js server runs locally in your office. We use Port Forwarding and Dynamic DNS to allow field devices to securely reach your local server without passing traffic through a central cloud server.
+Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets. The Next.js server runs locally in the customer's office — there is no cloud relay or third-party tunneling service in the middle. To reach it from outside the office WiFi (cellular data, a job site, home), you configure the office router to forward traffic in from the internet, plus a free service that gives the router's changing public IP address a fixed hostname.
 
-**Recommended path — Port Forwarding & Dynamic DNS (works from any network)**
+**Before you start, understand the tradeoff:** this path uses plain `http://`, not `https://`. That means login credentials and session cookies travel unencrypted once traffic leaves the office LAN. This is a deliberate choice — it avoids per-seat subscription costs (e.g. Tailscale) and keeps setup to "router + free DDNS service," no ongoing account to manage. If a customer specifically needs encrypted transport, that requires an additional reverse-proxy step not covered in this section — ask your agent to help set one up (e.g. Caddy with automatic Let's Encrypt certificates) before committing to this path for that customer.
 
-1. Assign a Static IP to the office server running the app.
-2. Log into the office internet router and forward Port 3000 to that Static IP.
-3. Set up a free Dynamic DNS (like DuckDNS) so the router's external IP has a constant hostname.
-4. In the dashboard sidebar, click **Field Access QR** and enter your DDNS address (e.g. `http://your-client.duckdns.org:3000/field`).
-5. Hand out the URL and let each tech scan the QR code with their phone camera. 
-6. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
-7. **Offline Support**: The PWA uses an offline-first architecture via IndexedDB. If a technician loses signal, they can continue logging time, viewing job details, and saving materials. Their modifications will be queued locally and automatically flush back to the office server once the connection is restored.
+**Do this first: check for CGNAT.** Some ISPs (common on cable/mobile-carrier home internet, rare on business plans) put customers behind Carrier-Grade NAT, where you don't actually get your own public IP — port forwarding is then *impossible*, no router setting can fix it. Test before doing anything else:
+1. On a computer on the office network, visit a site like `whatismyip.com` and note the IP address it shows.
+2. Log into the router's admin page (see step 2 below) and find the "WAN IP," "Internet IP," or "Status" page — note the IP address shown there.
+3. **If these two IPs match**, you're not behind CGNAT — proceed. **If they don't match** (the router shows something like `100.64.x.x`–`100.127.x.x`, or any address different from what whatismyip.com reports), this ISP is using CGNAT. Call the ISP and ask for a "static IP" or "public IP" add-on (often available on business-tier plans for a small monthly fee) — port forwarding will not work until that's resolved. Do not proceed with the steps below until this is confirmed working.
+
+**Step 1 — Reserve a fixed local IP for the office PC.** If the office PC's local IP changes (routers hand these out dynamically by default), the port-forwarding rule silently stops working. Reserve one so it never changes:
+1. Log into the router's admin page — usually `http://192.168.1.1` or `http://192.168.0.1` in a browser (check a label on the router itself, or run `ipconfig` on the office PC and use the "Default Gateway" address).
+2. Find the section usually called **DHCP Reservation**, **Address Reservation**, or **Static Lease List** (varies by brand — look under "LAN" or "DHCP" settings).
+3. Find the office PC in the list of connected devices (by its name or MAC address — get the MAC address by running `ipconfig /all` on the PC and reading "Physical Address" for the active network adapter) and reserve its current IP address for that MAC address.
+4. Reboot the office PC and confirm (`ipconfig`) it comes back with the same IP.
+
+**Step 2 — Forward port 3000 to the office PC.**
+1. In the same router admin page, find **Port Forwarding**, **Virtual Server**, or **NAT Forwarding** (all names for the same feature, varies by brand).
+2. Add a rule: external/public port `3000` → internal/private IP = the office PC's reserved IP from Step 1 → internal port `3000` → protocol **TCP**.
+3. Save and apply — some routers require a reboot for this to take effect.
+
+**Step 3 — Allow the app through Windows Firewall.**
+1. On the office PC, open **Windows Defender Firewall with Advanced Security**.
+2. Create a new **Inbound Rule** → Rule type: **Port** → **TCP**, specific local port `3000` → **Allow the connection** → apply to all profiles (Domain, Private, Public) → name it something like "WhiteVanOps".
+3. (If Windows already showed an "Allow this app through firewall" prompt on first launch and you clicked Allow, this may already be covered — the explicit rule above is a more reliable belt-and-suspenders step that doesn't depend on remembering to click the right button on a popup.)
+
+**Step 4 — Set up free Dynamic DNS (DDNS) so the router's changing public IP has a fixed hostname.**
+1. Create a free account at [duckdns.org](https://www.duckdns.org) and add a subdomain (e.g. `your-client-name.duckdns.org`) — it will show you the office's current public IP.
+2. Most consumer routers don't support DuckDNS natively (they support other providers like No-IP or DynDNS by name only). The reliable option: install DuckDNS's official Windows updater on the office PC as a **Scheduled Task** that runs every 5 minutes and pings DuckDNS's update URL with your token — this keeps the hostname pointed at the current IP even if the office's public IP changes. Follow the "Windows" install instructions on the DuckDNS install page for your subdomain (it generates a ready-to-use PowerShell script and gives exact Task Scheduler steps).
+3. Confirm it's working: wait a few minutes, then check that `your-client-name.duckdns.org` (via `nslookup your-client-name.duckdns.org` or any "DNS lookup" website) resolves to the same IP you found in the CGNAT check above.
+
+**Step 5 — Verify end-to-end, from outside the office network.** This is the step people get wrong most often: testing from a phone still connected to the office WiFi does **not** prove port forwarding works, because that traffic never leaves the LAN. To test for real:
+1. On a phone, **turn off WiFi** and switch to cellular data (or use a different network entirely, like a coffee shop).
+2. Visit `http://your-client-name.duckdns.org:3000/field` in the phone's browser.
+3. You should see the White Van Ops login screen. If it times out, see the Troubleshooting table (§11) — the most common causes are: CGNAT (Step 0 above), the port-forward rule pointing at a stale IP because Step 1 wasn't done, or Windows Firewall blocking the inbound connection.
+
+**Step 6 — Hand out access to field techs.**
+1. In the dashboard sidebar, click **Field Access QR** and enter the DDNS address (e.g. `http://your-client-name.duckdns.org:3000/field`).
+2. Hand out the URL and let each tech scan the QR code with their phone camera.
+3. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
+4. **Offline support:** the PWA uses an offline-first architecture via IndexedDB. If a technician loses signal, they can continue logging time, viewing job details, and saving materials — their changes queue locally and automatically flush back to the office server once the connection is restored.
 
 ---
 
@@ -194,7 +223,7 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `SESSION_SECRET` | Yes | Random string for signing session JWTs — keep secret and consistent across restarts |
 | `WVO_FIREBASE_SERVICE_ACCOUNT` | Vendor only | Absolute path to the Firebase service-account key used by `scripts/license-manager.js` to mint license keys. **Store this file OUTSIDE the repository** (e.g. `%APPDATA%\whitevanops-secrets\`) — it is a highly privileged credential and is now gitignored so it can never be committed. `GOOGLE_APPLICATION_CREDENTIALS` is accepted as an alias. Not needed on customer machines. |
-| `REQUIRE_HTTPS` | No | Set to `true` once the app is reachable over HTTPS (e.g. via `tailscale serve`, see §7). Locks the session cookie to HTTPS-only (`Secure` flag) in production. Leave unset for LAN-only/Electron-only deployments — otherwise browser-based access over plain `http://` will silently fail to log in. |
+| `REQUIRE_HTTPS` | No | Set to `true` only if you've put a real HTTPS front end (e.g. a reverse proxy) in front of the app. Locks the session cookie to HTTPS-only (`Secure` flag). **Leave unset for the standard Port Forwarding + DDNS setup in §7**, which is plain `http://` — setting this without HTTPS in place will silently break field-tech logins. |
 
 ---
 
@@ -208,6 +237,8 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | "Too many login attempts" (HTTP 429) | More than 20 login attempts from the same IP within 5 minutes | This is a rate limit, not an account lockout — it resets automatically a few minutes after attempts stop. If several techs share one NAT/VPN egress IP, this can trigger from combined traffic; space out retries. |
 | Field techs can't reach the server | Firewall, wrong IP, or AP/client isolation on the WiFi network | Check Windows Firewall allows port 3000; confirm techs are using the server machine's IP, not `localhost`. If the phone times out despite a correct IP and open firewall, the WiFi network may isolate devices from each other (common on managed/corporate networks) — use Dynamic DNS and Port Forwarding instead of relying on LAN routing. |
 | Field tech field page loads but login doesn't work / bounces back to login screen | `Secure` session cookie requires HTTPS; plain `http://<lan-ip>:3000` can't set it | Use your Dynamic DNS address (e.g. `http://your-client.duckdns.org:3000/field`) — see §7. |
+| Port forwarding + DDNS set up correctly, but still times out from cellular data | ISP is using Carrier-Grade NAT (CGNAT) — the office doesn't actually have its own public IP, so no router setting can fix this | Run the CGNAT check in §7 (compare `whatismyip.com` to the router's WAN IP page). If they differ, call the ISP and ask for a static/public IP add-on — this is an ISP-side change, not something fixable from the router or the app. |
+| DDNS hostname resolves to the wrong IP, or stopped updating | The DDNS updater (Task Scheduler job on the office PC) isn't running, or the office's public IP changed and hasn't been pushed yet | Check Task Scheduler on the office PC for the DuckDNS update task's last run time/result. Manually re-run it, then re-check with `nslookup your-client.duckdns.org`. |
 | Database connection refused | Port mismatch | Verify PostgreSQL is on port 5433 (or update DATABASE_URL to match your actual port) |
 | App unreachable from any device (laptop or phone) after a reboot | PM2's login-triggered startup means nothing restarts until someone logs into the server machine | Log into `MearHPLaptop`. PM2 should auto-resurrect both processes. If not, run `pm2 resurrect` manually, then `pm2 list` to confirm `whitevanops` and `whitevanops-db` both show `online`. |
 | Prisma errors with `code: 'ECONNREFUSED'` in PM2 logs (`pm2 logs whitevanops`) | The `whitevanops-db` PM2 process (the real Postgres instance) isn't running — do not assume it's the app itself that's broken | Run `pm2 list`. If `whitevanops-db` is missing or stopped, start it: `pm2 start "C:\Program Files\PostgreSQL\9.5\bin\postgres.exe" --name whitevanops-db -- -D "C:\Users\rober\Desktop\WhiteVanOps\pg_data" -p 5433` then `pm2 save`. Do **not** start either of the unrelated Windows PostgreSQL services (`postgresql-x64-9.5` on port 5432 is a separate legacy install) to "fix" this — they use different data directories and will not have the app's tables. |

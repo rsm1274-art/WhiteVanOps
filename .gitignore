@@ -59,10 +59,3 @@ next-env.d.ts
 # marketing/ is its own separate git checkout (public GitHub Pages repo) —
 # never nest it inside this private app repo
 /marketing
-
-# FRP tunnel configs contain live auth tokens/secret keys — never commit
-electron/frp/frpc_field.toml
-electron/frp/frpc_office.toml
-# downloaded FRP binaries — same category as pgsql/, don't bloat the repo
-electron/frp/frp.zip
-electron/frp/frpc.exe
