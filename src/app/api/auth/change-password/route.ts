@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getSessionUser, Role, setSessionCookie, signSessionToken } from "@/lib/auth";
+import { validatePassword } from "@/lib/password";
 
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
@@ -19,18 +20,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Passwords do not match." }, { status: 400 });
   }
 
-  if (newPassword.length < 8) {
-    return NextResponse.json(
-      { error: "Password must be at least 8 characters." },
-      { status: 400 }
-    );
-  }
-
-  if (newPassword.toLowerCase() === "admin") {
-    return NextResponse.json(
-      { error: "Please choose a stronger password." },
-      { status: 400 }
-    );
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
   }
 
   const passwordHash = await bcrypt.hash(newPassword, 12);

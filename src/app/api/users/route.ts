@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { validatePassword } from "@/lib/password";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -40,6 +41,11 @@ export async function POST(request: Request) {
 
   if (!["superuser", "admin", "tech"].includes(role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  }
+
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
   }
 
   const existing = await prisma.user.findUnique({ where: { username } });
@@ -85,7 +91,13 @@ export async function PUT(request: Request) {
   }
   if (personnelId !== undefined) updateData.personnelId = personnelId || null;
   if (active !== undefined) updateData.active = active;
-  if (password) updateData.passwordHash = await bcrypt.hash(password, 12);
+  if (password) {
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
+    }
+    updateData.passwordHash = await bcrypt.hash(password, 12);
+  }
 
   const updated = await prisma.user.update({ where: { id }, data: updateData });
 
