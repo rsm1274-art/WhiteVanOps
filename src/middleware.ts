@@ -23,6 +23,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Cookie name must match SESSION_COOKIE_NAME in src/lib/auth.ts. Not imported
+  // directly here to avoid pulling next/headers into the Edge middleware bundle.
   const token = req.cookies.get("session")?.value;
 
   if (!token) {

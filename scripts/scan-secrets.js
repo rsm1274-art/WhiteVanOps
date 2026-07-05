@@ -5,6 +5,7 @@
 // (e.g. a forced `git add -f`).
 
 const { execSync } = require("child_process");
+const path = require("path");
 
 const BLOCKED_FILENAME_PATTERNS = [
   /\.env(\..+)?$/i,
@@ -21,7 +22,12 @@ const CONTENT_PATTERNS = [
   { name: "AWS access key ID", re: /AKIA[0-9A-Z]{16}/ },
   { name: "AWS secret access key assignment", re: /aws_secret_access_key\s*=\s*['"][A-Za-z0-9/+=]{40}['"]/i },
   { name: "GCP service account private_key field", re: /"private_key"\s*:\s*"-----BEGIN/ },
-  { name: "Generic long secret/token assignment", re: /(secret|password|token|api_?key)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{20,}['"]/i },
+  // Skipped for .md files: documentation legitimately shows example env-var
+  // syntax (e.g. `SESSION_SECRET="<example>"` in a setup guide), which this
+  // pattern can't distinguish from a real leaked value. Code/config files
+  // still get scanned — real secrets don't belong in either, but false
+  // positives here were specifically drowning out real findings in docs.
+  { name: "Generic long secret/token assignment", re: /(secret|password|token|api_?key)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{20,}['"]/i, skipExtensions: [".md"] },
   { name: "Slack token", re: /xox[baprs]-[0-9A-Za-z-]{10,}/ },
 ];
 
@@ -47,7 +53,9 @@ function main() {
       continue; // binary or unreadable — skip content scan
     }
 
-    for (const { name, re } of CONTENT_PATTERNS) {
+    const ext = path.extname(file).toLowerCase();
+    for (const { name, re, skipExtensions } of CONTENT_PATTERNS) {
+      if (skipExtensions?.includes(ext)) continue;
       if (re.test(content)) {
         violations.push(`${file}: matches "${name}" pattern`);
       }

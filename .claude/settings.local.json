@@ -63,7 +63,11 @@
       "PowerShell(Set-Service -Name \"postgresql-x64-17\" -StartupType Disabled)",
       "PowerShell(Get-Service -Name \"postgresql-x64-17\")",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\9.5\\\\bin\\\\pg_ctl.exe\" -D \"C:\\\\Users\\\\rober\\\\Desktop\\\\WhiteVanOps\\\\pg_data\" stop -m fast)",
-      "PowerShell(& \"$env:APPDATA\\\\npm\\\\pm2.cmd\" save)"
+      "PowerShell(& \"$env:APPDATA\\\\npm\\\\pm2.cmd\" save)",
+      "Bash(grep -oE '\"clone_url\": *\"[^\"]+\"' /tmp_repo_create_response.json)",
+      "Bash(grep -oE '\"full_name\": *\"[^\"]+\"' /tmp_repo_create_response.json)",
+      "Bash(grep -oE '\"private\": *\\(true|false\\)' /tmp_repo_create_response.json)",
+      "Bash(rm -f /tmp_repo_create_response.json)"
     ]
   }
 }

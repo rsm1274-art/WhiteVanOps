@@ -194,6 +194,7 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `SESSION_SECRET` | Yes | Random string for signing session JWTs — keep secret and consistent across restarts |
 | `WVO_FIREBASE_SERVICE_ACCOUNT` | Vendor only | Absolute path to the Firebase service-account key used by `scripts/license-manager.js` to mint license keys. **Store this file OUTSIDE the repository** (e.g. `%APPDATA%\whitevanops-secrets\`) — it is a highly privileged credential and is now gitignored so it can never be committed. `GOOGLE_APPLICATION_CREDENTIALS` is accepted as an alias. Not needed on customer machines. |
+| `REQUIRE_HTTPS` | No | Set to `true` once the app is reachable over HTTPS (e.g. via `tailscale serve`, see §7). Locks the session cookie to HTTPS-only (`Secure` flag) in production. Leave unset for LAN-only/Electron-only deployments — otherwise browser-based access over plain `http://` will silently fail to log in. |
 
 ---
 

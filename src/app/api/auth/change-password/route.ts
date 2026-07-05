@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, Role, setSessionCookie, signSessionToken } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const user = await getSessionUser();
@@ -41,28 +40,17 @@ export async function POST(req: NextRequest) {
     data: { passwordHash, mustChangePassword: false },
   });
 
-  const secret = process.env.SESSION_SECRET!;
-  const key = new TextEncoder().encode(secret);
-  const token = await new SignJWT({
+  const token = await signSessionToken({
     userId: updated.id,
     username: updated.username,
     displayName: updated.displayName,
-    role: updated.role,
+    role: updated.role as Role,
     personnelId: updated.personnelId ?? undefined,
     mustChangePassword: false,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("7d")
-    .sign(key);
+  });
 
   const res = NextResponse.json({ ok: true, role: updated.role });
-  res.cookies.set("session", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7,
-    path: "/",
-  });
+  setSessionCookie(res, token);
 
   return res;
 }
