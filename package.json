@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "electron:dev": "node scripts/electron-dev.js",
     "electron:build": "node scripts/electron-build.js",
     "prepare": "husky"
@@ -97,7 +99,8 @@
     "prisma": "^7.8.0",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

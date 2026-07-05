@@ -18,9 +18,10 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 // The session cookie is only marked Secure (HTTPS-only) when REQUIRE_HTTPS=true.
 // Browsers refuse to persist Secure cookies over plain http:// on a non-localhost
-// origin, so anyone reached over LAN http:// (e.g. field techs before Tailscale is
-// set up) would be silently logged out. Set REQUIRE_HTTPS=true once the app is
-// served over HTTPS (e.g. via `tailscale serve`) to lock the cookie down.
+// origin. The documented field-access path (MANUAL_Setup_Installation.md §7) is
+// router Port Forwarding + Dynamic DNS, which is plain http:// by design — leave
+// REQUIRE_HTTPS unset for that setup. Only set it to true if a real HTTPS front
+// end (e.g. a reverse proxy) is in front of the app.
 function isHttpsRequired(): boolean {
   return process.env.NODE_ENV === "production" && process.env.REQUIRE_HTTPS === "true";
 }

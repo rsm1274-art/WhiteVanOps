@@ -9,6 +9,8 @@ npm run dev              # Start Next.js dev server (http://localhost:3000)
 npm run build            # Production Next.js build
 npm run lint             # ESLint
 npx tsc --noEmit         # Type check without building
+npm test                 # Run the Vitest unit test suite once
+npm run test:watch       # Vitest in watch mode
 
 # Electron desktop app
 npm run electron:dev     # Start Next.js dev + open Electron window (do this instead of npm run dev for UI work)
@@ -119,6 +121,16 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 - `AuditLog.userId` → `User`
 - `StockLevel` is the join between `InventoryItem` and `StockLocation` (includes `quantity` and `minThreshold`)
 - Completing a job deducts `JobLineItem` quantities from the assigned vehicle's `StockLocation`
+
+## Testing
+
+Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
+
+- **`src/lib/db.ts` opens a real `pg.Pool` at import time and throws without `DATABASE_URL`** — any module that imports it (like `jobConflicts.ts`) needs `@/lib/db` mocked with `vi.mock`, never imported for real, in unit tests.
+- **`next/headers`'s `cookies()` is request-scoped** and throws outside a real request — mock it (see `auth.test.ts`) when testing code that calls `getSessionUser()`. `NextResponse` itself (from `next/server`) works fine unmocked — it's just a `Response` subclass.
+- **Use `vi.resetAllMocks()` in `beforeEach`, not `vi.clearAllMocks()`**, when a mock is shared across multiple check branches (e.g. `repairRecord.findFirst` is called by both the vehicle-repair and equipment-repair checks in `jobConflicts.ts`). `clearAllMocks` only wipes call history — queued `mockResolvedValueOnce` values and default `mockResolvedValue` implementations survive into the next test and can silently leak between cases.
+- **Use `vi.stubEnv`/`vi.unstubAllEnvs`, not direct `process.env.X =` assignment**, for env vars used in conditionals (e.g. `REQUIRE_HTTPS`) — `NODE_ENV` is typed read-only and direct assignment fails `tsc`.
+- **Keep fake secret-shaped fixture values short** (under ~20 chars) or avoid the words secret/password/token immediately before them — the `scripts/scan-secrets.js` pre-commit hook's generic pattern doesn't know the difference between a real leaked credential and a test fixture with a matching shape.
 
 ## Manual update policy
 
