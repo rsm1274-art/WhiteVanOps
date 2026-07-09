@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>White Van Ops — Field Operations Software You Actually Own</title>
-<meta name="description" content="Self-hosted field operations management software. Manage scheduling, fleet, inventory, and time tracking. One installer, database included. Your data never leaves your building." />
+<meta name="description" content="Self-hosted field operations management software. Manage scheduling, fleet, inventory, and time tracking — and upgrade to Plus for CRM follow-ups, business analytics, and invoicing. One installer, database included. Your data never leaves your building." />
 <meta name="keywords" content="field operations software, self-hosted field service management, fleet management software, hvac software, plumbing software, inventory control, time tracking, zero subscription software" />
 <meta name="author" content="White Van Ops" />
 <link rel="canonical" href="https://rsm1274-art.github.io/WhiteVanOps/" />
@@ -282,8 +282,8 @@
   .step .tag { display:inline-block; margin-top:.9rem; font-family:var(--mono); font-size:.55rem; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--blue); border:1px solid var(--blue); border-radius:2px; padding:3px 10px; }
 
   /* ---------- Pricing ---------- */
-  .price-grid { display:grid; grid-template-columns:repeat(2,minmax(0,420px)); gap:20px; justify-content:center; margin-top:2.6rem; }
-  @media (max-width:820px){ .price-grid { grid-template-columns:1fr; } }
+  .price-grid { display:grid; grid-template-columns:repeat(3,minmax(0,360px)); gap:20px; justify-content:center; margin-top:2.6rem; }
+  @media (max-width:960px){ .price-grid { grid-template-columns:1fr; } }
   .pcard { background:#fff; border:1px solid var(--line); border-radius:2px; padding:32px; }
   .pcard.featured { border:2px solid var(--blue); }
   .pcard .pn { font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; font-weight:700; color:var(--zinc-500); }
@@ -326,6 +326,22 @@
 
   /* inline stroke icons */
   .icon { fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:square; stroke-linejoin:miter; }
+
+  /* ---------- Plus tier badge ---------- */
+  .plus-badge {
+    display:inline-block; margin-left:.5rem; padding:2px 7px; border-radius:2px;
+    font-family:var(--mono); font-size:.5rem; font-weight:500; letter-spacing:.14em;
+    text-transform:uppercase; color:#fff; background:var(--blue); vertical-align:2px;
+  }
+  .fcard.plus { border-color:var(--blue); background:linear-gradient(#fff,#fff) padding-box; }
+  .mock-side .it .mini-plus {
+    font-family:var(--mono); font-size:.42rem; color:var(--blue-400);
+    border:1px solid var(--blue-400); border-radius:2px; padding:0 3px; margin-left:4px;
+  }
+  .tier-note {
+    margin-top:1.6rem; padding:1rem 1.2rem; background:var(--zinc-100); border:1px solid var(--line);
+    border-left:3px solid var(--blue); border-radius:2px; font-size:.85rem; color:var(--zinc-700);
+  }
 </style>
 </head>
 <body>
@@ -393,6 +409,8 @@
           <div class="it" data-view="time">Personnel &amp; Time</div>
           <div class="it" data-view="fleet">Fleet &amp; Service</div>
           <div class="it" data-view="inventory">Inventory Control</div>
+          <div class="it" data-view="analytics">Analytics<span class="mini-plus">Plus</span></div>
+          <div class="it" data-view="invoicing">Invoicing<span class="mini-plus">Plus</span></div>
           <div class="it" data-view="qb">QuickBooks Sync</div>
         </div>
         <div class="mock-main" id="hero-main">
@@ -447,8 +465,8 @@
 <section id="features">
   <div class="container">
     <span class="kicker"><span class="no">Sec. 02</span> Everything a service fleet runs on</span>
-    <h2>Eight modules. One dashboard.</h2>
-    <p class="muted" style="max-width:40rem">Built for HVAC, electrical, plumbing and specialty trade contractors running 2–25 vans.</p>
+    <h2>Eight modules on Base.<br/>Three more on Plus.</h2>
+    <p class="muted" style="max-width:40rem">Built for HVAC, electrical, plumbing and specialty trade contractors running 2–25 vans. Everything below ships in <b>Base</b>; the <span class="plus-badge" style="vertical-align:1px">Plus</span> cards are the paid upgrade — same install, switched on with a license, no reinstall.</p>
     <div class="features-grid">
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></svg></div><b>Scheduling &amp; Jobs</b><p>Job ledger with clients, line items, crew assignment and recurring job templates — set a cadence once, generate the next batch of visits with one click.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M2 17V7h11v10"/><path d="M13 10h4l3 4v3h-3"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg></div><b>Fleet &amp; Service</b><p>Track every van, its maintenance history and repair reports. Know which vehicle is due before it breaks down.</p></div>
@@ -458,6 +476,9 @@
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></svg></div><b>Roles &amp; Audit Log</b><p>Superuser, admin and tech roles with forced password changes and a full audit trail of every change.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><b>Offline-First Field App</b><p>Techs lose signal? No problem. The PWA caches jobs locally and silently syncs when reconnected.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><b>Ironclad Local Backups</b><p>Configure a target mirror directory. The system automatically executes a full pg_dump backup every night.</p></div>
+      <div class="fcard plus reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></svg></div><b>CRM Notes &amp; Follow-Ups<span class="plus-badge">Plus</span></b><p>A permanent communication log on every client, plus dated follow-up reminders assigned to your crew — due ones surface in the dashboard alert bell.</p></div>
+      <div class="fcard plus reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg></div><b>Business Analytics<span class="plus-badge">Plus</span></b><p>Revenue by month, technician hours, top clients and fleet maintenance cost — 12 months of trends charted live from your own data.</p></div>
+      <div class="fcard plus reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><path d="M10 13h6M10 17h4"/></svg></div><b>Invoicing &amp; Payments<span class="plus-badge">Plus</span></b><p>Create invoices from completed jobs, print professional PDFs, and track payments through partial to paid — a real AR ledger, alongside the QuickBooks export.</p></div>
     </div>
   </div>
 </section>
@@ -519,34 +540,51 @@
 <!-- ===================== PRICING ===================== -->
 <section id="pricing">
   <div class="container">
-    <span class="kicker"><span class="no">Sec. 05</span> Pricing</span>
+    <span class="kicker"><span class="no">Sec. 05</span> Pricing &amp; Plans</span>
     <h2>Buy it once. It's yours.</h2>
-    <p class="muted">No per-seat rent. No data hostage fees.</p>
+    <p class="muted">No per-seat rent. No data hostage fees. Two plans, one install — Plus is a license switch, not a different product.</p>
     <div class="price-grid">
       <div class="pcard reveal">
-        <div class="pn">Single Office</div>
+        <div class="pn">WhiteVanOps Base</div>
         <div class="pv">$500 <small>one-time</small></div>
         <ul>
           <li>Unlimited users &amp; vans</li>
           <li>Bundled PostgreSQL database</li>
           <li>Admin dashboard + field module</li>
+          <li>Scheduling, fleet, inventory &amp; time</li>
           <li>QuickBooks CSV export</li>
           <li>1 year of updates</li>
         </ul>
         <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
       </div>
       <div class="pcard featured reveal">
-        <div class="pn" style="color:var(--blue)">Office + White Glove</div>
+        <div class="pn" style="color:var(--blue)">WhiteVanOps Plus <span class="plus-badge">Plus</span></div>
+        <div class="pv">Base&nbsp;+ <small style="display:block;margin-top:.15rem">one-time upgrade — contact for pricing</small></div>
+        <ul>
+          <li>Everything in Base</li>
+          <li>Client CRM notes &amp; communication log</li>
+          <li>Follow-up reminders with due alerts</li>
+          <li>Business Analytics — revenue, hours, fleet cost</li>
+          <li>Invoicing with PDF &amp; payment tracking</li>
+          <li>Activate anytime — no reinstall</li>
+        </ul>
+        <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Upgrade to Plus</a>
+      </div>
+      <div class="pcard reveal">
+        <div class="pn">Office + White Glove</div>
         <div class="pv">$1000 <small>one-time + setup</small></div>
         <ul>
-          <li>Everything in Single Office</li>
+          <li>Base or Plus — your choice</li>
           <li>On-site or remote installation</li>
           <li>Field-access router configuration</li>
           <li>Data migration from spreadsheets</li>
           <li>Priority support optional - $500 lifetime access</li>
         </ul>
-        <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Book a Demo</a>
+        <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Book a Demo</a>
       </div>
+    </div>
+    <div class="tier-note reveal">
+      <b>How the Plus upgrade works:</b> every install ships with the full software. Upgrading to Plus is a license flag your superuser flips in Settings — the Analytics and Invoicing tabs and CRM follow-ups appear on the next refresh, with no reinstall and no downtime. And if a Plus license ever lapses, your notes, invoices and payment records are never deleted; they're right there when you re-activate.
     </div>
   </div>
 </section>
@@ -788,6 +826,27 @@ const heroViews = {
     <div class="rowline"><div><div class="jn">Refrigerant R-410A (25lb)</div><div class="jc">Warehouse: 6 · Vans: 2</div></div><span class="pill p3">OK</span></div>
     <div class="rowline"><div><div class="jn">Capacitor 45/5 µF</div><div class="jc">Warehouse: 3 · Vans: 1 (Min: 5)</div></div><span class="pill p2">Reorder</span></div>
     <div class="rowline"><div><div class="jn">Filter-Drier 3/8"</div><div class="jc">Warehouse: 22 · Vans: 8</div></div><span class="pill p3">OK</span></div>
+  `,
+  analytics: `
+    <div class="ttl">Business Analytics <span class="plus-badge">Plus</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Revenue (12 mo)</div><div class="kv">$412k</div></div>
+      <div class="kpi"><div class="kl">Avg Job Value</div><div class="kv">$1,940</div></div>
+      <div class="kpi"><div class="kl">Labor Hours</div><div class="kv">3,120</div></div>
+    </div>
+    <div class="rowline"><div><div class="jn">Top client: Lakeside Mall</div><div class="jc">$86k billed · 41 jobs</div></div><span class="pill p3">+18% YoY</span></div>
+    <div class="rowline"><div><div class="jn">Fleet maintenance</div><div class="jc">$1,240 this month</div></div><span class="pill p1">Trending</span></div>
+  `,
+  invoicing: `
+    <div class="ttl">Invoicing &amp; Payments <span class="plus-badge">Plus</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="kl">Outstanding AR</div><div class="kv">$12.4k</div></div>
+      <div class="kpi"><div class="kl">Overdue</div><div class="kv">2</div></div>
+      <div class="kpi"><div class="kl">Collected</div><div class="kv">$398k</div></div>
+    </div>
+    <div class="rowline"><div><div class="jn">INV-0142 — Reyes Dental</div><div class="jc">$3,800 · due Jul 24</div></div><span class="pill p1">Sent</span></div>
+    <div class="rowline"><div><div class="jn">INV-0141 — Hilltop Foods</div><div class="jc">$1,150 · PDF sent</div></div><span class="pill p2">Partial</span></div>
+    <div class="rowline"><div><div class="jn">INV-0140 — Marina Storage</div><div class="jc">$6,200 · check #1042</div></div><span class="pill p3">Paid</span></div>
   `,
   qb: `
     <div class="ttl">QuickBooks Sync</div>
