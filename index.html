@@ -282,8 +282,9 @@
   .step .tag { display:inline-block; margin-top:.9rem; font-family:var(--mono); font-size:.55rem; font-weight:500; letter-spacing:.12em; text-transform:uppercase; color:var(--blue); border:1px solid var(--blue); border-radius:2px; padding:3px 10px; }
 
   /* ---------- Pricing ---------- */
-  .price-grid { display:grid; grid-template-columns:repeat(3,minmax(0,360px)); gap:20px; justify-content:center; margin-top:2.6rem; }
-  @media (max-width:960px){ .price-grid { grid-template-columns:1fr; } }
+  .price-grid { display:grid; grid-template-columns:repeat(4,minmax(0,300px)); gap:18px; justify-content:center; margin-top:2.6rem; }
+  @media (max-width:1080px){ .price-grid { grid-template-columns:repeat(2,minmax(0,420px)); } }
+  @media (max-width:640px){ .price-grid { grid-template-columns:1fr; } }
   .pcard { background:#fff; border:1px solid var(--line); border-radius:2px; padding:32px; }
   .pcard.featured { border:2px solid var(--blue); }
   .pcard .pn { font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; font-weight:700; color:var(--zinc-500); }
@@ -545,7 +546,7 @@
     <p class="muted">No per-seat rent. No data hostage fees. Two plans, one install — Plus is a license switch, not a different product.</p>
     <div class="price-grid">
       <div class="pcard reveal">
-        <div class="pn">WhiteVanOps Base</div>
+        <div class="pn">Single Office Base</div>
         <div class="pv">$500 <small>one-time</small></div>
         <ul>
           <li>Unlimited users &amp; vans</li>
@@ -558,8 +559,8 @@
         <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
       </div>
       <div class="pcard featured reveal">
-        <div class="pn" style="color:var(--blue)">WhiteVanOps Plus <span class="plus-badge">Plus</span></div>
-        <div class="pv">Base&nbsp;+ <small style="display:block;margin-top:.15rem">one-time upgrade — contact for pricing</small></div>
+        <div class="pn" style="color:var(--blue)">Single Office Plus <span class="plus-badge">Plus</span></div>
+        <div class="pv">$1000 <small>one-time</small></div>
         <ul>
           <li>Everything in Base</li>
           <li>Client CRM notes &amp; communication log</li>
@@ -568,19 +569,31 @@
           <li>Invoicing with PDF &amp; payment tracking</li>
           <li>Activate anytime — no reinstall</li>
         </ul>
-        <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Upgrade to Plus</a>
+        <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Go Plus</a>
       </div>
       <div class="pcard reveal">
-        <div class="pn">Office + White Glove</div>
-        <div class="pv">$1000 <small>one-time + setup</small></div>
+        <div class="pn">White Glove Installation</div>
+        <div class="pv">$500 <small style="display:block;margin-top:.15rem">one-time add-on</small></div>
         <ul>
-          <li>Base or Plus — your choice</li>
+          <li>Works with Base or Plus</li>
           <li>On-site or remote installation</li>
           <li>Field-access router configuration</li>
           <li>Data migration from spreadsheets</li>
-          <li>Priority support optional - $500 lifetime access</li>
+          <li>Tech phones set up via QR code</li>
         </ul>
         <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Book a Demo</a>
+      </div>
+      <div class="pcard reveal">
+        <div class="pn">Lifetime Priority Support</div>
+        <div class="pv">$500 <small style="display:block;margin-top:.15rem">one-time add-on</small></div>
+        <ul>
+          <li>Lifetime access — pay once</li>
+          <li>Priority response, direct line</li>
+          <li>Help with upgrades &amp; updates</li>
+          <li>Backup &amp; recovery assistance</li>
+          <li>Works with Base or Plus</li>
+        </ul>
+        <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
       </div>
     </div>
     <div class="tier-note reveal">
