@@ -8,6 +8,79 @@ export interface Client {
   contactName: string;
   locationAddress: string;
   paymentTerms: string;
+  // Plus tier only — present in the dashboard payload only when licensed
+  notes?: ClientNote[];
+  followUps?: ClientFollowUp[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Plus tier — license, CRM notes & follow-ups, invoicing
+// ---------------------------------------------------------------------------
+
+export type LicenseTier = "base" | "plus";
+
+export interface LicenseInfo {
+  tier: LicenseTier;
+  expiresAt: string | null;
+  /** True only when tier is "plus" and unexpired. */
+  plus: boolean;
+}
+
+export interface ClientNote {
+  id: string;
+  clientId: string;
+  authorId: string | null;
+  author: { displayName: string } | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface ClientFollowUp {
+  id: string;
+  clientId: string;
+  assignedToId: string | null;
+  assignedTo: Personnel | null;
+  dueDate: string;
+  note: string;
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export type InvoiceStatus = "Draft" | "Sent" | "PartiallyPaid" | "Paid" | "Void";
+
+export interface InvoiceLineItem {
+  id: string;
+  invoiceId: string;
+  description: string;
+  quantity: number;
+  rate: number;
+}
+
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  amount: number;
+  method: string;
+  reference: string | null;
+  receivedDate: string;
+  recordedById: string | null;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  clientId: string;
+  client: Client;
+  jobId: string | null;
+  status: InvoiceStatus;
+  issueDate: string;
+  dueDate: string;
+  notes: string | null;
+  lineItems: InvoiceLineItem[];
+  payments: Payment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -220,6 +293,9 @@ export interface TimeEntry {
 // ---------------------------------------------------------------------------
 
 export interface DashboardData {
+  license: LicenseInfo;
+  /** Empty for Base-tier installs. */
+  invoices: Invoice[];
   clients: Client[];
   personnel: Personnel[];
   vehicles: Vehicle[];
@@ -342,6 +418,11 @@ export type ModalType =
   | "reportRepair"
   | "manageUsers"
   | "fieldAccess"
+  | "addClientNote"
+  | "addFollowUp"
+  | "editFollowUp"
+  | "addInvoice"
+  | "recordPayment"
   | null;
 
 // ---------------------------------------------------------------------------

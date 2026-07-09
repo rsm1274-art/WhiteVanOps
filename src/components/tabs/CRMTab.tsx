@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Copy, Pencil, Repeat, Play, Pause, Trash2, RotateCw } from "lucide-react";
-import { DashboardData, Job, JobStatus, RecurringJobTemplate } from "@/types";
+import { Plus, Copy, Pencil, Repeat, Play, Pause, Trash2, RotateCw, StickyNote, CalendarCheck, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Client, ClientFollowUp, DashboardData, Job, JobStatus, RecurringJobTemplate } from "@/types";
 import { JobStatusBadge, SyncStatusBadge } from "@/components/shared/StatusBadge";
-import { formatDate } from "@/lib/dateUtils";
+import { formatDate, todayLocalStr, dateToLocalStr } from "@/lib/dateUtils";
 
 const ALL_STATUSES: JobStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -30,6 +30,12 @@ interface Props {
   onGenerateRecurringJob: (template: RecurringJobTemplate) => void;
   onToggleRecurringActive: (template: RecurringJobTemplate) => void;
   onDeleteRecurringJob: (template: RecurringJobTemplate) => void;
+  // Plus tier — CRM notes & follow-ups (undefined handlers on Base installs)
+  onAddNote?: (client: Client) => void;
+  onAddFollowUp?: (client: Client) => void;
+  onEditFollowUp?: (client: Client, followUp: ClientFollowUp) => void;
+  onToggleFollowUp?: (followUp: ClientFollowUp) => void;
+  onDeleteFollowUp?: (followUp: ClientFollowUp) => void;
 }
 
 export default function CRMTab({
@@ -48,8 +54,17 @@ export default function CRMTab({
   onGenerateRecurringJob,
   onToggleRecurringActive,
   onDeleteRecurringJob,
+  onAddNote,
+  onAddFollowUp,
+  onEditFollowUp,
+  onToggleFollowUp,
+  onDeleteFollowUp,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<JobStatus | "All">("All");
+  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+
+  const plus = data.license.plus;
+  const today = todayLocalStr();
 
   const filteredJobs =
     statusFilter === "All"
@@ -92,19 +107,124 @@ export default function CRMTab({
           <p className="text-sm text-zinc-500">No clients yet. Add one above.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {data.clients.map((c) => (
-              <div key={c.id} className="p-4 border border-zinc-100 rounded bg-zinc-50">
-                <h5 className="font-bold text-sm">{c.name}</h5>
-                <span className="text-[10px] text-zinc-400 block font-semibold mt-0.5">
-                  Contact: {c.contactName}
-                </span>
-                <p className="text-xs text-zinc-500 mt-2">{c.locationAddress}</p>
-                <div className="mt-3 pt-2 border-t border-zinc-100 flex justify-between items-center text-xs">
-                  <span className="text-zinc-400">Terms:</span>
-                  <span className="font-semibold">{c.paymentTerms}</span>
+            {data.clients.map((c) => {
+              const notes = c.notes ?? [];
+              const followUps = c.followUps ?? [];
+              const openFollowUps = followUps.filter((f) => !f.completed);
+              const dueCount = openFollowUps.filter((f) => dateToLocalStr(f.dueDate) <= today).length;
+              const expanded = expandedClientId === c.id;
+              return (
+                <div key={c.id} className="p-4 border border-zinc-100 rounded bg-zinc-50">
+                  <h5 className="font-bold text-sm">{c.name}</h5>
+                  <span className="text-[10px] text-zinc-400 block font-semibold mt-0.5">
+                    Contact: {c.contactName}
+                  </span>
+                  <p className="text-xs text-zinc-500 mt-2">{c.locationAddress}</p>
+                  <div className="mt-3 pt-2 border-t border-zinc-100 flex justify-between items-center text-xs">
+                    <span className="text-zinc-400">Terms:</span>
+                    <span className="font-semibold">{c.paymentTerms}</span>
+                  </div>
+
+                  {/* Plus tier — notes & follow-ups panel */}
+                  {plus && (
+                    <div className="mt-3 pt-2 border-t border-zinc-100">
+                      <button
+                        onClick={() => setExpandedClientId(expanded ? null : c.id)}
+                        className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-800 transition-colors"
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <StickyNote className="h-3 w-3" />
+                          {notes.length} note{notes.length !== 1 && "s"} · {openFollowUps.length} follow-up{openFollowUps.length !== 1 && "s"}
+                          {dueCount > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">{dueCount} due</span>
+                          )}
+                        </span>
+                        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                      </button>
+
+                      {expanded && (
+                        <div className="mt-3 space-y-3">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => onAddNote?.(c)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 border border-zinc-300 bg-white hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-wider rounded transition-colors"
+                            >
+                              <StickyNote className="h-3 w-3" />
+                              Add Note
+                            </button>
+                            <button
+                              onClick={() => onAddFollowUp?.(c)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 border border-zinc-300 bg-white hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-wider rounded transition-colors"
+                            >
+                              <CalendarCheck className="h-3 w-3" />
+                              Follow-Up
+                            </button>
+                          </div>
+
+                          {openFollowUps.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Open Follow-Ups</p>
+                              {openFollowUps.map((f) => {
+                                const due = dateToLocalStr(f.dueDate) <= today;
+                                return (
+                                  <div key={f.id} className="flex items-start gap-2 p-2 bg-white border border-zinc-200 rounded">
+                                    <button
+                                      onClick={() => onToggleFollowUp?.(f)}
+                                      title="Mark completed"
+                                      className="mt-0.5 p-0.5 border border-zinc-300 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-600 rounded shrink-0"
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </button>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs text-zinc-700 leading-snug">{f.note}</p>
+                                      <p className={`text-[10px] mt-0.5 font-semibold ${due ? "text-red-600" : "text-zinc-400"}`}>
+                                        Due {formatDate(f.dueDate)}
+                                        {f.assignedTo && ` · ${f.assignedTo.firstName} ${f.assignedTo.lastName}`}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() => onEditFollowUp?.(c, f)}
+                                      title="Edit follow-up"
+                                      className="p-1 text-zinc-400 hover:text-zinc-700 shrink-0"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => onDeleteFollowUp?.(f)}
+                                      title="Delete follow-up"
+                                      className="p-1 text-zinc-400 hover:text-red-600 shrink-0"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {notes.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Notes</p>
+                              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                                {notes.map((n) => (
+                                  <div key={n.id} className="p-2 bg-white border border-zinc-200 rounded">
+                                    <p className="text-xs text-zinc-700 leading-snug whitespace-pre-wrap">{n.body}</p>
+                                    <p className="text-[10px] text-zinc-400 mt-1">
+                                      {formatDate(n.createdAt)}
+                                      {n.author && ` · ${n.author.displayName}`}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

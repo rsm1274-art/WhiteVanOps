@@ -14,8 +14,98 @@ model Client {
   paymentTerms    String                 // E.g., "Net 30", "Net 15", "Due on Receipt"
   jobs            Job[]
   recurringJobs   RecurringJobTemplate[]
+  notes           ClientNote[]
+  followUps       ClientFollowUp[]
+  invoices        Invoice[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// License — singleton row (fixed id "singleton", upserted on read by
+// src/lib/license.ts). Controls the Base vs Plus feature tier. The tables for
+// Plus features always exist; only the flag gates access.
+// ---------------------------------------------------------------------------
+model License {
+  id          String    @id @default("singleton")
+  tier        String    @default("base") // "base" | "plus"
+  licenseKey  String?
+  notes       String?
+  activatedAt DateTime?
+  expiresAt   DateTime? // null = perpetual
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Plus tier — CRM notes & follow-ups
+// ---------------------------------------------------------------------------
+model ClientNote {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model ClientFollowUp {
+  id           String     @id @default(cuid())
+  clientId     String
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  assignedToId String?
+  assignedTo   Personnel? @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  dueDate      DateTime
+  note         String
+  completed    Boolean    @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Plus tier — internal invoicing / AR ledger. Independent of the QuickBooks
+// CSV export flow (qbInvoiceSyncStatus) — additive, not a replacement.
+// ---------------------------------------------------------------------------
+model Invoice {
+  id            String            @id @default(cuid())
+  invoiceNumber String            @unique // "INV-0001", counter in SystemSetting
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  jobId         String?           // Optional link to the job that was invoiced
+  job           Job?              @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status        String            @default("Draft") // "Draft" | "Sent" | "PartiallyPaid" | "Paid" | "Void"
+  issueDate     DateTime
+  dueDate       DateTime
+  notes         String?
+  lineItems     InvoiceLineItem[]
+  payments      Payment[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  rate        Float
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount       Float
+  method       String   // "Check" | "Cash" | "Card" | "ACH" | "Other"
+  reference    String?  // Check number / transaction id
+  receivedDate DateTime
+  recordedById String?
+  recordedBy   User?    @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
 }
 
 model Personnel {
@@ -29,6 +119,7 @@ model Personnel {
   qualifications      PersonnelQualification[]
   timeOff             PersonnelTimeOff[]
   recurringAssignments RecurringJobPersonnel[]
+  followUps           ClientFollowUp[]
   user                User?
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
@@ -169,6 +260,7 @@ model Job {
   lineItems           JobLineItem[]
   timeEntries         TimeEntry[]
   equipment           JobEquipment[]
+  invoices            Invoice[]
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 }
@@ -271,6 +363,8 @@ model User {
   failedLoginAttempts Int       @default(0)
   lockedUntil        DateTime?
   auditLogs          AuditLog[]
+  clientNotes        ClientNote[]
+  paymentsRecorded   Payment[]
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 }

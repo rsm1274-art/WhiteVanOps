@@ -16,10 +16,12 @@ import {
   ShieldCheck,
   QrCode,
   Settings,
+  BarChart3,
+  Receipt,
 } from "lucide-react";
 
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { AdjustStockContext, AppUser, Job, ModalType, Personnel, RecurringJobTemplate, RepairContext, Vehicle } from "@/types";
+import { AdjustStockContext, AppUser, Client, ClientFollowUp, Invoice, Job, ModalType, Personnel, RecurringJobTemplate, RepairContext, Vehicle } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 
 // Tabs
@@ -31,6 +33,8 @@ import FleetTab from "@/components/tabs/FleetTab";
 import InventoryTab from "@/components/tabs/InventoryTab";
 import AccountingTab from "@/components/tabs/AccountingTab";
 import SettingsTab from "@/components/tabs/SettingsTab";
+import AnalyticsTab from "@/components/tabs/AnalyticsTab";
+import InvoicingTab from "@/components/tabs/InvoicingTab";
 
 // Modals
 import AddClientModal from "@/components/modals/AddClientModal";
@@ -50,13 +54,17 @@ import AllocateResourcesModal from "@/components/modals/AllocateResourcesModal";
 import JobCostsModal from "@/components/modals/JobCostsModal";
 import ManageUsersModal from "@/components/modals/ManageUsersModal";
 import FieldAccessModal from "@/components/modals/FieldAccessModal";
+import AddClientNoteModal from "@/components/modals/AddClientNoteModal";
+import FollowUpModal from "@/components/modals/FollowUpModal";
+import AddInvoiceModal from "@/components/modals/AddInvoiceModal";
+import RecordPaymentModal from "@/components/modals/RecordPaymentModal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import NotificationBell from "@/components/shared/NotificationBell";
 
 // ---------------------------------------------------------------------------
 // Types for modal context payloads
 // ---------------------------------------------------------------------------
-type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "accounting" | "settings";
+type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "analytics" | "invoicing" | "accounting" | "settings";
 
 const TAB_LABELS: Record<TabId, string> = {
   overview: "Operations Overview",
@@ -65,17 +73,23 @@ const TAB_LABELS: Record<TabId, string> = {
   personnel: "Personnel & Labor Hours",
   fleet: "Fleet Logistics",
   inventory: "Inventory & Van Levels",
+  analytics: "Business Analytics",
+  invoicing: "Invoicing & Payments",
   accounting: "QuickBooks Export Sync",
   settings: "System Settings",
 };
 
-const NAV: { id: TabId; label: string; icon: React.ReactNode }[] = [
+// plusOnly tabs are hidden without an active Plus license (the API routes
+// behind them are also gated server-side — hiding here is convenience only).
+const NAV: { id: TabId; label: string; icon: React.ReactNode; plusOnly?: boolean }[] = [
   { id: "overview", label: "Overview", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "crm", label: "Clients & Jobs", icon: <Briefcase className="h-4 w-4" /> },
   { id: "scheduling", label: "Scheduling", icon: <Clock className="h-4 w-4" /> },
   { id: "personnel", label: "Personnel & Time", icon: <Users className="h-4 w-4" /> },
   { id: "fleet", label: "Fleet & Service", icon: <Truck className="h-4 w-4" /> },
   { id: "inventory", label: "Inventory Control", icon: <Package className="h-4 w-4" /> },
+  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" />, plusOnly: true },
+  { id: "invoicing", label: "Invoicing", icon: <Receipt className="h-4 w-4" />, plusOnly: true },
   { id: "accounting", label: "QuickBooks Sync", icon: <FileSpreadsheet className="h-4 w-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
 ];
@@ -130,6 +144,15 @@ export default function Dashboard() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [cloneSource, setCloneSource] = useState<Job | null>(null);
   const [selectedRecurringJob, setSelectedRecurringJob] = useState<RecurringJobTemplate | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedFollowUp, setSelectedFollowUp] = useState<ClientFollowUp | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  // If the license is downgraded/expires, render Overview instead of a
+  // now-hidden Plus tab (derived during render — no effect needed).
+  const plus = data?.license.plus ?? false;
+  const effectiveTab: TabId =
+    !plus && (activeTab === "analytics" || activeTab === "invoicing") ? "overview" : activeTab;
 
   // Confirmation dialog state
   const [confirm, setConfirm] = useState<{
@@ -163,6 +186,113 @@ export default function Dashboard() {
     setSelectedJob(null);
     setCloneSource(null);
     setSelectedRecurringJob(null);
+    setSelectedClient(null);
+    setSelectedFollowUp(null);
+    setSelectedInvoice(null);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Plus tier — follow-up and invoice actions
+  // ---------------------------------------------------------------------------
+  const completeFollowUp = async (followUp: ClientFollowUp) => {
+    try {
+      const res = await fetch(`/api/follow-ups/${followUp.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: true }),
+      });
+      if (!res.ok) throw new Error("Failed to complete follow-up");
+      handleSuccess("Follow-up marked completed.");
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to complete follow-up");
+    }
+  };
+
+  const requestDeleteFollowUp = (followUp: ClientFollowUp) => {
+    setConfirm({
+      title: "Delete Follow-Up",
+      message: "Delete this follow-up reminder? This cannot be undone.",
+      destructive: true,
+      onConfirm: () => {
+        setConfirm(null);
+        deleteFollowUp(followUp.id);
+      },
+    });
+  };
+
+  const deleteFollowUp = async (id: string) => {
+    try {
+      const res = await fetch(`/api/follow-ups/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete follow-up");
+      handleSuccess("Follow-up deleted.");
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to delete follow-up");
+    }
+  };
+
+  const markInvoiceSent = async (invoice: Invoice) => {
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Sent" }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to mark invoice sent");
+      handleSuccess(`${invoice.invoiceNumber} marked as Sent — payments can now be recorded.`);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to mark invoice sent");
+    }
+  };
+
+  const requestVoidInvoice = (invoice: Invoice) => {
+    setConfirm({
+      title: "Void Invoice",
+      message: `Void ${invoice.invoiceNumber}? A voided invoice is kept for the record but can no longer accept payments. This cannot be undone.`,
+      destructive: true,
+      onConfirm: () => {
+        setConfirm(null);
+        voidInvoice(invoice);
+      },
+    });
+  };
+
+  const voidInvoice = async (invoice: Invoice) => {
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Void" }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to void invoice");
+      handleSuccess(`${invoice.invoiceNumber} voided.`);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to void invoice");
+    }
+  };
+
+  const requestDeleteInvoice = (invoice: Invoice) => {
+    setConfirm({
+      title: "Delete Draft Invoice",
+      message: `Permanently delete draft ${invoice.invoiceNumber}? Only unsent drafts can be deleted.`,
+      destructive: true,
+      onConfirm: () => {
+        setConfirm(null);
+        deleteInvoice(invoice);
+      },
+    });
+  };
+
+  const deleteInvoice = async (invoice: Invoice) => {
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to delete invoice");
+      handleSuccess(`Draft ${invoice.invoiceNumber} deleted.`);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to delete invoice");
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -553,12 +683,14 @@ export default function Dashboard() {
           </div>
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1">
-          {NAV.filter(navItem => navItem.id !== "settings" || (currentUser && (currentUser.role === "superuser" || currentUser.role === "admin"))).map(({ id, label, icon }) => (
+          {NAV.filter(navItem => navItem.id !== "settings" || (currentUser && (currentUser.role === "superuser" || currentUser.role === "admin")))
+            .filter(navItem => !navItem.plusOnly || plus)
+            .map(({ id, label, icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium tracking-wide uppercase transition-colors rounded border-l-2 ${
-                activeTab === id
+                effectiveTab === id
                   ? "bg-zinc-800 text-white border-blue-600"
                   : "border-transparent hover:bg-zinc-800 hover:text-zinc-200"
               }`}
@@ -624,7 +756,7 @@ export default function Dashboard() {
         {/* Header */}
         <header className="h-16 border-b border-zinc-200 px-8 bg-white flex items-center justify-between shrink-0">
           <h1 className="text-xl font-bold uppercase tracking-wide text-zinc-800">
-            {TAB_LABELS[activeTab]}
+            {TAB_LABELS[effectiveTab]}
           </h1>
           <div className="flex items-center gap-4">
             {unsyncedTotal > 0 && (
@@ -665,9 +797,9 @@ export default function Dashboard() {
 
         {/* Tab content */}
         <div className="flex-1 p-8 overflow-y-auto">
-          {activeTab === "overview" && <OverviewTab data={data} />}
+          {effectiveTab === "overview" && <OverviewTab data={data} />}
 
-          {activeTab === "crm" && (
+          {effectiveTab === "crm" && (
             <CRMTab
               data={data}
               onAddClient={() => setActiveModal("addClient")}
@@ -684,12 +816,17 @@ export default function Dashboard() {
               onGenerateRecurringJob={generateRecurringJob}
               onToggleRecurringActive={toggleRecurringActive}
               onDeleteRecurringJob={requestDeleteRecurringJob}
+              onAddNote={(client) => { setSelectedClient(client); setActiveModal("addClientNote"); }}
+              onAddFollowUp={(client) => { setSelectedClient(client); setActiveModal("addFollowUp"); }}
+              onEditFollowUp={(client, followUp) => { setSelectedClient(client); setSelectedFollowUp(followUp); setActiveModal("editFollowUp"); }}
+              onToggleFollowUp={completeFollowUp}
+              onDeleteFollowUp={requestDeleteFollowUp}
             />
           )}
 
-          {activeTab === "scheduling" && <SchedulingTab data={data} />}
+          {effectiveTab === "scheduling" && <SchedulingTab data={data} />}
 
-          {activeTab === "personnel" && (
+          {effectiveTab === "personnel" && (
             <PersonnelTab
               data={data}
               onAddPersonnel={() => setActiveModal("addPersonnel")}
@@ -698,7 +835,7 @@ export default function Dashboard() {
             />
           )}
 
-          {activeTab === "fleet" && (
+          {effectiveTab === "fleet" && (
             <FleetTab
               data={data}
               onAddVehicle={() => setActiveModal("addVehicle")}
@@ -709,7 +846,7 @@ export default function Dashboard() {
             />
           )}
 
-          {activeTab === "inventory" && (
+          {effectiveTab === "inventory" && (
             <InventoryTab
               data={data}
               onAddItem={() => setActiveModal("addItem")}
@@ -719,7 +856,20 @@ export default function Dashboard() {
             />
           )}
 
-          {activeTab === "accounting" && (
+          {effectiveTab === "analytics" && plus && <AnalyticsTab />}
+
+          {effectiveTab === "invoicing" && plus && (
+            <InvoicingTab
+              data={data}
+              onAddInvoice={() => setActiveModal("addInvoice")}
+              onMarkSent={markInvoiceSent}
+              onRecordPayment={(inv) => { setSelectedInvoice(inv); setActiveModal("recordPayment"); }}
+              onVoidInvoice={requestVoidInvoice}
+              onDeleteInvoice={requestDeleteInvoice}
+            />
+          )}
+
+          {effectiveTab === "accounting" && (
             <AccountingTab
               data={data}
               onExportInvoices={exportInvoiceCSV}
@@ -728,8 +878,12 @@ export default function Dashboard() {
             />
           )}
 
-          {activeTab === "settings" && (
-            <SettingsTab onShowToast={showToast} />
+          {effectiveTab === "settings" && (
+            <SettingsTab
+              onShowToast={showToast}
+              isSuperuser={currentUser?.role === "superuser"}
+              onLicenseChanged={reload}
+            />
           )}
         </div>
       </main>
@@ -862,6 +1016,50 @@ export default function Dashboard() {
 
       {activeModal === "fieldAccess" && (
         <FieldAccessModal onClose={closeModal} />
+      )}
+
+      {activeModal === "addClientNote" && selectedClient && (
+        <AddClientNoteModal
+          client={selectedClient}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
+      )}
+      {activeModal === "addFollowUp" && selectedClient && (
+        <FollowUpModal
+          client={selectedClient}
+          personnel={data.personnel}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
+      )}
+      {activeModal === "editFollowUp" && selectedClient && selectedFollowUp && (
+        <FollowUpModal
+          client={selectedClient}
+          personnel={data.personnel}
+          followUp={selectedFollowUp}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
+      )}
+      {activeModal === "addInvoice" && (
+        <AddInvoiceModal
+          data={data}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
+      )}
+      {activeModal === "recordPayment" && selectedInvoice && (
+        <RecordPaymentModal
+          invoice={selectedInvoice}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
       )}
 
       {/* Confirmation dialog (rendered above modals) */}

@@ -7,7 +7,19 @@
 
 ## Overview
 
-WhiteVanOps is an internal field operations management dashboard. It tracks jobs, clients, crew, fleet, inventory, and produces QuickBooks-ready export files. It does **not** send invoices or process payroll — those steps happen inside QuickBooks after you import the CSV exports this system generates.
+WhiteVanOps is an internal field operations management dashboard. It tracks jobs, clients, crew, fleet, inventory, and produces QuickBooks-ready export files. It does **not** process payroll — that happens inside QuickBooks after you import the CSV exports this system generates.
+
+### Plans: Base & Plus
+
+WhiteVanOps ships in two plans running on the same installation:
+
+- **Base** — everything described in Modules 1–7 below: jobs, scheduling, personnel, fleet, inventory, and QuickBooks CSV export.
+- **Plus** — adds three feature areas on top of Base:
+  - **Client notes & follow-up reminders** in the Clients & Jobs module (Module 2)
+  - **Business Analytics** tab — revenue, technician hours, and fleet cost charts (Module 8)
+  - **Invoicing & Payments** tab — internal invoices with PDF generation and payment tracking (Module 9)
+
+The plan is controlled by a license setting in **Settings → License & Plan** (superuser only — see that section below). Upgrading requires no reinstall: flip the plan and the new tabs appear on the next dashboard refresh. Downgrading hides the Plus tabs and blocks the Plus features, but **never deletes** notes, follow-ups, invoices, or payment records — everything reappears if the plan is re-activated.
 
 Open the **WhiteVanOps** application from your desktop shortcut or Start Menu. The app starts its internal server automatically — a loading screen appears for a few seconds, then the login page opens.
 
@@ -25,7 +37,7 @@ The initial superuser account is **admin / admin**. On first login you will be i
 
 After logging in, you see a two-panel layout:
 
-- **Left sidebar** — navigation between the seven modules
+- **Left sidebar** — navigation between the modules (seven on Base; **Analytics** and **Invoicing** also appear on Plus)
 - **Main area** — the active module's content
 
 The sidebar also shows:
@@ -49,9 +61,10 @@ The top header shows the current module name, a yellow **Unsynced** badge when c
 The bell icon in the top header shows a red count badge when there are active alerts. Click it to open a panel listing:
 
 - **Overdue Jobs** — jobs still `Scheduled` or `In Progress` whose scheduled date has already passed
+- **Client Follow-Ups Due** *(Plus only)* — open client follow-ups whose due date is today or earlier
 - **Low Stock** — any stock level (warehouse or van) at or below its configured minimum threshold
 
-Clicking an individual alert jumps you to the relevant tab (Clients & Jobs for overdue jobs, Inventory Control for low stock) so you can act on it. This is in-app only — there is no push/email/SMS delivery.
+Clicking an individual alert jumps you to the relevant tab (Clients & Jobs for overdue jobs and follow-ups, Inventory Control for low stock) so you can act on it. This is in-app only — there is no push/email/SMS delivery.
 
 ---
 
@@ -84,6 +97,18 @@ Click **Add Client** to create a new client record. Fields:
 | Contact Name | Primary contact person at the client. |
 | Location Address | Site address where work is performed. |
 | Payment Terms | Select from: **Due on Receipt**, **Net 15**, or **Net 30**. This controls the invoice due date on QB exports. |
+
+### Client Notes & Follow-Ups (Plus only)
+
+With a Plus license, each client card gains a collapsible **notes & follow-ups** panel (click the "X notes · X follow-ups" row at the bottom of the card to expand it):
+
+- **Add Note** — appends a timestamped entry to the client's communication log (calls, emails, site visits, anything worth remembering). Notes record who wrote them and cannot be edited or deleted — treat them as a permanent log.
+- **Follow-Up** — schedules a dated reminder for this client (e.g., "Call to confirm contract renewal"), optionally assigned to a crew member. Open follow-ups are listed on the card with:
+  - a **checkmark** button to mark them completed,
+  - a **pencil** to edit the date, text, or assignee,
+  - a **trash** icon to delete them.
+
+A follow-up whose due date arrives shows in red on the card and appears in the notification bell under **Client Follow-Ups Due** until completed or deleted.
 
 ### Job Management
 
@@ -278,6 +303,62 @@ The yellow **Unsynced** badge in the top header shows the total count of pending
 
 ---
 
+## Module 8: Business Analytics (Plus only)
+
+A read-only reporting tab covering the **trailing 12 months**. Numbers are computed live from your operational data — there is nothing to configure.
+
+- **KPI tiles** — total revenue, jobs completed, average job value, and labor hours logged.
+- **Revenue by Month** — billed line-item totals on completed jobs, by completion month. Hover a bar to see the month's revenue and job count.
+- **Technician Hours** — total logged time per technician.
+- **Top Clients by Revenue** — your highest-billing clients.
+- **Fleet Maintenance Cost** — logged maintenance spend per month across all vehicles.
+
+**Note on "revenue":** revenue is the sum of quantity × rate on completed jobs' line items. Labor cost is not tracked in WhiteVanOps, so these figures are revenue, not profit.
+
+---
+
+## Module 9: Invoicing & Payments (Plus only)
+
+An internal accounts-receivable ledger with printable PDF invoices and payment tracking. It is **completely independent of the QuickBooks Export Sync tab** (Module 7) — creating an invoice here does not affect a job's QB sync status, and vice versa. Use whichever billing flow (or both) fits your business.
+
+### Creating an invoice
+
+Click **Create Invoice**. Select a client, and optionally one of that client's **completed jobs** to prefill line items from the job's materials. Add or edit line items freely (description, quantity, rate); the issue and due dates default from today and the client's payment terms. Invoice numbers (`INV-0001`, `INV-0002`, ...) are assigned automatically.
+
+### Invoice lifecycle
+
+| Status | Meaning |
+|---|---|
+| Draft | Just created. Can still be edited or **deleted**. No payments can be recorded yet. |
+| Sent | You clicked **Mark Sent** after delivering the invoice to the client. Payments can now be recorded. |
+| Partially Paid | One or more payments recorded, but a balance remains. |
+| Paid | Payments cover the full total. |
+| Void | Cancelled invoice, kept for the record. Only invoices with no payments can be voided; issued invoices can never be deleted — void them instead. |
+
+`Partially Paid` and `Paid` are set automatically from recorded payments — you never set them by hand.
+
+### Recording payments
+
+Click **Payment** on a Sent or Partially Paid invoice. Enter the amount (defaults to the outstanding balance), method (Check, Cash, Card, ACH, Other), an optional reference (check number / transaction ID), and the received date. A payment larger than the outstanding balance is rejected.
+
+### PDF invoices
+
+Click **PDF** on any invoice row to open a printable PDF (letterhead, line items, totals, payments, and balance due) in a new tab. Print it or save it to send to the client.
+
+### AR summary
+
+The tiles at the top show total **Outstanding AR** (unpaid balances across Sent/Partially Paid invoices), the count of **overdue invoices** (past their due date), and total **collected** payments.
+
+---
+
+## Settings: License & Plan
+
+Open **Settings** in the sidebar. The **License & Plan** section shows the current plan (Base or Plus) and, on Plus, the expiry date if one is set.
+
+Changing the plan is **superuser only** — admins see the current plan but cannot change it. To activate Plus: set Plan to **Plus**, optionally enter the license key and notes provided by your vendor and an expiry date, and click **Save Plan**. The Analytics and Invoicing tabs and the CRM notes/follow-ups panels appear immediately. If an expiry date is set and passes, Plus features are blocked automatically until the license is renewed (the data is kept).
+
+---
+
 ## Routine Operational Checklist
 
 **Daily:**
@@ -314,6 +395,12 @@ The invoice export will include one generic placeholder line ("Operations:Servic
 
 **Can I export only some records, not all pending ones?**
 No. The current export includes all pending records at once. Lock records only after a full successful import.
+
+**Do Plus invoices replace the QuickBooks export?**
+No. The Invoicing tab (Plus) is an internal AR ledger with its own PDF invoices and payment tracking; the QuickBooks Export Sync tab is unchanged and works exactly as before. They do not affect each other.
+
+**What happens to my notes and invoices if the Plus license lapses?**
+Nothing is deleted. The Plus tabs disappear and the Plus features are blocked, but all notes, follow-ups, invoices, and payments remain in the database and reappear when Plus is re-activated.
 
 ---
 

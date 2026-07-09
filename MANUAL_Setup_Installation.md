@@ -129,6 +129,12 @@ npx tsx prisma/bootstrap.ts
 
 This creates a superuser with username **admin** and password **admin**, flagged to require a password change on first login. All other accounts are created from within the app by a superuser after first login.
 
+### License tier (Base vs Plus)
+
+Every install starts on the **Base** plan — the `License` table's singleton row is created automatically on first use (no seed step, no extra command on any install path), with `tier = "base"`. All Plus tables (client notes, follow-ups, invoices, payments) are created by the normal migrations on every install and simply stay empty until Plus is activated.
+
+To activate Plus for a customer: log in as a superuser, open **Settings → License & Plan**, set the plan to **Plus** (optionally recording the license key, notes, and an expiry date), and save. No rebuild, reinstall, or migration is needed — the Plus tabs appear on the next dashboard refresh. There is no cryptographic key validation; the toggle is vendor-managed as part of the support relationship. To downgrade, set the plan back to Base — Plus data is retained, only access is removed.
+
 ---
 
 ## 6. Build the Desktop Installer

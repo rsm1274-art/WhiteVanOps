@@ -3,7 +3,7 @@ import { todayLocalStr, dateToLocalStr, formatDate } from "@/lib/dateUtils";
 
 export interface AppAlert {
   id: string;
-  type: "lowStock" | "overdueJob";
+  type: "lowStock" | "overdueJob" | "followUpDue";
   title: string;
   detail: string;
 }
@@ -45,6 +45,21 @@ export function getAlerts(data: DashboardData): AppAlert[] {
           type: "lowStock",
           title: lvl.inventoryItem.name,
           detail: `${loc.name}: ${lvl.quantity} on hand (min ${lvl.minThreshold})`,
+        });
+      });
+  });
+
+  // Due/overdue client follow-ups (Plus tier — followUps is only present in
+  // the dashboard payload when licensed).
+  data.clients.forEach((c) => {
+    (c.followUps ?? [])
+      .filter((f) => !f.completed && dateToLocalStr(f.dueDate) <= today)
+      .forEach((f) => {
+        alerts.push({
+          id: `followup-${f.id}`,
+          type: "followUpDue",
+          title: c.name,
+          detail: `Follow-up due ${formatDate(f.dueDate)} — ${f.note}`,
         });
       });
   });

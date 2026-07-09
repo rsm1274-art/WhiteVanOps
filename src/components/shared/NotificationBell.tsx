@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bell, Package, Clock } from "lucide-react";
+import { Bell, Package, Clock, CalendarCheck } from "lucide-react";
 import { DashboardData } from "@/types";
 import { getAlerts, AppAlert } from "@/lib/alerts";
 
@@ -34,10 +34,11 @@ export default function NotificationBell({ data, onNavigate }: Props) {
   const alerts = getAlerts(data);
   const overdueJobs = alerts.filter((a) => a.type === "overdueJob");
   const lowStock = alerts.filter((a) => a.type === "lowStock");
+  const followUps = alerts.filter((a) => a.type === "followUpDue");
 
   const handleAlertClick = (alert: AppAlert) => {
     setOpen(false);
-    onNavigate(alert.type === "overdueJob" ? "crm" : "inventory");
+    onNavigate(alert.type === "lowStock" ? "inventory" : "crm");
   };
 
   return (
@@ -79,6 +80,27 @@ export default function NotificationBell({ data, onNavigate }: Props) {
                       className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 flex items-start gap-2.5 transition-colors"
                     >
                       <Clock className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+                      <span>
+                        <span className="text-xs font-semibold text-zinc-800 block">{a.title}</span>
+                        <span className="text-[11px] text-zinc-500">{a.detail}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {followUps.length > 0 && (
+                <div>
+                  <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                    Client Follow-Ups Due
+                  </p>
+                  {followUps.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => handleAlertClick(a)}
+                      className="w-full text-left px-4 py-2.5 hover:bg-zinc-50 flex items-start gap-2.5 transition-colors"
+                    >
+                      <CalendarCheck className="h-3.5 w-3.5 text-blue-500 mt-0.5 shrink-0" />
                       <span>
                         <span className="text-xs font-semibold text-zinc-800 block">{a.title}</span>
                         <span className="text-[11px] text-zinc-500">{a.detail}</span>

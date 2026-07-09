@@ -46,7 +46,7 @@ The DB is PostgreSQL on port 5433 (non-standard). Prisma CLI configuration lives
 
 ## Architecture
 
-**Stack:** Next.js 16 App Router · TypeScript · Tailwind v4 · PostgreSQL via Prisma + `@prisma/adapter-pg` · `jose` for JWT · `bcryptjs` for passwords · Electron 42 (desktop shell)
+**Stack:** Next.js 16 App Router · TypeScript · Tailwind v4 · PostgreSQL via Prisma + `@prisma/adapter-pg` · `jose` for JWT · `bcryptjs` for passwords · Electron 42 (desktop shell) · Recharts (Plus analytics) · `pdf-lib` (Plus invoice PDFs)
 
 ### Two surfaces
 
@@ -92,6 +92,18 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 - **Distributing to multiple customers:** each customer needs their own unique `SESSION_SECRET` and database credentials — never reuse the same secret across customer installs. `electron-build.js` bundles `.env.local` into the `.exe`, so a shared secret would ship inside a file handed to more than one company, and there's no reason to share it since every customer runs an isolated server/database. Generate a fresh secret per customer (`node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`) and either rebuild the installer per customer or configure `.env.local` on-site after installing a generic build. See `MANUAL_Setup_Installation.md` §3.
 - **No Docker deploy path:** an earlier, half-finished Docker deployment scaffold (`docker-compose.yml`, `Dockerfile`, `deploy/`) predated real user auth and was removed — it assumed a hardcoded `APP_USERNAME`/`APP_PASSWORD` login the app hasn't used since auth became the `User` table + JWT session (see Auth helpers below). The Electron installer + native PostgreSQL path documented above is the only deploy path. Automated backups are handled by the built-in Settings → Database Backup & Recovery feature (`electron/backup.js`), not a standalone script.
 
+### License / Plus tier
+
+The app runs as one codebase in two plans, gated at runtime by a DB flag (not separate builds): **Base** and **Plus** (CRM notes/follow-ups, Analytics tab, Invoicing tab). Key pieces:
+
+- `License` model in `prisma/schema.prisma` — singleton row with fixed id `"singleton"`, **upserted on read** by `src/lib/license.ts` (`getLicense()`), so every install path self-heals without a seed step. Fields: `tier` ("base"|"plus"), `licenseKey`, `notes`, `activatedAt`, `expiresAt` (null = perpetual).
+- `src/lib/license.ts` mirrors `auth.ts`'s shape: `hasPlusLicense()` (tier is plus **and** unexpired), `requirePlus(licensed)` returns a `403 NextResponse` or `null`. It is called explicitly alongside `requireRole` in every Plus route — deliberately not folded into `requireRole`, so `requirePlus` stays greppable as the complete list of Plus-gated routes.
+- **Every Plus API route gates server-side** (`/api/clients/[id]/notes`, `/api/clients/[id]/follow-ups`, `/api/follow-ups/[id]`, `/api/analytics`, `/api/invoices/**`, and the Plus-data branches of `/api/dashboard`). The UI hiding tabs is convenience only, not security.
+- `/api/dashboard` returns `license: { tier, expiresAt, plus }` in `DashboardData` and only populates Plus data (client `notes`/`followUps` includes, `invoices`) when licensed — a downgraded install doesn't leak Plus data through the full-reload pattern.
+- `GET/POST /api/license` — GET is admin/superuser; POST (plan change) is **superuser-only** + audited. UI: Settings → License & Plan (`SettingsTab.tsx`). No cryptographic validation — honor-system toggle, vendor-managed.
+- Downgrade/expiry hides tabs and 403s the APIs but never deletes Plus data. All Plus tables ship in the normal migration set to every install and stay empty until licensed.
+- Invoicing: statuses Draft → Sent (manual) → PartiallyPaid/Paid (derived from payments in `src/lib/invoice.ts`, never set by hand) or Void; numbering via a `SystemSetting` counter (`invoice_next_number`) incremented in the same transaction as the create; PDF via `pdf-lib` (pure JS — chosen over puppeteer for Electron installer size). Charts: Recharts.
+
 ### Data flow (dashboard)
 
 `/api/dashboard` fetches all entities in a single parallel `Promise.all` and returns them as `DashboardData`. The `useDashboardData` hook in `src/hooks/useDashboardData.ts` fetches this on mount and exposes a `reload()` callback. After any mutation, components call `onSuccess()` which calls `reload()` to refresh everything. **There is no per-entity caching or optimistic UI** — every action does a full dashboard refresh.
@@ -107,7 +119,8 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 1. Import `getSessionUser` and `requireRole` from `@/lib/auth`
 2. Import `audit` from `@/lib/audit`
 3. Call `requireRole(user, "admin", "superuser")` at the top (adjust roles as needed)
-4. After the DB write succeeds, call `audit(user!.userId, "CREATE"|"UPDATE"|"DELETE", "EntityName", entityId)`
+4. If the route is Plus-only, also call `requirePlus(await hasPlusLicense())` from `@/lib/license` right after `requireRole` (see "License / Plus tier" above)
+5. After the DB write succeeds, call `audit(user!.userId, "CREATE"|"UPDATE"|"DELETE", "EntityName", entityId)`
 
 ### Adding a new modal
 
@@ -128,7 +141,7 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 
 ## Testing
 
-Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
+Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`, `license`, `invoice`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
 
 - **`src/lib/db.ts` opens a real `pg.Pool` at import time and throws without `DATABASE_URL`** — any module that imports it (like `jobConflicts.ts`) needs `@/lib/db` mocked with `vi.mock`, never imported for real, in unit tests.
 - **`next/headers`'s `cookies()` is request-scoped** and throws outside a real request — mock it (see `auth.test.ts`) when testing code that calls `getSessionUser()`. `NextResponse` itself (from `next/server`) works fine unmocked — it's just a `Response` subclass.

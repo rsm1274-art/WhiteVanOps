@@ -78,10 +78,12 @@
     "next": "16.2.4",
     "node-cron": "^4.5.0",
     "node-machine-id": "^1.1.12",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.22.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
