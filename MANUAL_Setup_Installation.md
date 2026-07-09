@@ -131,25 +131,60 @@ This creates a superuser with username **admin** and password **admin**, flagged
 
 ### License tier (Base vs Plus)
 
-Every install starts on the **Base** plan — the `License` table's singleton row is created automatically on first use (no seed step, no extra command on any install path), with `tier = "base"`. All Plus tables (client notes, follow-ups, invoices, payments) are created by the normal migrations on every install and simply stay empty until Plus is activated.
+Every install starts on the **Base** plan — the `License` table's singleton row is created automatically on first use, with `tier = "base"`. Plus tables exist but stay empty.
 
-To activate Plus for a customer: log in as a superuser, open **Settings → License & Plan**, set the plan to **Plus** (optionally recording the license key, notes, and an expiry date), and save. No rebuild, reinstall, or migration is needed — the Plus tabs appear on the next dashboard refresh. There is no cryptographic key validation; the toggle is vendor-managed as part of the support relationship. To downgrade, set the plan back to Base — Plus data is retained, only access is removed.
+To upgrade an installation from Base to Plus:
+1. **Retrieve the active Base License Key:** Log in as a superuser, open **Settings → License & Plan**, and locate the active License Key (copied directly from the client's screen).
+2. **Generate the Plus Upgrade License:** On the vendor machine, run the license manager script to mint a cryptographically signed Plus upgrade payload for that specific key:
+   ```bash
+   node scripts/license-manager.js --plus --key <licenseKey> [--expires YYYY-MM-DD] [--notes "Upgrade Notes"]
+   ```
+   This generates a signed JSON license block bound to their active license key.
+3. **Apply the Upgrade:** 
+   * **In-App Upload:** Copy the generated JSON block from the console and paste it into the textarea in **Settings → License & Plan**, or save it as a `.json` file and drag and drop it into the upload zone. Click **Apply Plus Upgrade**.
+   * **Plus Upgrade Installer (Alternative):** Run a custom patch/installer containing the signed `plus_license.json` file. The file is placed at `%APPDATA%\whitevanops\plus_license.json`.
+   On the next refresh, the Plus features (CRM notes, Invoicing, Analytics) will unlock.
+4. **Validation & Anti-Tampering:** The app verifies the signature of `plus_license.json` offline at startup and compares it to the active `license.json` key. If the database is manually tampered with (e.g. manually set to `"plus"` without a valid file), the app automatically self-heals/downgrades back to `"base"`.
+5. **Downgrade:** To downgrade, click **Downgrade to Base Plan** under **Settings → License & Plan**. This resets the database tier and deletes the local `plus_license.json` file.
 
 ---
 
-## 6. Build the Desktop Installer
+## 6. Build the Desktop Installers
 
+We support three installer build paths depending on the customer's package:
+
+### 1. Base Setup Installer (Standard)
+Builds the standard installer. On first boot, the app defaults to the **Base** tier.
 ```bash
-npm run electron:build
+npm run electron:build:base
 ```
+* **Output:** `dist-electron/WhiteVanOps-Base-Setup.exe`
 
-This command:
-1. Compiles the Next.js production build
-2. Concatenates the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
-3. Packages the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single NSIS installer
-4. Outputs to `dist-electron/WhiteVanOps Setup x.x.x.exe`
+### 2. Base + Plus Setup Installer (Pre-Activated)
+Builds the combined installer. On first boot, the app defaults to the **Plus** tier directly without requiring an offline upgrade license payload.
+```bash
+npm run electron:build:plus
+```
+* **Output:** `dist-electron/WhiteVanOps-Plus-Setup.exe`
 
-Distribute this `.exe` to office staff. The installer creates a desktop shortcut and Start Menu entry automatically. No browser or Node.js installation is needed on officer machines.
+### 3. Plus Upgrade Installer (Patch Utility)
+Generates a lightweight, native Windows executable that installs the signed `plus_license.json` payload directly into the target machine's AppData directory (`%APPDATA%\whitevanops\`).
+```bash
+npm run electron:build:upgrade -- --key <licenseKey> [--expires YYYY-MM-DD] [--notes "Upgrade Notes"]
+```
+* **Output:** `dist-electron/WhiteVanOps-Plus-Upgrade.exe`
+* **Note:** The double hyphens (`--`) are required to forward the CLI arguments through npm to the underlying build script.
+
+---
+
+### What the build commands do (Full installers):
+1. Compile the Next.js production build
+2. Set the default license tier (`WVO_DEFAULT_TIER`) inside the Next.js standalone bundle environment
+3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
+4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single NSIS installer
+5. Output and rename the resulting executable in `dist-electron/`
+
+Distribute the generated setup `.exe` to office staff. The installers upgrade any existing installation in-place.
 
 ---
 

@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "fs";
+import crypto from "crypto";
+import { machineIdSync } from "node-machine-id";
 
 // license.ts imports db.ts, which opens a real pg.Pool at import time — mock it.
 vi.mock("@/lib/db", () => ({
   prisma: {
     license: {
       upsert: vi.fn(),
+      update: vi.fn(),
     },
   },
+}));
+
+vi.mock("node-machine-id", () => ({
+  machineIdSync: vi.fn(() => "test-machine-id"),
 }));
 
 import { prisma } from "@/lib/db";
@@ -17,6 +25,8 @@ import {
   hasPlusLicense,
   requirePlus,
   LICENSE_ROW_ID,
+  LICENSE_SIGNING_SECRET,
+  verifyPlusLicense,
 } from "./license";
 
 const NOW = new Date("2026-07-09T12:00:00Z");
@@ -55,7 +65,53 @@ describe("isPlusActive", () => {
   });
 });
 
-describe("getLicense / hasPlusLicense", () => {
+describe("verifyPlusLicense", () => {
+  const baseKey = "WVO-KEY-1234";
+
+  it("returns true for a valid signed plus license", () => {
+    const expiresAt = "2027-12-31T23:59:59.999Z";
+    const sig = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:plus:${expiresAt}`)
+      .digest("hex");
+
+    const plusData = {
+      licenseKey: baseKey,
+      tier: "plus",
+      expiresAt,
+      notes: "Test Notes",
+      sig,
+    };
+
+    expect(verifyPlusLicense(plusData, baseKey)).toBe(true);
+  });
+
+  it("returns false if signature is invalid", () => {
+    const plusData = {
+      licenseKey: baseKey,
+      tier: "plus",
+      expiresAt: null,
+      notes: "Test Notes",
+      sig: "invalid_sig",
+    };
+
+    expect(verifyPlusLicense(plusData, baseKey)).toBe(false);
+  });
+
+  it("returns false if licenseKey does not match baseKey", () => {
+    const plusData = {
+      licenseKey: "DIFFERENT-KEY",
+      tier: "plus",
+      expiresAt: null,
+      notes: "Test Notes",
+      sig: "some_sig",
+    };
+
+    expect(verifyPlusLicense(plusData, baseKey)).toBe(false);
+  });
+});
+
+describe("getLicense / hasPlusLicense in test mode bypass", () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -79,7 +135,7 @@ describe("getLicense / hasPlusLicense", () => {
     );
   });
 
-  it("hasPlusLicense is true for an unexpired plus row", async () => {
+  it("hasPlusLicense is true for an unexpired plus row when bypassing files in test environment", async () => {
     vi.mocked(prisma.license.upsert).mockResolvedValue({
       id: LICENSE_ROW_ID,
       tier: "plus",
@@ -92,19 +148,165 @@ describe("getLicense / hasPlusLicense", () => {
     });
     expect(await hasPlusLicense()).toBe(true);
   });
+});
 
-  it("hasPlusLicense is false once the plus row has expired", async () => {
+describe("getLicense with cryptographic validation", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.restoreAllMocks();
+    vi.mocked(machineIdSync).mockReturnValue("test-machine-id");
+  });
+
+  it("auto-upgrades database to plus when valid plus_license.json is found", async () => {
+    const baseKey = "WVO-KEY-123";
+    const sigBase = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id`)
+      .digest("hex");
+
+    const sigPlus = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:plus:`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => {
+      const pathStr = p.toString();
+      if (pathStr.endsWith("plus_license.json")) return true;
+      if (pathStr.endsWith("license.json")) return true;
+      return false;
+    });
+
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      const pathStr = p.toString();
+      if (pathStr.endsWith("plus_license.json")) {
+        return JSON.stringify({ licenseKey: baseKey, tier: "plus", expiresAt: null, notes: "Test notes", sig: sigPlus });
+      }
+      if (pathStr.endsWith("license.json")) {
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", sig: sigBase });
+      }
+      throw new Error("File not found");
+    });
+
     vi.mocked(prisma.license.upsert).mockResolvedValue({
       id: LICENSE_ROW_ID,
-      tier: "plus",
-      licenseKey: "abc",
+      tier: "base",
+      licenseKey: null,
       notes: null,
-      activatedAt: new Date("2025-01-01"),
-      expiresAt: new Date("2025-12-31"),
+      activatedAt: null,
+      expiresAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    expect(await hasPlusLicense()).toBe(false);
+
+    vi.mocked(prisma.license.update).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "plus",
+      licenseKey: baseKey,
+      notes: "Test notes",
+      activatedAt: new Date(),
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const license = await getLicense();
+    expect(license.tier).toBe("plus");
+    expect(prisma.license.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LICENSE_ROW_ID },
+        data: expect.objectContaining({ tier: "plus", licenseKey: baseKey }),
+      })
+    );
+  });
+
+  it("self-heals / auto-downgrades database to base when DB tier is plus but no valid Plus license file exists", async () => {
+    const baseKey = "WVO-KEY-123";
+    const sigBase = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => {
+      const pathStr = p.toString();
+      if (pathStr.endsWith("license.json")) return true;
+      return false;
+    });
+
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      const pathStr = p.toString();
+      if (pathStr.endsWith("license.json")) {
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", sig: sigBase });
+      }
+      throw new Error("File not found");
+    });
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "plus",
+      licenseKey: "WVO-KEY-123",
+      notes: "Tampered Notes",
+      activatedAt: new Date(),
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    vi.mocked(prisma.license.update).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: "WVO-KEY-123",
+      notes: "Tampered Notes",
+      activatedAt: null,
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const license = await getLicense();
+    expect(license.tier).toBe("base");
+    expect(prisma.license.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LICENSE_ROW_ID },
+        data: expect.objectContaining({ tier: "base", activatedAt: null }),
+      })
+    );
+  });
+
+  it("bypasses files and activates plus when WVO_DEFAULT_TIER environment variable is plus", async () => {
+    vi.stubEnv("WVO_DEFAULT_TIER", "plus");
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    vi.mocked(prisma.license.update).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "plus",
+      licenseKey: "PRE-ACTIVATED-PLUS-BUILD",
+      notes: "Activated via Plus Installer Build",
+      activatedAt: new Date(),
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const license = await getLicense();
+    expect(license.tier).toBe("plus");
+    expect(license.notes).toBe("Activated via Plus Installer Build");
+    expect(prisma.license.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LICENSE_ROW_ID },
+        data: expect.objectContaining({ tier: "plus", licenseKey: "PRE-ACTIVATED-PLUS-BUILD" }),
+      })
+    );
+    vi.unstubAllEnvs();
   });
 });
 

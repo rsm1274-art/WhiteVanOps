@@ -1,6 +1,64 @@
 const crypto = require("crypto");
 const path = require("path");
 const fs = require("fs");
+const args = process.argv.slice(2);
+const isPlusMode = args.includes("--plus");
+
+if (isPlusMode) {
+  const keyIdx = args.indexOf("--key");
+  const expiresIdx = args.indexOf("--expires");
+  const notesIdx = args.indexOf("--notes");
+
+  let licenseKey = "";
+  if (keyIdx !== -1 && keyIdx + 1 < args.length) {
+    licenseKey = args[keyIdx + 1].trim();
+  }
+
+  if (!licenseKey) {
+    console.error("Error: --key <licenseKey> is required in --plus mode");
+    console.error("Usage: node scripts/license-manager.js --plus --key <licenseKey> [--expires <YYYY-MM-DD>] [--notes <notes>]");
+    process.exit(1);
+  }
+
+  let expiresAt = null;
+  if (expiresIdx !== -1 && expiresIdx + 1 < args.length) {
+    const expStr = args[expiresIdx + 1].trim();
+    const date = new Date(expStr);
+    if (isNaN(date.getTime())) {
+      console.error(`Error: Invalid expiry date '${expStr}'. Use YYYY-MM-DD format.`);
+      process.exit(1);
+    }
+    expiresAt = date.toISOString();
+  }
+
+  let notes = "";
+  if (notesIdx !== -1 && notesIdx + 1 < args.length) {
+    notes = args[notesIdx + 1].trim();
+  } else {
+    notes = `Activated offline on ${new Date().toISOString().split('T')[0]}`;
+  }
+
+  const LICENSE_SIGNING_SECRET = "wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765";
+  const signatureData = `${licenseKey}:plus:${expiresAt || ""}`;
+  const sig = crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(signatureData)
+    .digest("hex");
+
+  const licensePayload = {
+    licenseKey,
+    tier: "plus",
+    expiresAt,
+    notes,
+    sig
+  };
+
+  console.log(`\n✅ Success! Offline Plus Upgrade License Generated:`);
+  console.log(`\n${JSON.stringify(licensePayload, null, 2)}\n`);
+  console.log("Provide the JSON block above to the customer. They can paste it or save it as a file to apply it in Settings.");
+  process.exit(0);
+}
+
 require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
 const { initializeApp, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');

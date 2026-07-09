@@ -8,6 +8,7 @@ interface LicenseResponse {
   notes: string | null;
   activatedAt: string | null;
   expiresAt: string | null;
+  activeBaseKey: string | null;
   plus: boolean;
 }
 
@@ -22,40 +23,115 @@ function LicenseSection({
 }) {
   const [license, setLicense] = useState<LicenseResponse | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tier, setTier] = useState<"base" | "plus">("base");
-  const [licenseKey, setLicenseKey] = useState("");
-  const [notes, setNotes] = useState("");
-  const [expiresAt, setExpiresAt] = useState("");
+  const [pastedPayload, setPastedPayload] = useState("");
+  const [uploadedPayload, setUploadedPayload] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [showConfirmDowngrade, setShowConfirmDowngrade] = useState(false);
 
   useEffect(() => {
+    fetchLicense();
+  }, []);
+
+  const fetchLicense = () => {
     fetch("/api/license")
       .then((res) => res.json())
       .then((data: LicenseResponse) => {
         setLicense(data);
-        setTier(data.tier);
-        setLicenseKey(data.licenseKey ?? "");
-        setNotes(data.notes ?? "");
-        setExpiresAt(data.expiresAt ? dateToLocalStr(data.expiresAt) : "");
       })
       .catch(console.error);
-  }, []);
+  };
 
-  const handleSave = async () => {
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const readAndApplyFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        // Verify it is JSON
+        JSON.parse(content);
+        setUploadedPayload(content);
+        onShowToast(`Loaded license file: ${file.name}`);
+      } catch (err) {
+        onShowToast("Invalid license file format. Must be JSON.", true);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      readAndApplyFile(file);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    readAndApplyFile(file);
+  };
+
+  const handleUpgrade = async () => {
+    const payloadStr = (pastedPayload || uploadedPayload).trim();
+    if (!payloadStr) {
+      onShowToast("Please paste a license code or upload a license file first.", true);
+      return;
+    }
+
+    let payloadObj;
+    try {
+      payloadObj = JSON.parse(payloadStr);
+    } catch (err) {
+      onShowToast("Invalid license code format. Must be a valid JSON block.", true);
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/license", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, licenseKey, notes, expiresAt: expiresAt || null }),
+        body: JSON.stringify({ tier: "plus", licensePayload: payloadObj }),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to update license");
+      if (!res.ok) throw new Error(result.error || "Failed to upgrade license");
       setLicense(result);
-      onShowToast(
-        result.plus
-          ? "Plus plan activated — Analytics, Invoicing, and CRM follow-ups are now available."
-          : "Plan set to Base. Plus features are hidden; existing Plus data is kept."
-      );
+      setPastedPayload("");
+      setUploadedPayload("");
+      onShowToast("Plus plan activated — Analytics, Invoicing, and CRM follow-ups are now available.");
+      onLicenseChanged();
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : "Failed to update license", true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDowngrade = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: "base" }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to downgrade license");
+      setLicense(result);
+      setShowConfirmDowngrade(false);
+      onShowToast("Plan set to Base. Plus features are hidden; existing Plus data is kept.");
       onLicenseChanged();
     } catch (err: unknown) {
       onShowToast(err instanceof Error ? err.message : "Failed to update license", true);
@@ -88,68 +164,172 @@ function LicenseSection({
         <div className="p-4 bg-zinc-50 border border-zinc-200 rounded text-sm text-zinc-600 flex gap-3">
           <AlertCircle className="h-5 w-5 text-zinc-400 shrink-0" />
           <p>
-            <strong>Plus</strong>&nbsp;adds CRM notes &amp; follow-up reminders, the Business Analytics tab, and
+            <strong>Plus</strong> adds CRM notes &amp; follow-up reminders, the Business Analytics tab, and
             internal Invoicing with PDF generation and payment tracking. Downgrading hides these features
             but never deletes existing notes, invoices, or payment records.
           </p>
         </div>
 
         {isSuperuser ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-bold uppercase tracking-wide text-zinc-700 mb-1">Plan</label>
-                <select
-                  value={tier}
-                  onChange={(e) => setTier(e.target.value as "base" | "plus")}
-                  className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border bg-white"
-                >
-                  <option value="base">Base</option>
-                  <option value="plus">Plus</option>
-                </select>
+          <div className="space-y-6">
+            {!license.plus ? (
+              /* Upgrade Flow */
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-800">1. Copy Active License Key</h3>
+                  <p className="text-xs text-zinc-500">
+                    To purchase the Plus Upgrade, copy the active Base License Key below and send it to your vendor.
+                  </p>
+                  {license.activeBaseKey ? (
+                    <div className="flex items-center gap-2 max-w-xl">
+                      <input
+                        type="text"
+                        readOnly
+                        value={license.activeBaseKey}
+                        className="flex-1 font-mono text-xs bg-zinc-50 border border-zinc-300 rounded p-2 text-zinc-600 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(license.activeBaseKey || "");
+                          onShowToast("License key copied to clipboard!");
+                        }}
+                        className="px-3 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 rounded text-xs font-semibold text-zinc-700 transition-colors uppercase tracking-wider"
+                      >
+                        Copy Key
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-red-600 font-semibold bg-red-50 border border-red-200 rounded p-2 max-w-xl">
+                      Warning: Base activation key not found. Please activate the application in Electron first.
+                    </p>
+                  )}
+                </div>
+
+                <div className="border-t border-zinc-100 pt-6 space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-zinc-800">2. Apply Upgrade License</h3>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Paste Text Area */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold uppercase text-zinc-700">Paste License Code</label>
+                      <textarea
+                        value={pastedPayload}
+                        onChange={(e) => {
+                          setPastedPayload(e.target.value);
+                          setUploadedPayload("");
+                        }}
+                        placeholder="Paste the cryptographically signed JSON block here..."
+                        className="w-full h-32 text-xs font-mono border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 p-2 border bg-white placeholder-zinc-400"
+                      />
+                    </div>
+
+                    {/* Drag and Drop File Zone */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold uppercase text-zinc-700">Or Upload License File</label>
+                      <div
+                        onDragEnter={handleDrag}
+                        onDragOver={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDrop={handleDrop}
+                        className={`w-full h-32 border-2 border-dashed rounded flex flex-col items-center justify-center p-4 text-center transition-colors ${
+                          dragActive ? "border-blue-500 bg-blue-50" : "border-zinc-300 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={handleFileChange}
+                          id="license-file-upload"
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="license-file-upload"
+                          className="cursor-pointer text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+                        >
+                          Choose a file
+                        </label>
+                        <span className="text-[11px] text-zinc-500 mt-1">or drag and drop it here (.json)</span>
+                        {uploadedPayload && (
+                          <div className="mt-2 text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            License file loaded successfully
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={handleUpgrade}
+                    disabled={saving || (!pastedPayload.trim() && !uploadedPayload)}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white text-sm font-bold uppercase tracking-wider rounded hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? "Verifying..." : "Apply Plus Upgrade"}
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-bold uppercase tracking-wide text-zinc-700 mb-1">
-                  License Key (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
-                  placeholder="Provided by your vendor"
-                  className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
-                />
+            ) : (
+              /* Upgrade Details & Downgrade Flow */
+              <div className="space-y-6">
+                <div className="bg-emerald-50/50 border border-emerald-100 rounded-lg p-5 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">License Key</span>
+                    <p className="text-sm font-mono text-zinc-800 font-medium mt-0.5">{license.licenseKey}</p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Expires / Renews</span>
+                    <p className="text-sm text-zinc-800 font-medium mt-0.5">
+                      {license.expiresAt ? formatDate(license.expiresAt) : "Perpetual (Never Expires)"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Activated On</span>
+                    <p className="text-sm text-zinc-800 font-medium mt-0.5">
+                      {license.activatedAt ? formatDate(license.activatedAt) : "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Upgrade Notes</span>
+                    <p className="text-sm text-zinc-600 mt-0.5">{license.notes || "No notes recorded"}</p>
+                  </div>
+                </div>
+
+                {!showConfirmDowngrade ? (
+                  <button
+                    onClick={() => setShowConfirmDowngrade(true)}
+                    className="px-4 py-2 border border-red-200 text-red-600 text-xs font-bold uppercase tracking-wider rounded hover:bg-red-50 hover:text-red-700 transition-colors"
+                  >
+                    Downgrade to Base Plan
+                  </button>
+                ) : (
+                  <div className="bg-red-50 border border-red-200 rounded p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-red-800 uppercase tracking-wide">Confirm Downgrade to Base</p>
+                      <p className="text-xs text-red-600 mt-1">
+                        This will hide Invoicing, Analytics, and CRM notes. Your existing data will be kept but hidden.
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={handleDowngrade}
+                        disabled={saving}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                      >
+                        {saving ? "Downgrading..." : "Yes, Downgrade"}
+                      </button>
+                      <button
+                        onClick={() => setShowConfirmDowngrade(false)}
+                        className="px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-bold uppercase tracking-wide text-zinc-700 mb-1">
-                  Expiry (Optional)
-                </label>
-                <input
-                  type="date"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-bold uppercase tracking-wide text-zinc-700 mb-1">Notes</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Activated per support agreement, June 2026"
-                className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
-              />
-            </div>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white text-sm font-bold uppercase tracking-wider rounded hover:bg-zinc-800 transition-colors"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? "Saving..." : "Save Plan"}
-            </button>
+            )}
           </div>
         ) : (
           <p className="text-sm text-zinc-500">

@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:dev": "node scripts/electron-dev.js",
-    "electron:build": "node scripts/electron-build.js",
+    "electron:build": "node scripts/electron-build.js --base",
+    "electron:build:base": "node scripts/electron-build.js --base",
+    "electron:build:plus": "node scripts/electron-build.js --plus",
+    "electron:build:upgrade": "node scripts/electron-build.js --upgrade",
     "prepare": "husky"
   },
   "build": {

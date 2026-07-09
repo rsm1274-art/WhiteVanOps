@@ -119,6 +119,18 @@ A full-folder security review (`CODE_REVIEW_2026-07-04.md`) turned up a live Fir
 
 Added Vitest (`vitest.config.ts`) with 36 tests across the pure-logic `src/lib/` modules: `dateUtils` (local-noon date parsing), `recurrence` (weekly/biweekly/monthly cadence advancement), `jobConflicts` (all six conflict branches plus edit-exclusion scoping, with `@/lib/db` mocked), and `auth` (cookie security options, JWT sign/verify round trip, role enforcement, with `next/headers` mocked). This is a starting baseline, not comprehensive coverage — there is still no coverage of the API routes themselves, no component tests, and no end-to-end tests. Run via `npm test`.
 
+### Phase 11 — Cryptographic Offline Licensing (July 9, 2026)
+
+Implemented a secure, offline cryptographic licensing model for the Plus tier upgrade:
+- **Offline Signature Validation**: Added platform-specific AppData directory resolution and HMAC-SHA256 signature verification in `src/lib/license.ts` bound to the machine-locked base activation key.
+- **Auto-Upgrade & Self-Healing**: Database auto-upgrades when `plus_license.json` is detected locally, and automatically self-heals (downgrades) back to Base if the database is tampered with without a valid license file.
+- **Reworked UI**: Replaced Settings tab Plan dropdown with active License Key display, Copy button, upload zone, text area for JSON payload, and confirmable downgrade controls.
+- **CLI Minting Script**: Added `--plus` offline mode to `scripts/license-manager.js` to mint signed Plus upgrade payloads for any base key.
+- **Multi-Target Installer builds**: Upgraded the pipeline (`scripts/electron-build.js`) to clean build-only artifacts and compile:
+  - `WhiteVanOps-Base-Setup.exe` (standard Base installer)
+  - `WhiteVanOps-Plus-Setup.exe` (pre-activated Plus installer)
+  - `WhiteVanOps-Plus-Upgrade.exe` (lightweight, native upgrade patch executable compiled via `csc.exe` on the fly)
+
 ---
 
 ## Current State (What Works)
@@ -128,6 +140,7 @@ Added Vitest (`vitest.config.ts`) with 36 tests across the pure-logic `src/lib/`
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
 | Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
+| License tier (Plus Upgrade) | Complete — Offline cryptographically signed license verification bound to machine ID. Supports Base, Base+Plus (pre-activated), and lightweight Upgrade Patch installers compiled on the fly |
 | Audit logging | Complete — every write action recorded |
 | Field tech module | Complete — mobile-optimized, auto-selects linked tech |
 | QuickBooks CSV export | Complete — Invoice and Time exports, sync-lock via `/api/sync` |

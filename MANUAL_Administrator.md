@@ -353,9 +353,13 @@ The tiles at the top show total **Outstanding AR** (unpaid balances across Sent/
 
 ## Settings: License & Plan
 
-Open **Settings** in the sidebar. The **License & Plan** section shows the current plan (Base or Plus) and, on Plus, the expiry date if one is set.
+Open **Settings** in the sidebar. The **License & Plan** section shows the current plan (Base or Plus).
 
-Changing the plan is **superuser only** — admins see the current plan but cannot change it. To activate Plus: set Plan to **Plus**, optionally enter the license key and notes provided by your vendor and an expiry date, and click **Save Plan**. The Analytics and Invoicing tabs and the CRM notes/follow-ups panels appear immediately. If an expiry date is set and passes, Plus features are blocked automatically until the license is renewed (the data is kept).
+Upgrading to Plus requires superuser access and a cryptographically signed license payload from your vendor:
+1. **Locate your License Key:** If your plan is currently Base, copy the active **License Key** shown in the Settings tab.
+2. **Obtain Upgrade Payload:** Send this key to your vendor to request a Plus Upgrade. They will provide a signed upgrade JSON payload.
+3. **Apply the Upgrade:** Paste the JSON block into the "Paste License Code" box, or upload the JSON file in the upload zone, and click **Apply Plus Upgrade**. Plus features will unlock instantly.
+4. **Downgrading:** A superuser can downgrade to the Base plan by clicking the **Downgrade to Base Plan** button and confirming. This removes Plus features but retains your data in the database.
 
 ---
 
