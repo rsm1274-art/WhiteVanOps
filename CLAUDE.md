@@ -55,7 +55,7 @@ The DB is PostgreSQL on port 5433 (non-standard). Prisma CLI configuration lives
 | `/` (dashboard) | Admin, Superuser | admin or superuser role |
 | `/field` | Field Techs (also accessible to admin/superuser) | any authenticated user |
 
-Login POSTs to `/api/auth/login`, which returns `{ ok, role, mustChangePassword }`. The client redirects: `mustChangePassword` → `/change-password`, `tech` → `/field`, others → `/`. `src/middleware.ts` enforces route access by role and also intercepts any request from a user whose JWT carries `mustChangePassword: true`, redirecting them to `/change-password` regardless of destination.
+Login POSTs to `/api/auth/login`, which returns `{ ok, role, mustChangePassword }`. The client redirects: `mustChangePassword` → `/change-password`, `tech` → `/field`, others → `/`. `src/proxy.ts` (the Next.js 16 request-path guard, formerly `middleware.ts`) enforces route access by role and also intercepts any request from a user whose JWT carries `mustChangePassword: true`, redirecting them to `/change-password` regardless of destination.
 
 ### Roles
 
@@ -71,7 +71,7 @@ All three auth routes (`login`, `change-password`, `logout`) issue the session c
 
 ### Forced password change flow
 
-`User.mustChangePassword` (Boolean, default false) is embedded in the JWT at login. `src/middleware.ts` redirects any authenticated request to `/change-password` when the flag is set, except for `/change-password` itself and `/api/auth/change-password`. The change-password API (`POST /api/auth/change-password`) validates the new password, updates the hash, sets `mustChangePassword = false`, and re-issues the JWT. The initial superuser created by `prisma/bootstrap.ts` ships with this flag set.
+`User.mustChangePassword` (Boolean, default false) is embedded in the JWT at login. `src/proxy.ts` redirects any authenticated request to `/change-password` when the flag is set, except for `/change-password` itself and `/api/auth/change-password`. The change-password API (`POST /api/auth/change-password`) validates the new password, updates the hash, sets `mustChangePassword = false`, and re-issues the JWT. The initial superuser created by `prisma/bootstrap.ts` ships with this flag set.
 
 ### Electron desktop app
 
@@ -112,7 +112,7 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 - `src/lib/auth.ts` — `getSessionUser()` reads the `session` cookie via `next/headers` and verifies the JWT. `requireRole(user, ...roles)` returns a `403 NextResponse` or `null`. Call these at the top of every write API route.
 - `src/lib/audit.ts` — `audit(userId, action, entity, entityId, details?)` writes an `AuditLog` row. Fire-and-forget; failures are console-logged only, never propagated to the caller.
-- `src/middleware.ts` — guards all non-public routes. `TECH_ALLOWED_PREFIXES` is the allowlist for tech-role API access; add any new API routes techs need to call. **Known:** Next.js 16 renamed `middleware.ts` → `proxy.ts`; a deprecation warning appears on every build but is non-breaking.
+- `src/proxy.ts` — guards all non-public routes. `TECH_ALLOWED_PREFIXES` is the allowlist for tech-role API access; add any new API routes techs need to call. This is the Next.js 16 rename of the old `middleware.ts` (file **and** exported function are `proxy`, per the [v16 upgrade guide](https://nextjs.org/docs/app/guides/upgrading/version-16)); it runs on the **nodejs** runtime, not edge — fine for this self-hosted app, and `jose`'s `jwtVerify` works there. The `config.matcher` export is unchanged.
 
 ### Adding a new write API route
 

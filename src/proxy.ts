@@ -16,15 +16,16 @@ const CHANGE_PASSWORD_PATHS = ["/change-password", "/api/auth/change-password"];
 // Routes a tech role may access
 const TECH_ALLOWED_PREFIXES = ["/field", "/api/field", "/api/time", "/api/auth", "/api/jobs"];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Cookie name must match SESSION_COOKIE_NAME in src/lib/auth.ts. Not imported
-  // directly here to avoid pulling next/headers into the Edge middleware bundle.
+  // Cookie name must match SESSION_COOKIE_NAME in src/lib/auth.ts. Kept as a
+  // literal (not imported) so this file stays a lean request-path guard with no
+  // pull-in of next/headers or the rest of the auth module.
   const token = req.cookies.get("session")?.value;
 
   if (!token) {

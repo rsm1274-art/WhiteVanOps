@@ -62,4 +62,6 @@ next-env.d.ts
 
 # tool caches
 /.graphify/
+# graphify knowledge-graph output (HTML/JSON/report — regenerate with /graphify)
+/graphify-out/
 
