@@ -3,7 +3,7 @@ title White Van Ops - Local Launcher
 echo ========================================================
 echo Starting local PostgreSQL database on port 5433...
 echo ========================================================
-"C:\Program Files\PostgreSQL\9.5\bin\pg_ctl" -D "%~dp0pg_data" -o "-p 5433" start
+"C:\Program Files\PostgreSQL\17\bin\pg_ctl" -D "%~dp0pg_data" -o "-p 5433" start
 
 echo.
 echo ========================================================

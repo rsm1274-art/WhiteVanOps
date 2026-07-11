@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Save, Server, AlertCircle, BadgeCheck } from "lucide-react";
-import { formatDate, dateToLocalStr } from "@/lib/dateUtils";
+import { Save, Server, AlertCircle, BadgeCheck, Building2 } from "lucide-react";
+import { formatDate } from "@/lib/dateUtils";
 
 interface LicenseResponse {
   tier: "base" | "plus";
@@ -28,10 +28,6 @@ function LicenseSection({
   const [dragActive, setDragActive] = useState(false);
   const [showConfirmDowngrade, setShowConfirmDowngrade] = useState(false);
 
-  useEffect(() => {
-    fetchLicense();
-  }, []);
-
   const fetchLicense = () => {
     fetch("/api/license")
       .then((res) => res.json())
@@ -40,6 +36,10 @@ function LicenseSection({
       })
       .catch(console.error);
   };
+
+  useEffect(() => {
+    fetchLicense();
+  }, []);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -351,18 +351,33 @@ export default function SettingsTab({
   onLicenseChanged?: () => void;
 }) {
   const [backupDir, setBackupDir] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [companyEmail, setCompanyEmail] = useState("");
+  const [companyRemittance, setCompanyRemittance] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingBusiness, setSavingBusiness] = useState(false);
 
   useEffect(() => {
-    fetch("/api/settings?key=backup_target_dir")
-      .then(res => res.json())
-      .then(data => {
-        if (data.value) setBackupDir(data.value);
+    fetch("/api/settings")
+      .then((res) => res.json())
+      .then((data: { key: string; value: string }[]) => {
+        if (Array.isArray(data)) {
+          data.forEach((s: { key: string; value: string }) => {
+            if (s.key === "backup_target_dir") setBackupDir(s.value);
+            if (s.key === "company_name") setCompanyName(s.value);
+            if (s.key === "company_address") setCompanyAddress(s.value);
+            if (s.key === "company_phone") setCompanyPhone(s.value);
+            if (s.key === "company_email") setCompanyEmail(s.value);
+            if (s.key === "company_remittance") setCompanyRemittance(s.value);
+          });
+        }
       })
       .catch(console.error);
   }, []);
 
-  const handleSave = async () => {
+  const handleSaveBackup = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/settings", {
@@ -376,6 +391,31 @@ export default function SettingsTab({
       onShowToast(err instanceof Error ? err.message : "Failed to save setting", true);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveBusiness = async () => {
+    setSavingBusiness(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            company_name: companyName,
+            company_address: companyAddress,
+            company_phone: companyPhone,
+            company_email: companyEmail,
+            company_remittance: companyRemittance,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save business settings");
+      onShowToast("Business & Invoicing profile saved successfully!");
+    } catch (err: unknown) {
+      onShowToast(err instanceof Error ? err.message : "Failed to save setting", true);
+    } finally {
+      setSavingBusiness(false);
     }
   };
 
@@ -396,6 +436,97 @@ export default function SettingsTab({
   return (
     <div className="space-y-8 max-w-4xl">
       <LicenseSection isSuperuser={isSuperuser} onShowToast={onShowToast} onLicenseChanged={onLicenseChanged} />
+
+      {/* Business & Invoicing Profile */}
+      <div className="bg-white rounded shadow-sm border border-zinc-200">
+        <div className="border-b border-zinc-100 p-6 flex items-center gap-3">
+          <div className="p-2 bg-blue-50 text-blue-600 rounded">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-zinc-800">Business & Invoicing Profile</h2>
+            <p className="text-sm text-zinc-500 mt-1">Configure company contact details and remittance instructions printed on invoice PDFs.</p>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wide text-zinc-700 mb-1">
+                Company Name
+              </label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="e.g. Acme Service Vans (defaults to WHITE VAN OPS)"
+                className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wide text-zinc-700 mb-1">
+                Company Address / Subtitle
+              </label>
+              <input
+                type="text"
+                value={companyAddress}
+                onChange={(e) => setCompanyAddress(e.target.value)}
+                placeholder="e.g. 123 Main St, Anytown, US"
+                className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wide text-zinc-700 mb-1">
+                Contact Phone
+              </label>
+              <input
+                type="text"
+                value={companyPhone}
+                onChange={(e) => setCompanyPhone(e.target.value)}
+                placeholder="e.g. 555-0199"
+                className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wide text-zinc-700 mb-1">
+                Contact Email
+              </label>
+              <input
+                type="email"
+                value={companyEmail}
+                onChange={(e) => setCompanyEmail(e.target.value)}
+                placeholder="e.g. billing@acmevans.com"
+                className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wide text-zinc-700 mb-1">
+              Remittance Instructions / Payment Terms Notes
+            </label>
+            <textarea
+              value={companyRemittance}
+              onChange={(e) => setCompanyRemittance(e.target.value)}
+              placeholder="e.g. Please send ACH payments to Routing: XXXXX, Account: XXXXX. Or mail checks to address above."
+              rows={3}
+              className="w-full border-zinc-300 rounded focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+            />
+            <p className="text-[10px] text-zinc-400 mt-1">This message will be printed at the bottom of generated invoice PDFs.</p>
+          </div>
+
+          <div className="pt-2">
+            <button
+              onClick={handleSaveBusiness}
+              disabled={savingBusiness}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white text-sm font-bold uppercase tracking-wider rounded hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {savingBusiness ? "Saving..." : "Save Business Profile"}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white rounded shadow-sm border border-zinc-200">
         <div className="border-b border-zinc-100 p-6 flex items-center gap-3">
@@ -433,7 +564,7 @@ export default function SettingsTab({
             
             <div className="flex items-center gap-4 pt-2">
               <button
-                onClick={handleSave}
+                onClick={handleSaveBackup}
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white text-sm font-bold uppercase tracking-wider rounded hover:bg-zinc-800 transition-colors"
               >

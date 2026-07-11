@@ -59,3 +59,7 @@ next-env.d.ts
 # marketing/ is its own separate git checkout (public GitHub Pages repo) —
 # never nest it inside this private app repo
 /marketing
+
+# tool caches
+/.graphify/
+

@@ -17,13 +17,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    const invoice = await prisma.invoice.findUnique({
-      where: { id },
-      include: { client: true, lineItems: { orderBy: { createdAt: "asc" } }, payments: true },
-    });
+    const [invoice, settings] = await Promise.all([
+      prisma.invoice.findUnique({
+        where: { id },
+        include: { client: true, lineItems: { orderBy: { createdAt: "asc" } }, payments: true },
+      }),
+      prisma.systemSetting.findMany(),
+    ]);
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
+
+    const companyName = settings.find((s) => s.key === "company_name")?.value || "WHITE VAN OPS";
+    const companyAddress = settings.find((s) => s.key === "company_address")?.value || "Field Service Operations";
+    const companyPhone = settings.find((s) => s.key === "company_phone")?.value || "";
+    const companyEmail = settings.find((s) => s.key === "company_email")?.value || "";
+    const remittanceInstructions = settings.find((s) => s.key === "company_remittance")?.value || "";
 
     const doc = await PDFDocument.create();
     const page = doc.addPage([612, 792]); // US Letter
@@ -53,11 +62,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       page.drawLine({ start: { x: left, y: yPos }, end: { x: right, y: yPos }, thickness: 1, color: line });
 
     // Header
-    text("WHITE VAN OPS", left, y, { font: bold, size: 18 });
+    text(companyName, left, y, { font: bold, size: 18 });
     text("INVOICE", right, y, { font: bold, size: 18, alignRight: true });
     y -= 16;
-    text("Field Service Operations", left, y, { size: 9, color: muted });
+    text(companyAddress, left, y, { size: 9, color: muted });
     text(invoice.invoiceNumber, right, y, { size: 11, alignRight: true, color: muted });
+    if (companyPhone || companyEmail) {
+      y -= 12;
+      const contactInfo = [companyPhone, companyEmail].filter(Boolean).join("  ·  ");
+      text(contactInfo, left, y, { size: 8, color: muted });
+    }
     y -= 24;
     hr(y);
     y -= 24;
@@ -124,6 +138,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       y -= 24;
     }
     text(`Payment terms: ${invoice.client.paymentTerms}`, left, y, { size: 9, color: muted });
+
+    if (remittanceInstructions) {
+      y -= 20;
+      text("REMITTANCE INSTRUCTIONS", left, y, { font: bold, size: 8, color: muted });
+      y -= 12;
+      const lines = remittanceInstructions.split("\n");
+      for (const lineStr of lines) {
+        text(lineStr.length > 90 ? lineStr.slice(0, 87) + "..." : lineStr, left, y, { size: 8 });
+        y -= 11;
+      }
+    }
 
     const bytes = await doc.save();
 

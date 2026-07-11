@@ -30,7 +30,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { key, value } = await request.json();
+    const body = await request.json();
+    
+    // Bulk settings update support
+    if (body.settings && typeof body.settings === "object") {
+      const results = [];
+      for (const [key, value] of Object.entries(body.settings)) {
+        const valStr = value !== null && value !== undefined ? String(value) : "";
+        const setting = await prisma.systemSetting.upsert({
+          where: { key },
+          update: { value: valStr },
+          create: { key, value: valStr },
+        });
+        results.push(setting);
+      }
+      return NextResponse.json({ success: true, settings: results });
+    }
+
+    // Single setting update (backwards compatible)
+    const { key, value } = body;
     if (!key) {
       return NextResponse.json({ error: "Missing key" }, { status: 400 });
     }
