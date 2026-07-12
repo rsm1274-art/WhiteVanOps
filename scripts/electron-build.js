@@ -187,13 +187,31 @@ fs.mkdirSync(path.join(root, '.next', 'db'), { recursive: true });
 fs.writeFileSync(path.join(root, '.next', 'db', 'schema.sql'), schemaSql);
 console.log(`\nGenerated .next/db/schema.sql from ${migrations.length} migrations.`);
 
-// 6. Verify the bundled PostgreSQL binaries are present
+// 6. Verify the bundled PostgreSQL binaries are present. electron-builder
+// silently skips a missing extraResources source, so building without pgsql/
+// would ship an installer with no database engine at all (every install that
+// self-boots would 500 on first query). Hard-fail instead.
 if (!fs.existsSync(path.join(root, 'pgsql', 'bin', 'pg_ctl.exe'))) {
-  console.warn('\nWARNING: pgsql/bin not found — the installer will NOT bundle PostgreSQL. See MANUAL_Setup_Installation.md.');
+  console.error('\n❌ Error: pgsql/bin/pg_ctl.exe not found — the installer would ship WITHOUT PostgreSQL and every self-booting install would fail on first launch.');
+  console.error('Recreate pgsql/ per MANUAL_Setup_Installation.md §1 (portable PostgreSQL 17.6 zip at the project root).\n');
+  process.exit(1);
 }
 
 // 7. Package with electron-builder
 run('npx electron-builder --win');
+
+// 7b. Assert the packaged output actually contains the pieces electron-builder
+// is known to drop silently (missing extraResources sources, node_modules).
+for (const rel of [
+  ['resources', 'pgsql', 'bin', 'pg_ctl.exe'],
+  ['resources', 'nextjs', 'node_modules', 'next'],
+]) {
+  const p = path.join(distElectron, 'win-unpacked', ...rel);
+  if (!fs.existsSync(p)) {
+    console.error(`\n❌ Error: packaged output is missing ${rel.join('/')} — the installer in dist-electron/ is broken, do not ship it.`);
+    process.exit(1);
+  }
+}
 
 // 8. Rename resulting installer file for clarity
 try {

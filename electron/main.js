@@ -21,6 +21,16 @@ const firebaseApp = initializeApp(firebaseConfig);
 const firestore = getFirestore(firebaseApp);
 
 const isDev = !app.isPackaged;
+
+// Packaged builds get their own Chromium profile under the app-managed
+// %APPDATA%\whitevanops dir. Without this, dev and packaged runs share the
+// default profile derived from package.json "name" (%APPDATA%\white-van-ops),
+// and stale dev state — service worker registrations, localhost:3000 cookies —
+// leaks into packaged-install testing (2026-07-10: a zombie cache-first sw.js
+// served a cached dashboard into a fresh install). Must run before app ready.
+if (!isDev) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'whitevanops', 'profile'));
+}
 // In dev, electron-dev.js starts next dev and passes the port via env var.
 // In production, the standalone server always uses 3000.
 const PORT = isDev ? (parseInt(process.env.ELECTRON_DEV_PORT, 10) || 3000) : 3000;
