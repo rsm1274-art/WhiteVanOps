@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { parseLocalDate, formatDate, todayLocalStr, dateToLocalStr } from "./dateUtils";
 
 describe("parseLocalDate", () => {
@@ -23,6 +23,34 @@ describe("parseLocalDate", () => {
     const result = parseLocalDate(input);
     const reference = new Date(input);
     expect(result.getDate()).toBe(reference.getDate());
+  });
+});
+
+describe("date-only string storage round-trip (invoice issueDate/dueDate)", () => {
+  const originalTz = process.env.TZ;
+  afterEach(() => {
+    process.env.TZ = originalTz;
+  });
+
+  it("round-trips a plain YYYY-MM-DD string back to the same day in a negative-UTC-offset zone", () => {
+    // Regression: the invoice create/update routes used to store
+    // `new Date(dateStr)` directly. For a date-only string like "2026-07-11",
+    // that's parsed as UTC midnight, which rolls back to "2026-07-10" once
+    // read back through dateToLocalStr/formatDate (local getters) in any
+    // negative-offset timezone. The routes now mirror the established
+    // pattern used elsewhere (e.g. clientJobConflicts.ts) of appending
+    // "T12:00:00" before parsing.
+    process.env.TZ = "America/New_York"; // UTC-4/UTC-5 — reproduces the bug
+
+    const input = "2026-07-11";
+
+    // The old, buggy behavior: store the raw date-only string as-is.
+    const buggyStored = new Date(input);
+    expect(dateToLocalStr(buggyStored.toISOString())).toBe("2026-07-10"); // proves the bug existed
+
+    // The fixed behavior: what the API routes now do before writing to the DB.
+    const fixedStored = parseLocalDate(`${input}T12:00:00`);
+    expect(dateToLocalStr(fixedStored.toISOString())).toBe(input); // proves the fix
   });
 });
 
