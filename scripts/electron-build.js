@@ -161,6 +161,19 @@ copyDir(
   path.join(standalone, 'public')
 );
 
+// 3b. Prune anything the file tracer wrongly dragged into the standalone
+// output. next.config.ts excludes these via outputFileTracingExcludes, but a
+// regression here is catastrophic — dist-electron/ holds previous multi-GB
+// installers, so one bad trace makes every later build bigger until NSIS
+// fails on a >2GB archive. Remove them unconditionally and loudly.
+for (const dir of ['dist-electron', 'pgsql', 'pg_data']) {
+  const p = path.join(standalone, dir);
+  if (fs.existsSync(p)) {
+    console.warn(`\nWARNING: file tracing pulled ${dir}/ into .next/standalone — pruning it. Check outputFileTracingExcludes in next.config.ts.`);
+    fs.rmSync(p, { recursive: true, force: true });
+  }
+}
+
 // 4. Copy .env.local into standalone so Next.js loads it at runtime
 const envSrc = path.join(root, '.env.local');
 const envDest = path.join(standalone, '.env.local');

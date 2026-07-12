@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
   // `node .next/standalone/server.js` and the Electron installer (which
   // expects server.js directly at the standalone root).
   outputFileTracingRoot: path.join(__dirname),
+  // The backup route's process.cwd()-based pg_dump lookup makes Next.js trace
+  // "the whole project" into .next/standalone. Without these excludes that
+  // includes dist-electron/ (previous multi-GB installers — each build would
+  // swallow the last one's output until NSIS dies on a >2GB archive), the
+  // pgsql/ binaries (bundled separately via extraResources), and pg_data/.
+  outputFileTracingExcludes: {
+    "*": ["./dist-electron/**", "./pgsql/**", "./pg_data/**", "./node_modules/.cache/**"],
+  },
 };
 
 export default nextConfig;
