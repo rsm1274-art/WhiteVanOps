@@ -63,3 +63,8 @@ next-env.d.ts
 # tool caches
 /.graphify/
 
+
+# Claude Code local state — machine-specific, never commit
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
