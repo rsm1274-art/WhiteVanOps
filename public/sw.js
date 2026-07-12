@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wvo-field-v1';
+const CACHE_NAME = 'wvo-field-v2';
 
 const STATIC_ASSETS = [
   '/field',
@@ -32,6 +32,24 @@ self.addEventListener('fetch', (event) => {
   
   // Skip API requests from standard SW caching; our React app handles API caching via idb.ts
   if (event.request.url.includes('/api/')) return;
+
+  // Navigations are network-first: pages carry auth redirects and fresh data,
+  // and serving them cache-first can hand a stale (or wrong-login) page to a
+  // live server. The cache is only an offline fallback here.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        const cloned = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, cloned);
+        });
+        return networkResponse;
+      }).catch(() =>
+        caches.match(event.request).then((cached) => cached || caches.match('/field'))
+      )
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {

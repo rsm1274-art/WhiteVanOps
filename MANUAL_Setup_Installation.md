@@ -59,7 +59,7 @@ The build bundles portable PostgreSQL binaries from the project's `pgsql/` direc
 2. Extract the `pgsql/` folder into the project root.
 3. Delete the unneeded subfolders: `pgsql/pgAdmin 4`, `pgsql/StackBuilder`, `pgsql/doc`, `pgsql/include`, `pgsql/lib/pgxs`.
 
-`npm run electron:build` warns (but still builds) if `pgsql/bin/pg_ctl.exe` is missing — the resulting installer then requires a pre-existing database server, as before.
+`npm run electron:build` **fails** if `pgsql/bin/pg_ctl.exe` is missing, and after packaging it re-verifies that `dist-electron/win-unpacked/resources/pgsql/bin/pg_ctl.exe` and `resources/nextjs/node_modules/next` exist. This guard exists because electron-builder silently skips missing `extraResources` sources — a `pgsql`-less build machine used to produce an installer with no database engine at all, which fails on first launch with "Failed to load dashboard data" on any machine without its own PostgreSQL. If a packaged app is ever started without bundled binaries (and nothing already listening on the database port), it now shows a "Database engine missing" startup error instead of opening a broken window.
 
 ---
 

@@ -132,8 +132,17 @@ async function ensurePostgres({ resourcesPath }) {
     return { managed: false };
   }
   if (!fs.existsSync(path.join(pgDir, 'bin', 'pg_ctl.exe'))) {
-    log('No bundled PostgreSQL binaries — skipping database management.');
-    return { managed: false };
+    // We are the only thing that could provide a database here (localhost URL,
+    // nothing listening) — silently continuing would boot a web server whose
+    // every query fails with "Failed to load dashboard data". Fail loudly so
+    // main.js surfaces a clear startup dialog instead. The office PM2 machine
+    // never reaches this: isServerUp()/the port check above return earlier.
+    throw new Error(
+      `Database engine missing: this installation has no bundled PostgreSQL (${pgDir}) ` +
+      `and nothing is running on port ${port}. The installer was likely built without the ` +
+      `pgsql/ binaries — reinstall from a complete installer, or start a PostgreSQL server ` +
+      `matching DATABASE_URL yourself.`
+    );
   }
 
   const bin = (exe) => path.join(pgDir, 'bin', `${exe}.exe`);
