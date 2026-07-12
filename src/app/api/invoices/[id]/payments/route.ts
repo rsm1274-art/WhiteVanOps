@@ -9,6 +9,7 @@ import {
   deriveInvoiceStatus,
   InvoiceStatus,
 } from "@/lib/invoice";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
@@ -65,7 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           amount: parsedAmount,
           method,
           reference: reference?.trim() || null,
-          receivedDate: new Date(receivedDate),
+          receivedDate: parseLocalDate(`${receivedDate}T12:00:00`),
           recordedById: user!.userId,
         },
       }),

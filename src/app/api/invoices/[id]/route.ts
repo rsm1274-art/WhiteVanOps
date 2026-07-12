@@ -4,6 +4,7 @@ import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { InvoiceStatus } from "@/lib/invoice";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 // Manual status moves only: Draft→Sent (mark sent) and →Void. Paid /
 // PartiallyPaid are derived from recorded payments, never set by hand.
@@ -42,7 +43,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       data: {
         ...(status !== undefined && { status }),
         ...(notes !== undefined && { notes: notes?.trim() || null }),
-        ...(dueDate !== undefined && { dueDate: new Date(dueDate) }),
+        ...(dueDate !== undefined && { dueDate: parseLocalDate(`${dueDate}T12:00:00`) }),
       },
       include: { lineItems: true, payments: true, client: true },
     });

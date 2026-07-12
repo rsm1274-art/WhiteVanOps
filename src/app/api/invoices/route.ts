@@ -4,6 +4,7 @@ import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { formatInvoiceNumber, INVOICE_NUMBER_SETTING_KEY } from "@/lib/invoice";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -56,8 +57,8 @@ export async function POST(request: Request) {
           invoiceNumber: formatInvoiceNumber(next),
           clientId,
           jobId: jobId || null,
-          issueDate: new Date(issueDate),
-          dueDate: new Date(dueDate),
+          issueDate: parseLocalDate(`${issueDate}T12:00:00`),
+          dueDate: parseLocalDate(`${dueDate}T12:00:00`),
           notes: notes?.trim() || null,
           lineItems: {
             create: lineItems.map((li: { description: string; quantity: number; rate: number }) => ({
