@@ -119,6 +119,24 @@ export function isPlusActive(
 }
 
 /**
+ * Reads and cryptographically verifies trial-unlock.json (machine-bound HMAC,
+ * same check the /api/license unlock-trial route performs). Returns null for
+ * anything unreadable, absent, or failing verification — callers fall back to
+ * the existing tier logic in that case.
+ */
+function getVerifiedTrialUnlock(): TrialUnlockPayload | null {
+  try {
+    const unlockPath = path.join(getAppDataWvoDir(), "trial-unlock.json");
+    if (!fs.existsSync(unlockPath)) return null;
+    const data = JSON.parse(fs.readFileSync(unlockPath, "utf8"));
+    if (!verifyTrialUnlock(data, machineIdSync())) return null;
+    return data as TrialUnlockPayload;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Reads the singleton license row, creating it (tier "base") if missing.
  * Verifies the offline Plus upgrade signature if set to "plus", performing self-healing / auto-sync.
  */
@@ -152,8 +170,11 @@ export async function getLicense(): Promise<LicenseState> {
 
   // 4. In test mode, if no activation file is present, bypass the strict file-verification
   // check to maintain compatibility with existing database-only tests.
+  // Trial builds (WVO_IS_TRIAL) always run their own tier logic below (force
+  // Plus, or honor a validated trial-unlock.json) — including the anti-tamper
+  // self-heal — so they must not take this test-only DB-passthrough shortcut.
   const isTest = process.env.NODE_ENV === "test";
-  if (isTest && !baseLicense && !plusLicense && defaultTier !== "plus") {
+  if (isTest && !baseLicense && !plusLicense && defaultTier !== "plus" && process.env.WVO_IS_TRIAL !== "true") {
     return {
       tier: row.tier === "plus" ? "plus" : "base",
       licenseKey: row.licenseKey,
@@ -170,7 +191,18 @@ export async function getLicense(): Promise<LicenseState> {
   let targetExpires: Date | null = null;
   let targetActivated: Date | null = null;
 
-  if (defaultTier === "plus") {
+  // A validated trial-unlock.json (day-30 conversion) outranks the trial's
+  // pre-activated-Plus default: the unlocked tier — base or plus — is what
+  // actually runs, not whatever the build was stamped with.
+  const trialUnlock = process.env.WVO_IS_TRIAL === "true" ? getVerifiedTrialUnlock() : null;
+
+  if (trialUnlock) {
+    targetTier = trialUnlock.tier;
+    targetKey = null;
+    targetNotes = trialUnlock.notes;
+    targetExpires = trialUnlock.expiresAt ? new Date(trialUnlock.expiresAt) : null;
+    targetActivated = row.activatedAt || new Date();
+  } else if (defaultTier === "plus") {
     targetTier = "plus";
     targetKey = "PRE-ACTIVATED-PLUS-BUILD";
     targetNotes = "Activated via Plus Installer Build";
