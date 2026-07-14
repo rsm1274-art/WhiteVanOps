@@ -151,7 +151,7 @@ To upgrade an installation from Base to Plus:
 
 ## 6. Build the Desktop Installers
 
-We support three installer build paths depending on the customer's package:
+We support four installer build paths depending on the customer's package:
 
 ### 1. Base Setup Installer (Standard)
 Builds the standard installer. On first boot, the app defaults to the **Base** tier.
@@ -174,6 +174,18 @@ npm run electron:build:upgrade -- --key <licenseKey> [--expires YYYY-MM-DD] [--n
 ```
 * **Output:** `dist-electron/WhiteVanOps-Plus-Upgrade.exe`
 * **Note:** The double hyphens (`--`) are required to forward the CLI arguments through npm to the underlying build script.
+
+### 4. Trial/Demo Installer (Sales Demos)
+Builds a time-limited demo installer for prospect evaluations. Runs on **Plus** tier so the prospect can try every feature, then fully locks the app 30 days after first launch until an activation key is entered.
+```bash
+npm run electron:build:trial
+```
+* **Output:** `dist-electron/WhiteVanOps-Trial-Setup.exe`
+* **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
+  ```bash
+  node scripts/license-manager.js --unlock-trial --machine <theirMachineId> --tier base|plus [--notes "Order #1234"]
+  ```
+  Use `--tier base` if they purchased Base only (this also correctly drops the Plus features they were trialing), or `--tier plus` if they purchased Base+Plus. Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control.
 
 ---
 
