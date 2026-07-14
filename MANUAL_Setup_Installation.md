@@ -181,6 +181,8 @@ Builds a time-limited demo installer for prospect evaluations. Runs on **Plus** 
 npm run electron:build:trial
 ```
 * **Output:** `dist-electron/WhiteVanOps-Trial-Setup.exe`
+* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs on Plus for 30 days from that first launch. (This differs from a standard Base/Plus customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
+* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen. A key generated for either `--tier base` or `--tier plus` (see below) unlocks the app running at that tier — a base key drops Plus features, a plus key keeps them.
 * **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
   ```bash
   node scripts/license-manager.js --unlock-trial --machine <theirMachineId> --tier base|plus [--notes "Order #1234"]
