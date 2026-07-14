@@ -49,6 +49,7 @@ describe("POST /api/license — unlock-trial action", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(machineIdSync).mockReturnValue("test-machine-id");
+    process.env.SESSION_SECRET = "test-secret-at-least-32-bytes-long";
   });
 
   it("accepts a validly signed base-tier unlock key and downgrades to base", async () => {
@@ -79,6 +80,9 @@ describe("POST /api/license — unlock-trial action", () => {
     expect(prisma.license.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ update: expect.objectContaining({ tier: "base" }) })
     );
+    // BUG FIX: the unlock must re-issue the session cookie, otherwise the
+    // still-trialLocked:true JWT bounces the user right back to /trial-expired.
+    expect(res.headers.get("set-cookie")).toMatch(/session=/);
   });
 
   it("rejects a key signed for a different machine", async () => {

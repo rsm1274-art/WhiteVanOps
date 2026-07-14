@@ -105,6 +105,17 @@ describe("getTrialStatus", () => {
     expect(status.isLocked).toBe(false);
   });
 
+  it("fails closed (locked) if the anchor file is corrupt/unparseable JSON", () => {
+    vi.stubEnv("WVO_IS_TRIAL", "true");
+
+    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
+    vi.spyOn(fs, "readFileSync").mockReturnValue("{ this is not json");
+
+    expect(() => getTrialStatus(NOW)).not.toThrow();
+    const status = getTrialStatus(NOW);
+    expect(status.isLocked).toBe(true);
+  });
+
   it("fails closed (locked) if the anchor file signature has been tampered with", () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
     const installedAt = new Date("2026-07-01T12:00:00Z").toISOString();

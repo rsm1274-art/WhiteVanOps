@@ -100,24 +100,31 @@ export function getTrialStatus(now: Date = new Date()): TrialStatus {
     return { isTrial: true, daysRemaining: 0, isLocked: false, machineId };
   }
 
-  const anchorPath = getTrialAnchorPath();
-  let anchor: TrialAnchor;
-  if (fs.existsSync(anchorPath)) {
-    anchor = JSON.parse(fs.readFileSync(anchorPath, "utf8"));
-  } else {
-    const installedAt = now.toISOString();
-    anchor = { installedAt, machineId, sig: signAnchor(installedAt, machineId) };
-    const dir = getAppDataWvoDir();
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  try {
+    const anchorPath = getTrialAnchorPath();
+    let anchor: TrialAnchor;
+    if (fs.existsSync(anchorPath)) {
+      anchor = JSON.parse(fs.readFileSync(anchorPath, "utf8"));
+    } else {
+      const installedAt = now.toISOString();
+      anchor = { installedAt, machineId, sig: signAnchor(installedAt, machineId) };
+      const dir = getAppDataWvoDir();
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(anchorPath, JSON.stringify(anchor, null, 2), "utf8");
     }
-    fs.writeFileSync(anchorPath, JSON.stringify(anchor, null, 2), "utf8");
+
+    const sigValid = timingSafeEqualStrings(anchor.sig, signAnchor(anchor.installedAt, anchor.machineId));
+    const elapsedMs = now.getTime() - new Date(anchor.installedAt).getTime();
+    const daysRemaining = Math.max(0, Math.ceil((TRIAL_LENGTH_MS - elapsedMs) / (24 * 60 * 60 * 1000)));
+    const isLocked = !sigValid || elapsedMs >= TRIAL_LENGTH_MS;
+
+    return { isTrial: true, daysRemaining, isLocked, machineId };
+  } catch {
+    // Corrupt/unreadable anchor (truncated JSON, disk error, etc). Fail
+    // closed rather than let this throw out of the login route and 500 every
+    // login — a locked trial is safe; an unhandled exception is not.
+    return { isTrial: true, daysRemaining: 0, isLocked: true, machineId };
   }
-
-  const sigValid = timingSafeEqualStrings(anchor.sig, signAnchor(anchor.installedAt, anchor.machineId));
-  const elapsedMs = now.getTime() - new Date(anchor.installedAt).getTime();
-  const daysRemaining = Math.max(0, Math.ceil((TRIAL_LENGTH_MS - elapsedMs) / (24 * 60 * 60 * 1000)));
-  const isLocked = !sigValid || elapsedMs >= TRIAL_LENGTH_MS;
-
-  return { isTrial: true, daysRemaining, isLocked, machineId };
 }

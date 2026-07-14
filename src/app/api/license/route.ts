@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSessionUser, requireRole } from "@/lib/auth";
+import { getSessionUser, requireRole, setSessionCookie, signSessionToken } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import {
   getLicense,
@@ -83,15 +83,32 @@ export async function POST(request: Request) {
 
       await audit(user!.userId, "UPDATE", "License", row.id, { action: "unlock-trial", tier: unlockPayload.tier });
 
-      return NextResponse.json({
+      // Re-issue the session JWT: trialLocked is stamped ONLY at login and is
+      // what edge middleware reads to redirect to /trial-expired. Without
+      // re-signing here, a trial-locked user who successfully unlocks would
+      // still carry trialLocked:true and get bounced right back.
+      const trial = getTrialStatus();
+      const token = await signSessionToken({
+        userId: user!.userId,
+        username: user!.username,
+        displayName: user!.displayName,
+        role: user!.role,
+        personnelId: user!.personnelId,
+        mustChangePassword: user!.mustChangePassword,
+        trialLocked: trial.isLocked,
+      });
+
+      const res = NextResponse.json({
         tier: row.tier,
         licenseKey: row.licenseKey,
         notes: row.notes,
         activatedAt: row.activatedAt,
         expiresAt: row.expiresAt,
         plus: unlockPayload.tier === "plus",
-        trial: getTrialStatus(),
+        trial,
       });
+      setSessionCookie(res, token);
+      return res;
     }
 
     const { tier } = body;
