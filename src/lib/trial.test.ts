@@ -69,7 +69,7 @@ describe("getTrialStatus", () => {
       .update(`${installedAt}:test-machine-id`)
       .digest("hex");
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => String(p).endsWith("trial.json"));
+    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
     vi.spyOn(fs, "readFileSync").mockReturnValue(
       JSON.stringify({ installedAt, machineId: "test-machine-id", sig })
     );
@@ -87,7 +87,7 @@ describe("getTrialStatus", () => {
       .update(`${installedAt}:test-machine-id`)
       .digest("hex");
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => String(p).endsWith("trial.json"));
+    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
     vi.spyOn(fs, "readFileSync").mockReturnValue(
       JSON.stringify({ installedAt, machineId: "test-machine-id", sig })
     );
@@ -99,7 +99,7 @@ describe("getTrialStatus", () => {
 
   it("is never locked once a valid trial-unlock.json exists, regardless of elapsed time", () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => String(p).endsWith("trial-unlock.json"));
+    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial-unlock.json"));
 
     const status = getTrialStatus(NOW);
     expect(status.isLocked).toBe(false);
@@ -109,7 +109,7 @@ describe("getTrialStatus", () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
     const installedAt = new Date("2026-07-01T12:00:00Z").toISOString();
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: any) => String(p).endsWith("trial.json"));
+    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
     vi.spyOn(fs, "readFileSync").mockReturnValue(
       JSON.stringify({ installedAt, machineId: "test-machine-id", sig: "tampered" })
     );
