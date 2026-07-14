@@ -2,9 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "./db";
 import path from "path";
 import fs from "fs";
-import os from "os";
 import crypto from "crypto";
 import { machineIdSync } from "node-machine-id";
+import {
+  LICENSE_SIGNING_SECRET,
+  getAppDataWvoDir,
+  verifyTrialUnlock,
+  TrialUnlockPayload,
+} from "./licenseCrypto";
 
 // ---------------------------------------------------------------------------
 // License tier gating (Base vs Plus). Mirrors the requireRole shape in
@@ -13,8 +18,9 @@ import { machineIdSync } from "node-machine-id";
 // route must gate server-side with requirePlus.
 // ---------------------------------------------------------------------------
 
+export { LICENSE_SIGNING_SECRET, getAppDataWvoDir };
+
 export const LICENSE_ROW_ID = "singleton";
-export const LICENSE_SIGNING_SECRET = "wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765";
 
 export type LicenseTier = "base" | "plus";
 
@@ -38,16 +44,6 @@ export interface PlusLicense {
   expiresAt: string | null;
   notes: string | null;
   sig: string;
-}
-
-/** Resolves platform-specific AppData directory for WhiteVanOps */
-export function getAppDataWvoDir(): string {
-  const appData =
-    process.env.APPDATA ||
-    (process.platform === "darwin"
-      ? path.join(os.homedir(), "Library/Application Support")
-      : path.join(os.homedir(), ".config"));
-  return path.join(appData, "whitevanops");
 }
 
 /** Reads the base activation license from disk, verifying its HMAC signature and machine ID */
