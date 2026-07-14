@@ -18,12 +18,7 @@ vi.mock("node-machine-id", () => ({
   machineIdSync: vi.fn(() => "test-machine-id"),
 }));
 
-import {
-  getTrialStatus,
-  verifyTrialUnlock,
-  signTrialUnlock,
-  markTrialUnlocked,
-} from "./trial";
+import { getTrialStatus, markTrialUnlocked } from "./trial";
 import { LICENSE_SIGNING_SECRET } from "./license";
 
 const NOW = new Date("2026-07-13T12:00:00Z");
@@ -127,31 +122,6 @@ describe("getTrialStatus", () => {
 
     const status = getTrialStatus(NOW);
     expect(status.isLocked).toBe(true);
-  });
-});
-
-describe("verifyTrialUnlock / signTrialUnlock", () => {
-  it("verifies a correctly signed payload", () => {
-    const sig = signTrialUnlock("test-machine-id", "plus", null);
-    const payload = { machineId: "test-machine-id", tier: "plus" as const, expiresAt: null, notes: null, sig };
-    expect(verifyTrialUnlock(payload, "test-machine-id")).toBe(true);
-  });
-
-  it("rejects a payload signed for a different machine", () => {
-    const sig = signTrialUnlock("other-machine", "plus", null);
-    const payload = { machineId: "other-machine", tier: "plus" as const, expiresAt: null, notes: null, sig };
-    expect(verifyTrialUnlock(payload, "test-machine-id")).toBe(false);
-  });
-
-  it("rejects a tampered signature", () => {
-    const payload = { machineId: "test-machine-id", tier: "plus" as const, expiresAt: null, notes: null, sig: "bogus" };
-    expect(verifyTrialUnlock(payload, "test-machine-id")).toBe(false);
-  });
-
-  it("rejects an invalid tier", () => {
-    const sig = signTrialUnlock("test-machine-id", "plus", null);
-    const payload = { machineId: "test-machine-id", tier: "enterprise", expiresAt: null, notes: null, sig };
-    expect(verifyTrialUnlock(payload, "test-machine-id")).toBe(false);
   });
 });
 

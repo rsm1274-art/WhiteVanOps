@@ -2,7 +2,14 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { machineIdSync } from "node-machine-id";
-import { getAppDataWvoDir, LICENSE_SIGNING_SECRET } from "./license";
+import {
+  getAppDataWvoDir,
+  LICENSE_SIGNING_SECRET,
+  timingSafeEqualStrings,
+  signTrialUnlock,
+  verifyTrialUnlock,
+  TrialUnlockPayload,
+} from "./licenseCrypto";
 
 // ---------------------------------------------------------------------------
 // Trial-lock for demo installers (WVO_IS_TRIAL=true builds only). Independent
@@ -11,19 +18,14 @@ import { getAppDataWvoDir, LICENSE_SIGNING_SECRET } from "./license";
 // until a signed unlock key (see verifyTrialUnlock) is applied.
 // ---------------------------------------------------------------------------
 
+export { signTrialUnlock, verifyTrialUnlock };
+export type { TrialUnlockPayload };
+
 const TRIAL_LENGTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface TrialAnchor {
   installedAt: string;
   machineId: string;
-  sig: string;
-}
-
-export interface TrialUnlockPayload {
-  machineId: string;
-  tier: "base" | "plus";
-  expiresAt: string | null;
-  notes: string | null;
   sig: string;
 }
 
@@ -47,33 +49,6 @@ function signAnchor(installedAt: string, machineId: string): string {
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
     .update(`${installedAt}:${machineId}`)
     .digest("hex");
-}
-
-function timingSafeEqualStrings(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return crypto.timingSafeEqual(aBuf, bBuf);
-}
-
-/** Signs a trial-unlock payload. Used by tests and mirrored in scripts/license-manager.js for CLI key generation. */
-export function signTrialUnlock(machineId: string, tier: "base" | "plus", expiresAt: string | null): string {
-  return crypto
-    .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${machineId}:${tier}:${expiresAt || ""}`)
-    .digest("hex");
-}
-
-/** Verifies a pasted activation key against THIS machine's real ID — never the payload's claimed machineId. */
-export function verifyTrialUnlock(payload: unknown, machineId: string): payload is TrialUnlockPayload {
-  if (!payload || typeof payload !== "object") return false;
-  const p = payload as Record<string, unknown>;
-  if (p.machineId !== machineId) return false;
-  if (p.tier !== "base" && p.tier !== "plus") return false;
-  if (typeof p.sig !== "string") return false;
-  const expiresAt = typeof p.expiresAt === "string" ? p.expiresAt : null;
-  const expected = signTrialUnlock(machineId, p.tier, expiresAt);
-  return timingSafeEqualStrings(p.sig, expected);
 }
 
 /** Writes trial-unlock.json. Its mere presence permanently defeats the trial lock. */
