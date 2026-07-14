@@ -63,7 +63,7 @@ describe("POST /api/license — unlock-trial action", () => {
       expiresAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
-    } as any);
+    });
 
     const req = new Request("http://localhost/api/license", {
       method: "POST",
@@ -73,7 +73,7 @@ describe("POST /api/license — unlock-trial action", () => {
       }),
     });
 
-    const res = await POST(req as any);
+    const res = await POST(req);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.tier).toBe("base");
@@ -95,7 +95,7 @@ describe("POST /api/license — unlock-trial action", () => {
       }),
     });
 
-    const res = await POST(req as any);
+    const res = await POST(req);
     expect(res.status).toBe(400);
     expect(prisma.license.upsert).not.toHaveBeenCalled();
   });
@@ -106,7 +106,7 @@ describe("POST /api/license — unlock-trial action", () => {
       body: JSON.stringify({ action: "unlock-trial", licenseKey: "not json" }),
     });
 
-    const res = await POST(req as any);
+    const res = await POST(req);
     expect(res.status).toBe(400);
   });
 });
