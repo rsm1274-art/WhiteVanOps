@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Save, Server, AlertCircle, BadgeCheck, Building2 } from "lucide-react";
 import { formatDate } from "@/lib/dateUtils";
+import { TrialUnlockForm } from "@/components/trial/TrialUnlockForm";
 
 interface LicenseResponse {
   tier: "base" | "plus";
@@ -10,6 +11,12 @@ interface LicenseResponse {
   expiresAt: string | null;
   activeBaseKey: string | null;
   plus: boolean;
+  trial: {
+    isTrial: boolean;
+    daysRemaining: number;
+    isLocked: boolean;
+    machineId: string | null;
+  };
 }
 
 function LicenseSection({
@@ -161,6 +168,18 @@ function LicenseSection({
       </div>
 
       <div className="p-6 space-y-6">
+        {license.trial.isTrial && (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded space-y-3">
+            <p className="text-sm font-semibold text-blue-800">
+              Trial: {license.trial.daysRemaining} day{license.trial.daysRemaining === 1 ? "" : "s"} remaining
+            </p>
+            <p className="text-xs text-blue-700">
+              Purchased? Enter your activation key below to convert this install permanently.
+            </p>
+            <TrialUnlockForm machineId={license.trial.machineId} onUnlocked={fetchLicense} />
+          </div>
+        )}
+
         <div className="p-4 bg-zinc-50 border border-zinc-200 rounded text-sm text-zinc-600 flex gap-3">
           <AlertCircle className="h-5 w-5 text-zinc-400 shrink-0" />
           <p>
