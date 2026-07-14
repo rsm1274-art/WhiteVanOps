@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/manifest.webmanifest",
 ];
 const CHANGE_PASSWORD_PATHS = ["/change-password", "/api/auth/change-password"];
+const TRIAL_EXPIRED_PATHS = ["/trial-expired", "/api/trial-unlock"];
 
 // Routes a tech role may access
 const TECH_ALLOWED_PREFIXES = ["/field", "/api/field", "/api/time", "/api/auth", "/api/jobs"];
@@ -40,6 +41,13 @@ export async function middleware(req: NextRequest) {
     // Force password change before anything else
     if (mustChangePassword && !CHANGE_PASSWORD_PATHS.some((p) => pathname.startsWith(p))) {
       return NextResponse.redirect(new URL("/change-password", req.url));
+    }
+
+    // Trial-lock takes priority over role-based routing — a locked trial
+    // install shows nothing but the unlock screen until a valid key is applied.
+    const trialLocked = payload.trialLocked as boolean | undefined;
+    if (trialLocked && !TRIAL_EXPIRED_PATHS.some((p) => pathname.startsWith(p))) {
+      return NextResponse.redirect(new URL("/trial-expired", req.url));
     }
 
     // Tech users are restricted to the field module and time/job APIs
