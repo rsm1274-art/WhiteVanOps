@@ -3,6 +3,55 @@ const path = require("path");
 const fs = require("fs");
 const args = process.argv.slice(2);
 const isPlusMode = args.includes("--plus");
+const isUnlockTrialMode = args.includes("--unlock-trial");
+
+if (isUnlockTrialMode) {
+  const machineIdx = args.indexOf("--machine");
+  const tierIdx = args.indexOf("--tier");
+  const expiresIdx = args.indexOf("--expires");
+  const notesIdx = args.indexOf("--notes");
+
+  const machineId = machineIdx !== -1 ? args[machineIdx + 1]?.trim() : null;
+  const tier = tierIdx !== -1 ? args[tierIdx + 1]?.trim() : null;
+
+  if (!machineId || (tier !== "base" && tier !== "plus")) {
+    console.error("Error: --machine <machineId> and --tier base|plus are required in --unlock-trial mode");
+    console.error("Usage: node scripts/license-manager.js --unlock-trial --machine <machineId> --tier base|plus [--expires <YYYY-MM-DD>] [--notes <notes>]");
+    process.exit(1);
+  }
+
+  let expiresAt = null;
+  if (expiresIdx !== -1 && expiresIdx + 1 < args.length) {
+    const expStr = args[expiresIdx + 1].trim();
+    const date = new Date(expStr);
+    if (isNaN(date.getTime())) {
+      console.error(`Error: Invalid expiry date '${expStr}'. Use YYYY-MM-DD format.`);
+      process.exit(1);
+    }
+    expiresAt = date.toISOString();
+  }
+
+  let notes = null;
+  if (notesIdx !== -1 && notesIdx + 1 < args.length) {
+    notes = args[notesIdx + 1].trim();
+  } else {
+    notes = `Trial converted on ${new Date().toISOString().split("T")[0]}`;
+  }
+
+  const LICENSE_SIGNING_SECRET = "wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765";
+  const signatureData = `${machineId}:${tier}:${expiresAt || ""}`;
+  const sig = crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(signatureData)
+    .digest("hex");
+
+  const payload = { machineId, tier, expiresAt, notes, sig };
+
+  console.log(`\n✅ Success! Trial Activation Key Generated (tier: ${tier}):`);
+  console.log(`\n${JSON.stringify(payload, null, 2)}\n`);
+  console.log("Send the JSON block above to the customer. They paste it into Settings → License & Plan (or the trial-expired screen) to convert their install.");
+  process.exit(0);
+}
 
 if (isPlusMode) {
   const keyIdx = args.indexOf("--key");
