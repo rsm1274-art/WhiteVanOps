@@ -11,6 +11,8 @@ export interface SessionUser {
   role: Role;
   personnelId?: string;
   mustChangePassword?: boolean;
+  /** Stamped at login for WVO_IS_TRIAL builds whose 30-day trial has expired with no unlock key applied. */
+  trialLocked?: boolean;
 }
 
 export const SESSION_COOKIE_NAME = "session";

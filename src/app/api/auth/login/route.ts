@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { Role, setSessionCookie, signSessionToken } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { getTrialStatus } from "@/lib/trial";
 
 // Per-IP: slows down credential-stuffing across many usernames from one source.
 const IP_MAX_ATTEMPTS = 20;
@@ -79,6 +80,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const trialStatus = getTrialStatus();
+
   const token = await signSessionToken({
     userId: user.id,
     username: user.username,
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest) {
     role: user.role as Role,
     personnelId: user.personnelId ?? undefined,
     mustChangePassword: user.mustChangePassword,
+    trialLocked: trialStatus.isLocked,
   });
 
   const res = NextResponse.json({

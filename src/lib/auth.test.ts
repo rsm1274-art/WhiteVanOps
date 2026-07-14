@@ -150,3 +150,20 @@ describe("requireRole", () => {
     expect(res).toBeNull();
   });
 });
+
+describe("SessionUser trialLocked claim round-trips through signSessionToken", () => {
+  it("preserves trialLocked: true through sign and verify", async () => {
+    process.env.SESSION_SECRET = "test-secret-at-least-32-bytes-long";
+    const token = await signSessionToken({
+      userId: "u1",
+      username: "admin",
+      displayName: "Admin",
+      role: "superuser",
+      trialLocked: true,
+    });
+    expect(typeof token).toBe("string");
+    const [, payloadB64] = token.split(".");
+    const decoded = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+    expect(decoded.trialLocked).toBe(true);
+  });
+});
