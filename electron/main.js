@@ -184,6 +184,22 @@ async function verifyLicenseSilent() {
   }
 }
 
+// True when this packaged build was produced by `npm run electron:build:trial`.
+// scripts/electron-build.js writes WVO_IS_TRIAL="true" into
+// resources/nextjs/.env.local for trial builds. Read that file directly here:
+// this check runs before startServer() requires the standalone Next.js
+// server (which is what normally loads .env.local), and dev builds never
+// reach this function's caller because isDev already short-circuits.
+function isTrialBuild() {
+  try {
+    const envPath = path.join(process.resourcesPath, 'nextjs', '.env.local');
+    if (!fs.existsSync(envPath)) return false;
+    return /^\s*WVO_IS_TRIAL\s*=\s*"?true"?\s*$/m.test(fs.readFileSync(envPath, 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
 function showActivationWindow() {
   return new Promise((resolve) => {
     const activationWindow = new BrowserWindow({
@@ -261,7 +277,7 @@ app.whenReady().then(async () => {
   createLoadingWindow();
 
   try {
-    const isActivated = await verifyLicenseSilent();
+    const isActivated = isTrialBuild() ? true : await verifyLicenseSilent();
     if (!isActivated) {
       if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
       await showActivationWindow();
