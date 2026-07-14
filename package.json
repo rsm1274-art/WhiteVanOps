@@ -14,6 +14,7 @@
     "electron:build": "node scripts/electron-build.js --base",
     "electron:build:base": "node scripts/electron-build.js --base",
     "electron:build:plus": "node scripts/electron-build.js --plus",
+    "electron:build:trial": "node scripts/electron-build.js --trial",
     "electron:build:upgrade": "node scripts/electron-build.js --upgrade",
     "prepare": "husky"
   },

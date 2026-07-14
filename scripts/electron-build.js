@@ -10,10 +10,12 @@ const args = process.argv.slice(2);
 const isBase = args.includes('--base');
 const isPlus = args.includes('--plus');
 const isUpgrade = args.includes('--upgrade');
+const isTrial = args.includes('--trial');
 
 let tier = 'base';
 if (isPlus) tier = 'plus';
 if (isUpgrade) tier = 'upgrade';
+if (isTrial) tier = 'trial';
 
 function run(cmd, env = {}) {
   console.log(`\n> ${cmd}`);
@@ -181,10 +183,16 @@ let envContent = '';
 if (fs.existsSync(envSrc)) {
   envContent = fs.readFileSync(envSrc, 'utf8');
 }
-// Append WVO_DEFAULT_TIER to build
-envContent += `\nWVO_DEFAULT_TIER="${tier}"\n`;
+// Append WVO_DEFAULT_TIER to build. Trial builds default to Plus (so the
+// prospect experiences the full feature set) and set WVO_IS_TRIAL so
+// src/lib/trial.ts activates the 30-day lock.
+const effectiveTier = tier === 'trial' ? 'plus' : tier;
+envContent += `\nWVO_DEFAULT_TIER="${effectiveTier}"\n`;
+if (tier === 'trial') {
+  envContent += `WVO_IS_TRIAL="true"\n`;
+}
 fs.writeFileSync(envDest, envContent, 'utf8');
-console.log(`\nCopied .env.local into standalone bundle with WVO_DEFAULT_TIER="${tier}".`);
+console.log(`\nCopied .env.local into standalone bundle with WVO_DEFAULT_TIER="${effectiveTier}"${tier === 'trial' ? ' and WVO_IS_TRIAL="true"' : ''}.`);
 
 // 5. Concatenate Prisma migrations into a single schema.sql — applied by
 // electron/postgres.js when the bundled PostgreSQL initializes on first run.
@@ -231,7 +239,9 @@ try {
   const files = fs.readdirSync(distElectron);
   const setupFile = files.find(f => f.startsWith('WhiteVanOps Setup') && f.endsWith('.exe'));
   if (setupFile) {
-    const newName = tier === 'plus' ? 'WhiteVanOps-Plus-Setup.exe' : 'WhiteVanOps-Base-Setup.exe';
+    let newName = 'WhiteVanOps-Base-Setup.exe';
+    if (tier === 'plus') newName = 'WhiteVanOps-Plus-Setup.exe';
+    if (tier === 'trial') newName = 'WhiteVanOps-Trial-Setup.exe';
     fs.renameSync(
       path.join(distElectron, setupFile),
       path.join(distElectron, newName)
