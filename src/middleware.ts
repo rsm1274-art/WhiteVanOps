@@ -12,7 +12,13 @@ const PUBLIC_PATHS = [
   "/manifest.webmanifest",
 ];
 const CHANGE_PASSWORD_PATHS = ["/change-password", "/api/auth/change-password"];
-const TRIAL_EXPIRED_PATHS = ["/trial-expired", "/api/trial-unlock"];
+// A trial-locked session may reach only the lockout page and the unlock API.
+// The unlock handler lives on POST /api/license ({ action: "unlock-trial" }),
+// so that path must be allowlisted or the unlock POST would itself be redirected
+// to /trial-expired and could never succeed. Safe: trialLocked is recomputed at
+// login from trial-unlock.json (not the License tier row), so reaching the
+// role- and signature-gated license API cannot bypass the lock.
+const TRIAL_EXPIRED_PATHS = ["/trial-expired", "/api/license"];
 
 // Routes a tech role may access
 const TECH_ALLOWED_PREFIXES = ["/field", "/api/field", "/api/time", "/api/auth", "/api/jobs"];
