@@ -72,15 +72,19 @@ export async function PUT(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { jobId, status, clientId, assignedVehicleId, scheduledDate, notes, lineItems, equipmentIds } = await request.json();
+    const { jobId, status, clientId, assignedVehicleId, scheduledDate, notes, lineItems, equipmentIds, personnelIds } = await request.json();
 
     if (!jobId) {
       return NextResponse.json({ error: "Missing job ID" }, { status: 400 });
     }
 
+    if (personnelIds !== undefined && (!Array.isArray(personnelIds) || personnelIds.length === 0)) {
+      return NextResponse.json({ error: "At least one technician must be assigned." }, { status: 400 });
+    }
+
     // Techs may only update status; block all other field changes
     if (user.role === "tech") {
-      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined) {
+      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined || personnelIds !== undefined) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       // Verify they are assigned to this job. A tech account not linked to a
@@ -104,28 +108,69 @@ export async function PUT(request: Request) {
 
     // A completed job has already deducted materials from the assigned
     // vehicle's stock and been billed — client/vehicle/date are locked.
-    if (currentJob.status === "Completed" && (clientId || assignedVehicleId !== undefined || scheduledDate)) {
-      return NextResponse.json({ error: "This job is Completed and its client, vehicle, and date can no longer be edited." }, { status: 400 });
+    if (currentJob.status === "Completed" && (clientId || assignedVehicleId !== undefined || scheduledDate || personnelIds !== undefined)) {
+      return NextResponse.json({ error: "This job is Completed and its client, vehicle, date, and crew can no longer be edited. Reopen the job to make changes." }, { status: 400 });
     }
 
     // Re-run the same availability checks used at creation time whenever the
-    // vehicle, date, or equipment list changes on an edit — otherwise a
-    // reschedule or a Resources-panel equipment addition could silently
+    // vehicle, date, crew, or equipment list changes on an edit — otherwise a
+    // reschedule or a Resources-panel crew/equipment change could silently
     // create a double-booking that POST would have rejected.
     const effectiveVehicleId = assignedVehicleId !== undefined ? assignedVehicleId : currentJob.assignedVehicleId;
     const effectiveDate = scheduledDate ? new Date(scheduledDate) : currentJob.scheduledDate;
     const effectiveEquipmentIds = Array.isArray(equipmentIds) ? equipmentIds : currentJob.equipment.map((e) => e.equipmentId);
-    if (assignedVehicleId !== undefined || scheduledDate || Array.isArray(equipmentIds)) {
+    const effectivePersonnelIds = Array.isArray(personnelIds) ? personnelIds : currentJob.assignments.map((a) => a.personnelId);
+    if (assignedVehicleId !== undefined || scheduledDate || Array.isArray(equipmentIds) || Array.isArray(personnelIds)) {
       const conflict = await checkJobConflicts({
         scheduledDate: effectiveDate,
         assignedVehicleId: effectiveVehicleId,
-        personnelIds: currentJob.assignments.map((a) => a.personnelId),
+        personnelIds: effectivePersonnelIds,
         equipmentIds: effectiveEquipmentIds,
         excludeJobId: jobId,
       });
       if (conflict) {
         return NextResponse.json({ error: conflict }, { status: 400 });
       }
+    }
+
+    // If status is transitioning FROM Completed to something else
+    if (currentJob.status === "Completed" && status && status !== "Completed") {
+      const reopenedJob = await prisma.$transaction(async (tx) => {
+        const updated = await tx.job.update({
+          where: { id: jobId },
+          data: { status, completionDate: null },
+        });
+
+        if (currentJob.assignedVehicleId) {
+          const vehicleStockLocation = await tx.stockLocation.findUnique({
+            where: { vehicleId: currentJob.assignedVehicleId },
+          });
+
+          if (vehicleStockLocation) {
+            for (const item of currentJob.lineItems) {
+              const stockLevel = await tx.stockLevel.findUnique({
+                where: {
+                  inventoryItemId_stockLocationId: {
+                    inventoryItemId: item.inventoryItemId,
+                    stockLocationId: vehicleStockLocation.id,
+                  },
+                },
+              });
+
+              if (stockLevel) {
+                await tx.stockLevel.update({
+                  where: { id: stockLevel.id },
+                  data: { quantity: { increment: item.quantity } },
+                });
+              }
+            }
+          }
+        }
+        return updated;
+      });
+
+      await audit(user.userId, "UPDATE", "Job", jobId, { status });
+      return NextResponse.json(reopenedJob);
     }
 
     // If status is transitioning to Completed
@@ -211,10 +256,17 @@ export async function PUT(request: Request) {
         }
       }
 
+      if (Array.isArray(personnelIds)) {
+        await tx.jobAssignment.deleteMany({ where: { jobId } });
+        await tx.jobAssignment.createMany({
+          data: personnelIds.map((pId: string) => ({ jobId, personnelId: pId })),
+        });
+      }
+
       return await tx.job.update({ where: { id: jobId }, data: dataUpdate });
     });
 
-    await audit(user.userId, "UPDATE", "Job", jobId, { status, clientId, assignedVehicleId, scheduledDate });
+    await audit(user.userId, "UPDATE", "Job", jobId, { status, clientId, assignedVehicleId, scheduledDate, personnelIds });
 
     return NextResponse.json(updatedJob);
   } catch (error) {

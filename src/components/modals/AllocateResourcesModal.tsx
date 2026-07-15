@@ -19,10 +19,12 @@ function CheckboxList({
   items,
   selected,
   onChange,
+  emptyLabel = "No equipment registered.",
 }: {
   items: { id: string; label: string }[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  emptyLabel?: string;
 }) {
   const toggle = (id: string) => {
     onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
@@ -30,7 +32,7 @@ function CheckboxList({
   return (
     <div className="border border-zinc-300 rounded divide-y divide-zinc-100 max-h-36 overflow-y-auto">
       {items.length === 0 ? (
-        <p className="text-xs text-zinc-400 px-3 py-2">No equipment registered.</p>
+        <p className="text-xs text-zinc-400 px-3 py-2">{emptyLabel}</p>
       ) : (
         items.map((item) => (
           <label key={item.id} className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-50 cursor-pointer">
@@ -51,16 +53,21 @@ function CheckboxList({
 export default function AllocateResourcesModal({ context, data, job, onClose, onSuccess, onError }: Props) {
   const [parts, setParts] = useState<JobPartLine[]>(context.existingParts);
   const [eqIds, setEqIds] = useState<string[]>(context.existingEquipmentIds);
+  const [personnelIds, setPersonnelIds] = useState<string[]>(job.assignments.map((a) => a.personnelId));
+
+  // Completed jobs have locked crew server-side; reopen the job to change it.
+  const isCompleted = job.status === "Completed";
 
   const warnings = useMemo(
     () =>
       findClientSideConflicts({
         data,
         scheduledDate: dateToLocalStr(job.scheduledDate),
+        personnelIds,
         equipmentIds: eqIds,
         excludeJobId: job.id,
       }),
-    [data, job.scheduledDate, job.id, eqIds]
+    [data, job.scheduledDate, job.id, eqIds, personnelIds]
   );
 
   const addLine = () =>
@@ -82,6 +89,10 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isCompleted && personnelIds.length === 0) {
+      onError("At least one technician must be assigned.");
+      return;
+    }
     try {
       const res = await fetch("/api/jobs", {
         method: "PUT",
@@ -90,6 +101,9 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
           jobId: context.jobId,
           lineItems: parts,
           equipmentIds: eqIds,
+          // Crew is locked once a job is Completed — omit it so the server
+          // doesn't reject the materials/equipment save.
+          ...(isCompleted ? {} : { personnelIds }),
         }),
       });
       if (!res.ok) {
@@ -107,6 +121,12 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
     id: eq.id,
     label: `${eq.name} (S/N: ${eq.serialNumber})`,
   }));
+
+  // Technicians, plus anyone already assigned (so a non-Technician assignee
+  // stays visible and removable), mirroring EditJobModal's vehicle filter.
+  const techItems = data.personnel
+    .filter((p) => p.role === "Technician" || personnelIds.includes(p.id))
+    .map((p) => ({ id: p.id, label: `${p.firstName} ${p.lastName}` }));
 
   return (
     <Modal onClose={onClose} maxWidth="xl">
@@ -188,6 +208,22 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
             + Add Material Line
           </button>
         </div>
+
+        {/* Crew section */}
+        {isCompleted ? (
+          <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-600">
+            This job is Completed, so its crew is locked. Reopen the job to change assignments.
+          </div>
+        ) : (
+          <Field label="Assign Crew">
+            <CheckboxList
+              items={techItems}
+              selected={personnelIds}
+              onChange={setPersonnelIds}
+              emptyLabel="No technicians registered."
+            />
+          </Field>
+        )}
 
         {/* Equipment section */}
         <Field label="Allocate Specialized Tools">
