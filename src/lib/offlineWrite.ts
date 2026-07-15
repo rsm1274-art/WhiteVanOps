@@ -1,4 +1,4 @@
-import { addToSyncQueue, getSyncQueue, removeFromSyncQueue } from "@/lib/idb";
+import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck } from "@/lib/idb";
 
 export type WriteResult = "synced" | "queued";
 
@@ -6,8 +6,9 @@ export type RejectionClass = "permanent" | "auth" | "transient";
 
 export type DrainResult = {
   synced: number;
+  stuck: number;
   remaining: number;
-  stopped: "complete" | "unreachable" | "rejected";
+  stopped: "complete" | "unreachable" | "auth" | "retry";
 };
 
 /**
@@ -59,18 +60,22 @@ export async function submitWrite(
  *
  * Safe to call at any time — it probes by attempting the first write rather
  * than consulting `navigator.onLine`, so it works when the server has come
- * back up without the device ever having lost connectivity (the overnight
- * case: no online event fires, so nothing else would trigger a drain).
+ * back up without the device ever having lost connectivity.
  *
- * Stops at the first op the server does not accept, leaving it and everything
- * behind it queued. Queued ops frequently target the same job, so letting a
- * later one overtake a stuck one could apply them out of order.
+ * One rule drives the loop: stop if the op might still succeed later,
+ * continue past it if it never will. A transient failure (5xx, unreachable)
+ * stops the drain so same-job edits can't apply out of order. A permanent
+ * rejection (400/404/409/422) quarantines the op into stuckOps and keeps
+ * going — nothing is preserved by making live work wait behind a corpse, and
+ * any later op rejected for the same reason is quarantined identically.
  */
 export async function drainSyncQueue(): Promise<DrainResult> {
   const queue = await getSyncQueue();
   let synced = 0;
+  let stuck = 0;
 
   for (const op of queue) {
+    const remaining = queue.length - synced - stuck;
     let res: Response;
 
     try {
@@ -80,18 +85,31 @@ export async function drainSyncQueue(): Promise<DrainResult> {
         body: JSON.stringify(op.body),
       });
     } catch {
-      return { synced, remaining: queue.length - synced, stopped: "unreachable" };
+      return { synced, stuck, remaining, stopped: "unreachable" };
     }
 
     if (!res.ok) {
-      return { synced, remaining: queue.length - synced, stopped: "rejected" };
+      const kind = classifyRejection(res.status);
+      if (kind === "auth") return { synced, stuck, remaining, stopped: "auth" };
+      if (kind === "transient") return { synced, stuck, remaining, stopped: "retry" };
+
+      let message = `Request failed (${res.status})`;
+      try {
+        const result = await res.json();
+        if (result?.error) message = result.error;
+      } catch {
+        // Rejection carried no JSON body; the status-code message stands.
+      }
+      await moveToStuck(op, { status: res.status, message });
+      stuck++;
+      continue;
     }
 
     await removeFromSyncQueue(op.id!);
     synced++;
   }
 
-  return { synced, remaining: 0, stopped: "complete" };
+  return { synced, stuck, remaining: 0, stopped: "complete" };
 }
 
 /**

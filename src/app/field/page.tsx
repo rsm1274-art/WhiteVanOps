@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { cacheApiResponse, getCachedApiResponse, addToSyncQueue, getSyncQueue, removeFromSyncQueue } from "@/lib/idb";
+import { cacheApiResponse, getCachedApiResponse, getSyncQueue } from "@/lib/idb";
+import { submitWrite, drainSyncQueue } from "@/lib/offlineWrite";
 import {
   Briefcase,
   Clock,
@@ -150,17 +151,7 @@ function LogTimePanel({
     const date = dateRef.current?.value || todayStr();
     setSaving(true);
     try {
-      if (navigator.onLine) {
-        const res = await fetch("/api/time", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" }),
-        });
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || "Failed to log time");
-      } else {
-        await addToSyncQueue("/api/time", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
-      }
+      await submitWrite("/api/time", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to log time");
@@ -252,16 +243,7 @@ function NotesPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      if (navigator.onLine) {
-        const res = await fetch("/api/jobs", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id, notes: note }),
-        });
-        if (!res.ok) throw new Error("Failed to save notes");
-      } else {
-        await addToSyncQueue("/api/jobs", "PUT", { jobId: job.id, notes: note });
-      }
+      await submitWrite("/api/jobs", "PUT", { jobId: job.id, notes: note });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save notes");
@@ -339,16 +321,7 @@ function MaterialsPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      if (navigator.onLine) {
-        const res = await fetch("/api/jobs", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id, lineItems: lines }),
-        });
-        if (!res.ok) throw new Error("Failed to save materials");
-      } else {
-        await addToSyncQueue("/api/jobs", "PUT", { jobId: job.id, lineItems: lines });
-      }
+      await submitWrite("/api/jobs", "PUT", { jobId: job.id, lineItems: lines });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save materials");
@@ -450,16 +423,7 @@ function JobCard({
   const changeStatus = async (status: string) => {
     setActioning(true);
     try {
-      if (navigator.onLine) {
-        const res = await fetch("/api/jobs", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jobId: job.id, status }),
-        });
-        if (!res.ok) throw new Error("Failed to update job status");
-      } else {
-        await addToSyncQueue("/api/jobs", "PUT", { jobId: job.id, status });
-      }
+      await submitWrite("/api/jobs", "PUT", { jobId: job.id, status });
       onRefresh();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to update status");
@@ -650,17 +614,17 @@ export default function FieldPage() {
   };
 
   const processSync = async () => {
-    if (!navigator.onLine) return;
     try {
-      const q = await getSyncQueue();
-      if (q.length === 0) return;
-      for (const op of q) {
-        const res = await fetch(op.url, { method: op.method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(op.body) });
-        if (res.ok) await removeFromSyncQueue(op.id!);
-      }
+      const { synced, stuck, stopped } = await drainSyncQueue();
+      if (synced === 0 && stuck === 0) return;
       checkSyncStatus();
       if (tech) loadJobs(tech.id);
-      showToast("Background sync completed. All changes saved to server.");
+      showToast(
+        stopped === "complete" && stuck === 0
+          ? "Background sync completed. All changes saved to server."
+          : `Synced ${synced} change${synced === 1 ? "" : "s"}. ${stuck > 0 ? `${stuck} need${stuck === 1 ? "s" : ""} attention.` : "The rest are still queued."}`,
+        stuck > 0
+      );
     } catch (err) {
       console.error("Sync failed", err);
     }
@@ -673,6 +637,11 @@ export default function FieldPage() {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     checkSyncStatus();
+
+    // Drain on mount, not just on an online event: if the server was down while
+    // the device kept its connection, no online event ever fires and queued
+    // writes would otherwise sit here indefinitely.
+    processSync();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(console.error);

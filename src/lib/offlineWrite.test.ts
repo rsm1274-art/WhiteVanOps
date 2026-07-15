@@ -1,11 +1,12 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { submitWrite, drainSyncQueue, classifyRejection } from "@/lib/offlineWrite";
-import { addToSyncQueue, getSyncQueue, removeFromSyncQueue } from "@/lib/idb";
+import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck } from "@/lib/idb";
 
 vi.mock("@/lib/idb", () => ({
   addToSyncQueue: vi.fn(),
   getSyncQueue: vi.fn(),
   removeFromSyncQueue: vi.fn(),
+  moveToStuck: vi.fn(),
 }));
 
 describe("submitWrite", () => {
@@ -136,7 +137,7 @@ describe("drainSyncQueue", () => {
     const result = await drainSyncQueue();
 
     // Assert
-    expect(result).toEqual({ synced: 0, remaining: 0, stopped: "complete" });
+    expect(result).toEqual({ synced: 0, stuck: 0, remaining: 0, stopped: "complete" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -150,7 +151,7 @@ describe("drainSyncQueue", () => {
     const result = await drainSyncQueue();
 
     // Assert
-    expect(result).toEqual({ synced: 2, remaining: 0, stopped: "complete" });
+    expect(result).toEqual({ synced: 2, stuck: 0, remaining: 0, stopped: "complete" });
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ status: "InProgress" });
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ status: "Complete" });
     expect(removeFromSyncQueue).toHaveBeenNthCalledWith(1, 1);
@@ -169,7 +170,7 @@ describe("drainSyncQueue", () => {
     const result = await drainSyncQueue();
 
     // Assert
-    expect(result).toEqual({ synced: 1, remaining: 0, stopped: "complete" });
+    expect(result).toEqual({ synced: 1, stuck: 0, remaining: 0, stopped: "complete" });
     expect(removeFromSyncQueue).toHaveBeenCalledWith(1);
   });
 
@@ -188,23 +189,94 @@ describe("drainSyncQueue", () => {
     const result = await drainSyncQueue();
 
     // Assert
-    expect(result).toEqual({ synced: 1, remaining: 2, stopped: "unreachable" });
+    expect(result).toEqual({ synced: 1, stuck: 0, remaining: 2, stopped: "unreachable" });
     expect(removeFromSyncQueue).toHaveBeenCalledTimes(1);
     expect(removeFromSyncQueue).toHaveBeenCalledWith(1);
   });
 
-  test("stops without removing when the server rejects an op, keeping later ops behind it", async () => {
-    // Arrange — a reachable server refusing one op must not let subsequent ops
-    // for the same job overtake it and apply out of order.
-    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 })]);
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 400 }));
+  test("quarantines a permanently-rejected op and continues draining the rest", async () => {
+    // Arrange — op 1 targets a deleted job (404); ops 2 and 3 are fine. One
+    // dead record must not freeze the good ones behind it.
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 }), op(3, { c: 3 })]);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: "Job not found" }) })
+        .mockResolvedValue({ ok: true })
+    );
 
     // Act
     const result = await drainSyncQueue();
 
     // Assert
-    expect(result).toEqual({ synced: 0, remaining: 2, stopped: "rejected" });
+    expect(result).toEqual({ synced: 2, stuck: 1, remaining: 0, stopped: "complete" });
+    expect(moveToStuck).toHaveBeenCalledWith(op(1, { a: 1 }), { status: 404, message: "Job not found" });
+    expect(removeFromSyncQueue).toHaveBeenCalledWith(2);
+    expect(removeFromSyncQueue).toHaveBeenCalledWith(3);
+    expect(removeFromSyncQueue).not.toHaveBeenCalledWith(1);
+  });
+
+  test("falls back to a generic quarantine message when the rejection has no JSON body", async () => {
+    // Arrange
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 })]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        json: async () => { throw new SyntaxError("Unexpected end of JSON input"); },
+      })
+    );
+
+    // Act
+    const result = await drainSyncQueue();
+
+    // Assert
+    expect(result).toEqual({ synced: 0, stuck: 1, remaining: 0, stopped: "complete" });
+    expect(moveToStuck).toHaveBeenCalledWith(op(1, { a: 1 }), { status: 422, message: "Request failed (422)" });
+  });
+
+  test("stops without quarantining when the session has expired, keeping every op queued", async () => {
+    // Arrange — 401 means the cookie is bad, not the data. Quarantining here
+    // would invite a tech to discard real work over a login prompt.
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 })]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }));
+
+    // Act
+    const result = await drainSyncQueue();
+
+    // Assert
+    expect(result).toEqual({ synced: 0, stuck: 0, remaining: 2, stopped: "auth" });
+    expect(moveToStuck).not.toHaveBeenCalled();
     expect(removeFromSyncQueue).not.toHaveBeenCalled();
+  });
+
+  test("stops and holds the queue on a transient rejection", async () => {
+    // Arrange — a 500 might succeed next attempt; op 2 must wait behind op 1
+    // so same-job edits can't apply out of order.
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 })]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }));
+
+    // Act
+    const result = await drainSyncQueue();
+
+    // Assert
+    expect(result).toEqual({ synced: 0, stuck: 0, remaining: 2, stopped: "retry" });
+    expect(moveToStuck).not.toHaveBeenCalled();
+  });
+
+  test("treats an unknown status as transient — keep the data, don't interrupt the tech", async () => {
+    // Arrange
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 })]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 418, json: async () => ({}) }));
+
+    // Act
+    const result = await drainSyncQueue();
+
+    // Assert
+    expect(result).toEqual({ synced: 0, stuck: 0, remaining: 1, stopped: "retry" });
+    expect(moveToStuck).not.toHaveBeenCalled();
   });
 });
 
