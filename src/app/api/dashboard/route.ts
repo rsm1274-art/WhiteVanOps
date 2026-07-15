@@ -22,6 +22,7 @@ export async function GET() {
       maintenanceLogs,
       recurringJobTemplates,
       invoices,
+      syncReviewItems,
     ] = await Promise.all([
       prisma.client.findMany({
         orderBy: { name: "asc" },
@@ -117,6 +118,11 @@ export async function GET() {
             orderBy: { createdAt: "desc" },
           })
         : Promise.resolve([]),
+      prisma.syncReviewItem.findMany({
+        where: { status: "Open" },
+        include: { personnel: { select: { firstName: true, lastName: true } } },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
 
     return NextResponse.json({
@@ -135,6 +141,7 @@ export async function GET() {
       timeEntries,
       maintenanceLogs,
       recurringJobTemplates,
+      syncReviewItems,
       invoices,
     });
   } catch (error) {

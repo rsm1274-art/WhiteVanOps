@@ -306,6 +306,23 @@ export interface DashboardData {
   timeEntries: TimeEntry[];
   maintenanceLogs: MaintenanceLog[];
   recurringJobTemplates: RecurringJobTemplate[];
+  /** Field-sync records handed to the office by techs. Open items only. */
+  syncReviewItems: SyncReviewItemData[];
+}
+
+export interface SyncReviewItemData {
+  id: string;
+  personnelId: string | null;
+  personnel: { firstName: string; lastName: string } | null;
+  url: string;
+  method: string;
+  body: Record<string, unknown>;
+  queuedAt: string;
+  rejectedAt: string;
+  rejectionStatus: number;
+  rejectionMessage: string;
+  status: string;
+  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -423,6 +440,7 @@ export type ModalType =
   | "editFollowUp"
   | "addInvoice"
   | "recordPayment"
+  | "syncReview"
   | null;
 
 // ---------------------------------------------------------------------------
