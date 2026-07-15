@@ -14,9 +14,19 @@ const nextConfig: NextConfig = {
   // "the whole project" into .next/standalone. Without these excludes that
   // includes dist-electron/ (previous multi-GB installers — each build would
   // swallow the last one's output until NSIS dies on a >2GB archive), the
-  // pgsql/ binaries (bundled separately via extraResources), and pg_data/.
+  // pgsql/ + pgsql-linux/ binaries (bundled separately via extraResources),
+  // pg_data/, the multi-GB Linux build tarballs under "Linux builds/", and the
+  // postgres-linux.tar.gz staging tarball at the project root.
   outputFileTracingExcludes: {
-    "*": ["./dist-electron/**", "./pgsql/**", "./pg_data/**", "./node_modules/.cache/**"],
+    "*": [
+      "./dist-electron/**",
+      "./pgsql/**",
+      "./pgsql-linux/**",
+      "./pg_data/**",
+      "./Linux builds/**",
+      "./postgres-linux.tar.gz",
+      "./node_modules/.cache/**",
+    ],
   },
 };
 
