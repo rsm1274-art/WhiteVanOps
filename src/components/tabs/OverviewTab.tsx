@@ -7,9 +7,10 @@ import { getAlerts } from "@/lib/alerts";
 
 interface Props {
   data: DashboardData;
+  onOpenSyncReview: () => void;
 }
 
-export default function OverviewTab({ data }: Props) {
+export default function OverviewTab({ data, onOpenSyncReview }: Props) {
   const activeVans = data.vehicles.filter((v) => v.status === "Active").length;
   const inMaintenanceVans = data.vehicles.filter((v) => v.status === "In Maintenance").length;
 
@@ -34,6 +35,22 @@ export default function OverviewTab({ data }: Props) {
 
   return (
     <div className="space-y-8">
+      {data.syncReviewItems.length > 0 && (
+        <button
+          onClick={onOpenSyncReview}
+          className="w-full text-left p-4 bg-amber-50 border border-amber-300 rounded flex items-center justify-between"
+        >
+          <div>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Field Sync Review</span>
+            <p className="text-sm text-amber-800 mt-0.5">
+              {data.syncReviewItems.length} record{data.syncReviewItems.length === 1 ? "" : "s"} from field techs need
+              {data.syncReviewItems.length === 1 ? "s" : ""} office review.
+            </p>
+          </div>
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Review →</span>
+        </button>
+      )}
+
       {/* KPI scorecards */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
         <Scorecard

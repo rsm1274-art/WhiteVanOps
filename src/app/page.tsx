@@ -58,6 +58,7 @@ import AddClientNoteModal from "@/components/modals/AddClientNoteModal";
 import FollowUpModal from "@/components/modals/FollowUpModal";
 import AddInvoiceModal from "@/components/modals/AddInvoiceModal";
 import RecordPaymentModal from "@/components/modals/RecordPaymentModal";
+import SyncReviewModal from "@/components/modals/SyncReviewModal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
 import NotificationBell from "@/components/shared/NotificationBell";
 
@@ -147,6 +148,7 @@ export default function Dashboard() {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedFollowUp, setSelectedFollowUp] = useState<ClientFollowUp | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [invoiceMode, setInvoiceMode] = useState<"scratch" | "job">("scratch");
 
   // If the license is downgraded/expires, render Overview instead of a
   // now-hidden Plus tab (derived during render — no effect needed).
@@ -353,6 +355,33 @@ export default function Dashboard() {
       handleSuccess("Job completed! Van inventory updated.");
     } catch (err: unknown) {
       handleError(err instanceof Error ? err.message : "Failed to complete job");
+    }
+  };
+
+  const requestReopenJob = (jobId: string) => {
+    setConfirm({
+      title: "Re-open Job",
+      message:
+        "Are you sure you want to re-open this job? This will set status to In Progress and reverse any material inventory deductions.",
+      onConfirm: () => {
+        setConfirm(null);
+        reopenJob(jobId);
+      },
+    });
+  };
+
+  const reopenJob = async (jobId: string) => {
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId, status: "In Progress" }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to re-open job");
+      handleSuccess("Job is now In Progress. Van inventory deductions reversed.");
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to re-open job");
     }
   };
 
@@ -733,6 +762,8 @@ export default function Dashboard() {
           </button>
           <a
             href="/field"
+            target="_blank"
+            rel="noopener noreferrer"
             className="flex items-center gap-2 px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-bold uppercase tracking-wide text-zinc-300 hover:text-white transition-colors w-full"
           >
             <Truck className="h-3.5 w-3.5" />
@@ -797,7 +828,9 @@ export default function Dashboard() {
 
         {/* Tab content */}
         <div className="flex-1 p-8 overflow-y-auto">
-          {effectiveTab === "overview" && <OverviewTab data={data} />}
+          {effectiveTab === "overview" && (
+            <OverviewTab data={data} onOpenSyncReview={() => setActiveModal("syncReview")} />
+          )}
 
           {effectiveTab === "crm" && (
             <CRMTab
@@ -811,6 +844,7 @@ export default function Dashboard() {
               onOpenResources={(job) => { setSelectedJob(job); setActiveModal("addParts"); }}
               onOpenCosts={(job) => { setSelectedJob(job); setActiveModal("jobCosts"); }}
               onEditJob={(job) => { setSelectedJob(job); setActiveModal("editJob"); }}
+              onReopenJob={requestReopenJob}
               onAddRecurringJob={() => setActiveModal("addRecurringJob")}
               onEditRecurringJob={(t) => { setSelectedRecurringJob(t); setActiveModal("editRecurringJob"); }}
               onGenerateRecurringJob={generateRecurringJob}
@@ -861,7 +895,7 @@ export default function Dashboard() {
           {effectiveTab === "invoicing" && plus && (
             <InvoicingTab
               data={data}
-              onAddInvoice={() => setActiveModal("addInvoice")}
+              onAddInvoice={(mode) => { setInvoiceMode(mode); setActiveModal("addInvoice"); }}
               onMarkSent={markInvoiceSent}
               onRecordPayment={(inv) => { setSelectedInvoice(inv); setActiveModal("recordPayment"); }}
               onVoidInvoice={requestVoidInvoice}
@@ -1048,6 +1082,7 @@ export default function Dashboard() {
       {activeModal === "addInvoice" && (
         <AddInvoiceModal
           data={data}
+          mode={invoiceMode}
           onClose={closeModal}
           onSuccess={handleSuccess}
           onError={handleError}
@@ -1056,6 +1091,15 @@ export default function Dashboard() {
       {activeModal === "recordPayment" && selectedInvoice && (
         <RecordPaymentModal
           invoice={selectedInvoice}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
+      )}
+      {activeModal === "syncReview" && (
+        <SyncReviewModal
+          items={data.syncReviewItems}
+          jobs={data.jobs}
           onClose={closeModal}
           onSuccess={handleSuccess}
           onError={handleError}
