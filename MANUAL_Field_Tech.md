@@ -210,6 +210,32 @@ If you need any of these done, contact your dispatcher or supervisor.
 
 ---
 
+## Working Offline
+
+The Field Module saves your changes to your phone's local storage, so you can continue logging time, notes, and materials even if the server is unreachable. When the server comes back online, all saved changes are sent automatically.
+
+### Entries that need attention
+
+Sometimes a change you saved offline can no longer be applied — for example the office
+cancelled or deleted the job it was for. When that happens, the app sets the entry
+aside instead of blocking your other changes, and an amber banner appears:
+**"N entries need attention."**
+
+Tap the banner to see each entry and choose what to do with it:
+
+- **Re-target** — save the entry to a different one of your jobs (for time, notes, and
+  materials; not available for status changes). The list only shows jobs assigned to
+  you — if the right job isn't there, use *Send to office*.
+- **Send to office** — hands the entry to the office. An administrator sees it on the
+  dashboard and can apply it to the right job.
+- **Discard** — deletes the entry from your device. The office always keeps a record
+  of exactly what was discarded, so nothing disappears silently.
+
+All three actions need the office server to be reachable. If it isn't, the entry
+simply stays on your device — nothing is lost.
+
+---
+
 ## Troubleshooting
 
 **I don't have login credentials.**

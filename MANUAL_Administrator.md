@@ -81,6 +81,26 @@ The home screen. Displays at-a-glance KPIs across all active operations:
 
 Use this tab to assess the state of the business at a glance each morning.
 
+### Field Sync Review
+
+When a field tech's offline change can no longer be applied (for example, the job it
+targeted was deleted) and the tech chooses **Send to office**, the record appears on
+the dashboard: the Overview tab shows a **Field Sync Review** card whenever there are
+open items. Clicking it opens the review modal, which shows for each record: which
+tech sent it, what it was (time entry, notes, materials, or status change), the full
+original payload, and why the server rejected it.
+
+For each record you can:
+
+- **Re-target** — apply the entry to any job in the system (not limited to the tech's
+  assignments), then the item is marked Resolved. Not available for status changes.
+- **Mark resolved** — use after re-entering the data manually through the normal tabs.
+- **Dismiss** — close the item without applying it. Dismissals are recorded in the
+  audit log.
+
+Discarded (rather than handed-off) entries never appear here, but their full payloads
+are preserved in the audit log (entity "StuckSyncOp") and can be re-entered manually.
+
 ---
 
 ## Module 2: Clients & Jobs Ledger
