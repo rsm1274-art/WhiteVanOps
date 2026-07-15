@@ -121,6 +121,7 @@ model Personnel {
   recurringAssignments RecurringJobPersonnel[]
   followUps           ClientFollowUp[]
   user                User?
+  syncReviewItems     SyncReviewItem[]
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 }
@@ -378,6 +379,26 @@ model AuditLog {
   entityId  String
   details   String?  // JSON
   createdAt DateTime @default(now())
+}
+
+// Field-sync records handed off to the office when a tech can't resolve a
+// permanently-rejected offline write. Ships to every install — not Plus-gated.
+model SyncReviewItem {
+  id               String     @id @default(cuid())
+  personnelId      String?
+  personnel        Personnel? @relation(fields: [personnelId], references: [id])
+  userId           String
+  url              String
+  method           String
+  body             Json
+  queuedAt         DateTime
+  rejectedAt       DateTime
+  rejectionStatus  Int
+  rejectionMessage String
+  status           String     @default("Open") // "Open" | "Resolved" | "Dismissed"
+  resolvedById     String?
+  resolvedAt       DateTime?
+  createdAt        DateTime   @default(now())
 }
 
 model TimeEntry {
