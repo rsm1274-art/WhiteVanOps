@@ -753,7 +753,11 @@ export default function FieldPage() {
     setTimeout(() => setToast(null), 5000);
   };
 
+  const isDrainingRef = useRef(false);
+
   const processSync = async () => {
+    if (isDrainingRef.current) return;
+    isDrainingRef.current = true;
     try {
       const { synced, stuck, stopped } = await drainSyncQueue();
       if (stopped === "auth") {
@@ -774,6 +778,8 @@ export default function FieldPage() {
       }
     } catch (err) {
       console.error("Sync failed", err);
+    } finally {
+      isDrainingRef.current = false;
     }
   };
 
