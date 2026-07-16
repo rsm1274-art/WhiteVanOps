@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Save, Server, AlertCircle, BadgeCheck, Building2 } from "lucide-react";
 import { formatDate } from "@/lib/dateUtils";
 import { TrialUnlockForm } from "@/components/trial/TrialUnlockForm";
+import { DataImportSection } from "@/components/settings/DataImportSection";
 
 interface LicenseResponse {
   tier: "base" | "plus";
@@ -601,6 +602,10 @@ export default function SettingsTab({
           </div>
         </div>
       </div>
+
+      {isSuperuser && (
+        <DataImportSection onShowToast={onShowToast} />
+      )}
     </div>
   );
 }

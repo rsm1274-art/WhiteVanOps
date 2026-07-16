@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
 const { ensurePostgres } = require('./postgres');
@@ -32,8 +33,10 @@ if (!isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), 'whitevanops', 'profile'));
 }
 // In dev, electron-dev.js starts next dev and passes the port via env var.
-// In production, the standalone server always uses 3000.
-const PORT = isDev ? (parseInt(process.env.ELECTRON_DEV_PORT, 10) || 3000) : 3000;
+// In production, the standalone server prefers 3000 but falls back to the
+// next free port when a foreign app (e.g. a Docker container publishing
+// 3000) already holds it — see startServer(). Mutable for that reason only.
+let PORT = isDev ? (parseInt(process.env.ELECTRON_DEV_PORT, 10) || 3000) : 3000;
 
 let mainWindow;
 let loadingWindow;
@@ -54,12 +57,51 @@ function waitForServer(retries = 60) {
   });
 }
 
-function isServerUp() {
+// True only when the listener on `port` is actually a WhiteVanOps server —
+// identified by GET /api/health returning { app: "whitevanops" }. A bare
+// "something answered" check is not enough: any other product publishing the
+// same port (2026-07-14: an Open WebUI Docker container on 3000) would be
+// mistaken for our PM2 server and loaded straight into the app window.
+function isWvoServer(port) {
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${PORT}`, () => resolve(true));
+    const req = http.get(`http://localhost:${port}/api/health`, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        resolve(false);
+        return;
+      }
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(body).app === 'whitevanops');
+        } catch {
+          resolve(false);
+        }
+      });
+      res.on('error', () => resolve(false));
+    });
     req.on('error', () => resolve(false));
-    req.setTimeout(500, () => { req.destroy(); resolve(false); });
+    req.setTimeout(1500, () => { req.destroy(); resolve(false); });
   });
+}
+
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port);
+  });
+}
+
+const PORT_SCAN_LIMIT = 100;
+
+async function findFreePort(start) {
+  for (let port = start; port < start + PORT_SCAN_LIMIT; port++) {
+    if (await isPortFree(port)) return port;
+  }
+  throw new Error(`No free port found between ${start} and ${start + PORT_SCAN_LIMIT - 1}.`);
 }
 
 async function startServer() {
@@ -68,12 +110,17 @@ async function startServer() {
     return;
   }
 
-  // If a server is already serving this port (e.g. the always-on PM2
-  // field-tech service `whitevanops`), reuse it — two servers cannot bind the
-  // same port, and booting a second one here just stalls startup. Only spin up
-  // our own inline standalone server when nothing is already answering.
-  if (await isServerUp()) {
+  // If a WhiteVanOps server is already serving this port (e.g. the always-on
+  // PM2 field-tech service `whitevanops`), reuse it — two servers cannot bind
+  // the same port, and booting a second one here just stalls startup. The
+  // /api/health identity check keeps us from adopting a foreign app that
+  // happens to hold 3000; in that case, fall back to the next free port.
+  if (await isWvoServer(PORT)) {
     return;
+  }
+  if (!(await isPortFree(PORT))) {
+    PORT = await findFreePort(PORT + 1);
+    console.warn(`[startup] Port 3000 is held by another application; using port ${PORT} instead.`);
   }
 
   // Start (and on first run, initialize) the bundled PostgreSQL server.

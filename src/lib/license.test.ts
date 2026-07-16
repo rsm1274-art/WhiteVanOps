@@ -423,17 +423,18 @@ describe("getLicense with cryptographic validation", () => {
     vi.mocked(prisma.license.update).mockResolvedValue({
       id: LICENSE_ROW_ID,
       tier: "plus",
-      licenseKey: "PRE-ACTIVATED-PLUS-BUILD",
-      notes: "Activated via Plus Installer Build",
+      licenseKey: "TRIAL-ACTIVE",
+      notes: "30-Day Evaluation Period",
       activatedAt: new Date(),
-      expiresAt: null,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
     const license = await getLicense();
     expect(license.tier).toBe("plus");
-    expect(license.notes).toBe("Activated via Plus Installer Build");
+    expect(license.licenseKey).toBe("TRIAL-ACTIVE");
+    expect(license.notes).toBe("30-Day Evaluation Period");
   });
 
   it("ignores a trial-unlock.json signed for a different machine and self-heals a tampered plus DB row to base", async () => {

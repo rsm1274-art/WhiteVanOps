@@ -10,6 +10,7 @@ import {
   verifyTrialUnlock,
   TrialUnlockPayload,
 } from "./licenseCrypto";
+import { getTrialStatus } from "./trial";
 
 // ---------------------------------------------------------------------------
 // License tier gating (Base vs Plus). Mirrors the requireRole shape in
@@ -202,6 +203,13 @@ export async function getLicense(): Promise<LicenseState> {
     targetNotes = trialUnlock.notes;
     targetExpires = trialUnlock.expiresAt ? new Date(trialUnlock.expiresAt) : null;
     targetActivated = row.activatedAt || new Date();
+  } else if (process.env.WVO_IS_TRIAL === "true" && defaultTier === "plus") {
+    const trialStatus = getTrialStatus();
+    targetTier = "plus";
+    targetKey = "TRIAL-ACTIVE";
+    targetNotes = "30-Day Evaluation Period";
+    targetExpires = trialStatus.installedAt ? new Date(new Date(trialStatus.installedAt).getTime() + 30 * 24 * 60 * 60 * 1000) : null;
+    targetActivated = trialStatus.installedAt ? new Date(trialStatus.installedAt) : (row.activatedAt || new Date());
   } else if (defaultTier === "plus") {
     targetTier = "plus";
     targetKey = "PRE-ACTIVATED-PLUS-BUILD";

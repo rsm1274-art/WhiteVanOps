@@ -4,6 +4,10 @@ import { jwtVerify } from "jose";
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
+  // Identity probe for electron/main.js's reuse-or-boot port check — must
+  // answer 200 without a session or the probe can't tell this server from a
+  // foreign app squatting on port 3000 (see src/app/api/health/route.ts)
+  "/api/health",
   // Brand assets + PWA install files must load without a session
   "/logo.png",
   "/logo.svg",

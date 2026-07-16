@@ -48,20 +48,32 @@ function parseEnvFile(file) {
 
 function ensureEnvLocal(nextjsDir) {
   const envPath = path.join(nextjsDir, '.env.local');
-  if (fs.existsSync(envPath)) return parseEnvFile(envPath);
+  let env = {};
+  if (fs.existsSync(envPath)) {
+    env = parseEnvFile(envPath);
+  }
 
-  // Generic build with no bundled credentials: generate unique ones so every
-  // install gets its own SESSION_SECRET and database password.
-  const dbPassword = crypto.randomBytes(18).toString('hex');
-  const sessionSecret = crypto.randomBytes(48).toString('hex');
-  const databaseUrl = `postgresql://wvo_user:${dbPassword}@localhost:5433/white_van_ops?schema=public`;
-  fs.writeFileSync(
-    envPath,
-    `DATABASE_URL="${databaseUrl}"\nSESSION_SECRET="${sessionSecret}"\n`,
-    { mode: 0o600 }
-  );
-  log('Generated .env.local with fresh credentials.');
-  return { DATABASE_URL: databaseUrl, SESSION_SECRET: sessionSecret };
+  let modified = false;
+  if (!env.DATABASE_URL) {
+    const dbPassword = crypto.randomBytes(18).toString('hex');
+    env.DATABASE_URL = `postgresql://wvo_user:${dbPassword}@localhost:5433/white_van_ops?schema=public`;
+    modified = true;
+  }
+  if (!env.SESSION_SECRET) {
+    env.SESSION_SECRET = crypto.randomBytes(48).toString('hex');
+    modified = true;
+  }
+
+  if (modified) {
+    let content = '';
+    for (const [k, v] of Object.entries(env)) {
+      content += `${k}="${v}"\n`;
+    }
+    fs.writeFileSync(envPath, content, { mode: 0o600 });
+    log('Updated env.local with generated credentials.');
+  }
+
+  return env;
 }
 
 function run(exe, args, extraEnv) {
@@ -83,9 +95,45 @@ function runDetachedIo(exe, args, extraEnv) {
   });
 }
 
+// Helper function to run sql on a target database using node pg client
+async function executeSql(port, user, password, dbName, sql) {
+  const { Client } = require('pg');
+  const client = new Client({
+    host: '127.0.0.1',
+    port,
+    user,
+    password,
+    database: dbName,
+  });
+  await client.connect();
+  try {
+    await client.query(sql);
+  } finally {
+    await client.end();
+  }
+}
+
+// Helper to create the application database
+async function createDatabase(port, user, password, dbName) {
+  const { Client } = require('pg');
+  const client = new Client({
+    host: '127.0.0.1',
+    port,
+    user,
+    password,
+    database: 'postgres',
+  });
+  await client.connect();
+  try {
+    await client.query(`CREATE DATABASE "${dbName}";`);
+  } finally {
+    await client.end();
+  }
+}
+
 // Bootstrap the initial superuser directly over SQL. Prisma generates cuid
 // ids client-side, so we must supply id and updatedAt ourselves.
-function bootstrapAdmin(psql, connArgs, env, nextjsDir) {
+async function bootstrapAdmin(port, user, password, dbName, nextjsDir) {
   // bcryptjs is a production dependency, so electron-builder packs it into
   // app.asar — plain require resolves it there. The standalone-bundle path is
   // a fallback for running outside the packaged app (dev/testing).
@@ -101,14 +149,35 @@ function bootstrapAdmin(psql, connArgs, env, nextjsDir) {
     `INSERT INTO "User" ("id","username","passwordHash","displayName","role","mustChangePassword","updatedAt") ` +
     `VALUES ('${id}','admin','${hash}','Administrator','superuser',true,NOW()) ` +
     `ON CONFLICT ("username") DO NOTHING;`;
-  run(psql, [...connArgs, '-v', 'ON_ERROR_STOP=1', '-c', sql], env);
+  await executeSql(port, user, password, dbName, sql);
   log('Bootstrapped admin superuser (admin/admin, forced password change).');
+}
+
+async function testDbConnection(port, user, password, dbName) {
+  const { Client } = require('pg');
+  const client = new Client({
+    host: '127.0.0.1',
+    port,
+    user,
+    password,
+    database: dbName,
+  });
+  try {
+    await client.connect();
+    await client.query('SELECT 1;');
+    await client.end();
+    return true;
+  } catch (err) {
+    try { await client.end(); } catch (e) {}
+    return false;
+  }
 }
 
 async function ensurePostgres({ resourcesPath }) {
   const nextjsDir = path.join(resourcesPath, 'nextjs');
   const pgDir = path.join(resourcesPath, 'pgsql');
   const schemaFile = path.join(resourcesPath, 'db', 'schema.sql');
+  const envPath = path.join(nextjsDir, '.env.local');
 
   const env = ensureEnvLocal(nextjsDir);
   if (!env.DATABASE_URL) {
@@ -118,7 +187,7 @@ async function ensurePostgres({ resourcesPath }) {
 
   const url = new URL(env.DATABASE_URL);
   const host = url.hostname;
-  const port = parseInt(url.port, 10) || 5432;
+  let port = parseInt(url.port, 10) || 5432;
   const user = decodeURIComponent(url.username);
   const password = decodeURIComponent(url.password);
   const dbName = url.pathname.replace(/^\//, '') || 'white_van_ops';
@@ -127,11 +196,11 @@ async function ensurePostgres({ resourcesPath }) {
     log(`DATABASE_URL points at ${host} — external database, not managed.`);
     return { managed: false };
   }
-  if (await isPortInUse(port)) {
-    log(`Port ${port} already has a listener — reusing the existing database server.`);
-    return { managed: false };
-  }
-  if (!fs.existsSync(path.join(pgDir, 'bin', 'pg_ctl.exe'))) {
+
+  const isWin = process.platform === 'win32';
+  const pgCtlName = isWin ? 'pg_ctl.exe' : 'pg_ctl';
+
+  if (!fs.existsSync(path.join(pgDir, 'bin', pgCtlName))) {
     // We are the only thing that could provide a database here (localhost URL,
     // nothing listening) — silently continuing would boot a web server whose
     // every query fails with "Failed to load dashboard data". Fail loudly so
@@ -145,9 +214,9 @@ async function ensurePostgres({ resourcesPath }) {
     );
   }
 
-  const bin = (exe) => path.join(pgDir, 'bin', `${exe}.exe`);
+  const bin = (exe) => path.join(pgDir, 'bin', isWin ? `${exe}.exe` : exe);
   const dataDir = path.join(
-    process.env.APPDATA || os.homedir(),
+    (!isWin && os.homedir()) || process.env.APPDATA || os.homedir(),
     'whitevanops',
     'pgdata'
   );
@@ -156,6 +225,41 @@ async function ensurePostgres({ resourcesPath }) {
   // succeeded — a failed first run is wiped and retried on next launch.
   const sentinel = path.join(path.dirname(dataDir), 'bootstrap-complete');
   const firstRun = !fs.existsSync(sentinel);
+
+  let portCollision = false;
+  if (await isPortInUse(port)) {
+    if (firstRun) {
+      log(`Port ${port} is in use on first run; assuming collision.`);
+      portCollision = true;
+    } else {
+      const canConnect = await testDbConnection(port, user, password, dbName);
+      if (canConnect) {
+        log(`Port ${port} already has our database running — reusing the existing database server.`);
+        return { managed: false };
+      } else {
+        log(`Port ${port} is in use but database is unreachable/foreign; assuming collision.`);
+        portCollision = true;
+      }
+    }
+  }
+
+  if (portCollision) {
+    let freePort = port + 1;
+    while (await isPortInUse(freePort)) {
+      freePort++;
+    }
+    log(`Found free database port: ${freePort}. Updating DATABASE_URL.`);
+    port = freePort;
+    url.port = String(freePort);
+    env.DATABASE_URL = url.toString();
+
+    // Write updated env back to .env.local
+    let content = '';
+    for (const [k, v] of Object.entries(env)) {
+      content += `${k}="${v}"\n`;
+    }
+    fs.writeFileSync(envPath, content, { mode: 0o600 });
+  }
 
   if (firstRun && fs.existsSync(dataDir)) {
     log('Previous incomplete bootstrap detected — starting over.');
@@ -190,15 +294,13 @@ async function ensurePostgres({ resourcesPath }) {
     'start',
   ]);
 
-  const pgEnv = { PGPASSWORD: password };
-  const connArgs = ['-h', '127.0.0.1', '-p', String(port), '-U', user];
-
   if (firstRun) {
     try {
       log(`Creating database "${dbName}" and applying schema ...`);
-      run(bin('createdb'), [...connArgs, dbName], pgEnv);
-      run(bin('psql'), [...connArgs, '-d', dbName, '-v', 'ON_ERROR_STOP=1', '-f', schemaFile], pgEnv);
-      bootstrapAdmin(bin('psql'), [...connArgs, '-d', dbName], pgEnv, nextjsDir);
+      await createDatabase(port, user, password, dbName);
+      const schemaSql = fs.readFileSync(schemaFile, 'utf8');
+      await executeSql(port, user, password, dbName, schemaSql);
+      await bootstrapAdmin(port, user, password, dbName, nextjsDir);
       fs.writeFileSync(sentinel, new Date().toISOString());
     } catch (err) {
       // Roll back the half-initialized cluster so the next launch retries.

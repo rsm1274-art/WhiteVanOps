@@ -181,7 +181,8 @@ Jobs generated from a template show a small **Recurring** tag next to the client
 **Job actions available in this tab:**
 
 - **Start** — moves job from Scheduled to In Progress
-- **Complete** — moves job to Completed and deducts materials from the assigned van's stock. *This action requires confirmation and cannot be undone.*
+- **Complete** — moves job to Completed and deducts materials from the assigned van's stock. *This action requires confirmation.* If a job was completed by mistake, use **Re-open**.
+- **Re-open** — available on Completed jobs only. Sets the job back to In Progress and **reverses the van inventory deductions** that Complete made, so completing it again later deducts stock exactly once. *Requires confirmation.*
 - **Cancel** — cancels the job. *Requires confirmation.*
 - **Edit** — opens the Edit Job Details panel to change the client, assigned vehicle, scheduled date, or notes on a job. Available on Scheduled and In Progress jobs only; blocked once a job is Completed or Cancelled. Changing the vehicle or date re-runs the same double-booking and repair checks used when a job is first created — the save is rejected if it would conflict with another job, an active repair, or a technician's time off.
 - **Clone** — creates a new draft job pre-filled with the same client, vehicle, crew, and equipment. Useful for recurring service calls.
@@ -343,7 +344,12 @@ An internal accounts-receivable ledger with printable PDF invoices and payment t
 
 ### Creating an invoice
 
-Click **Create Invoice**. Select a client, and optionally one of that client's **completed jobs** to prefill line items from the job's materials. Add or edit line items freely (description, quantity, rate); the issue and due dates default from today and the client's payment terms. Invoice numbers (`INV-0001`, `INV-0002`, ...) are assigned automatically.
+There are two ways to create an invoice:
+
+- **Bill Completed Job** (the primary flow) — pick a **completed job that has not been invoiced yet**; jobs that already have an invoice don't appear in the list. The client is filled in automatically and the line items are prefilled from the job's materials.
+- **Create Manual Invoice** — start from a blank invoice for any client, with no job attached.
+
+In both flows you can add or edit line items freely (description, quantity, rate); the issue and due dates default from today and the client's payment terms. Invoice numbers (`INV-0001`, `INV-0002`, ...) are assigned automatically.
 
 ### Invoice lifecycle
 
@@ -380,6 +386,19 @@ Upgrading to Plus requires superuser access and a cryptographically signed licen
 2. **Obtain Upgrade Payload:** Send this key to your vendor to request a Plus Upgrade. They will provide a signed upgrade JSON payload.
 3. **Apply the Upgrade:** Paste the JSON block into the "Paste License Code" box, or upload the JSON file in the upload zone, and click **Apply Plus Upgrade**. Plus features will unlock instantly.
 4. **Downgrading:** A superuser can downgrade to the Base plan by clicking the **Downgrade to Base Plan** button and confirming. This removes Plus features but retains your data in the database.
+
+---
+
+## Settings: Onboarding Data Import (superuser only)
+
+The **Onboarding Data Import** section at the bottom of Settings imports a business's existing spreadsheets (clients, jobs, inventory, etc.) directly from the browser — the same engine as the command-line import described in the Setup & Installation manual §14, without needing terminal access.
+
+1. **Choose Files** — select one or more `.csv` or `.xlsx` files, then click **Analyze & Map**. The app inspects the files and proposes, for each file (or Excel sheet), which WhiteVanOps table it maps to and which column feeds which field.
+2. **Review the mapping** — expand each file card to correct the target entity, re-map or skip columns, and fill in **defaults** for any required fields your spreadsheet doesn't cover. If the analyzer found text categories it doesn't recognize (e.g. a status column with custom wording), a **Value Mapping** panel lets you translate each source value to an allowed one.
+3. **Dry Run (Validate)** — checks everything without writing to the database and shows a per-entity summary of planned, rejected, and skipped rows, with the reason for every rejection. Fix the mapping and re-validate until it passes.
+4. **Commit Import** — writes the data (requires confirmation). Two checkboxes control the run:
+   - **Wipe Transactional DB First** — clears existing operational data before importing. *Destructive — intended for a fresh install or a re-run of a failed onboarding, never a live database.*
+   - **Skip Rejected Rows** — imports the valid rows and leaves the rejected ones out, instead of refusing the whole run.
 
 ---
 

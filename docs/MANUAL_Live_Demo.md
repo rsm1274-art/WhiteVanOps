@@ -36,6 +36,7 @@
 ### Step 4: Closing & Questions (5 mins)
 - Remind them of the price: $250 one-time, or $500 for the white-glove installation where you set everything up for them.
 - Ask for the sale: *"Does this look like something that would simplify your dispatching tomorrow?"*
+- **Not ready to buy today?** Leave the Trial/Demo installer (`WhiteVanOps-Trial-Setup.exe`) so they can keep evaluating on their own — it runs the full Plus feature set for 30 days, then locks until they call you with a purchase decision. See `MANUAL_Setup_Installation.md` §6.4 for building it and converting a trial to a paid install.
 
 ---
 

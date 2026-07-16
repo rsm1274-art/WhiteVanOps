@@ -182,6 +182,7 @@ npm run electron:build:trial
 ```
 * **Output:** `dist-electron/WhiteVanOps-Trial-Setup.exe`
 * **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs on Plus for 30 days from that first launch. (This differs from a standard Base/Plus customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
+* **What the prospect sees:** during the trial, **Settings → License & Plan** shows the Plus plan with license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
 * **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen. A key generated for either `--tier base` or `--tier plus` (see below) unlocks the app running at that tier — a base key drops Plus features, a plus key keeps them.
 * **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
   ```bash
@@ -297,6 +298,7 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | Database connection refused | Port mismatch | Verify PostgreSQL is on port 5433 (or update DATABASE_URL to match your actual port) |
 | App unreachable from any device (laptop or phone) after a reboot | PM2's login-triggered startup means nothing restarts until someone logs into the server machine | Log into `MearHPLaptop`. PM2 should auto-resurrect both processes. If not, run `pm2 resurrect` manually, then `pm2 list` to confirm `whitevanops` and `whitevanops-db` both show `online`. |
 | Prisma errors with `code: 'ECONNREFUSED'` in PM2 logs (`pm2 logs whitevanops`) | The `whitevanops-db` PM2 process (the real Postgres instance) isn't running — do not assume it's the app itself that's broken | Run `pm2 list`. If `whitevanops-db` is missing or stopped, start it: `pm2 start "C:\Program Files\PostgreSQL\9.5\bin\postgres.exe" --name whitevanops-db -- -D "C:\Users\rober\Desktop\WhiteVanOps\pg_data" -p 5433` then `pm2 save`. Do **not** start either of the unrelated Windows PostgreSQL services (`postgresql-x64-9.5` on port 5432 is a separate legacy install) to "fix" this — they use different data directories and will not have the app's tables. |
+| App window shows a *different product's* login page (e.g. Open WebUI) — or did, on builds before 2026-07-14 | Another application (commonly a Docker container) is publishing port 3000; older builds treated any listener on 3000 as the WhiteVanOps server and loaded it into the window | Fixed in builds from 2026-07-14 on: the app now verifies the listener via `GET /api/health` and, if 3000 is held by a foreign app, automatically boots its own server on the next free port (3001+). No user action needed — just update to a current installer. Note for the office PM2 machine: after updating the desktop app, redeploy the PM2 `whitevanops` service too, or the desktop app will treat the older PM2 server (which lacks `/api/health`) as foreign and boot a redundant second server on 3001. |
 | "Unknown Publisher" warning on install | No code signing certificate | Safe to proceed for internal use — click "More info → Run anyway" |
 | Bundled database won't start / first launch fails repeatedly | Corrupted first-run initialization | A failed first run is wiped and retried automatically on next launch. Check `%APPDATA%\whitevanops\postgres.log`. To force a completely fresh database (destroys data!), delete `%APPDATA%\whitevanops\` and relaunch. |
 | Want to inspect the bundled database | — | Connect with any PostgreSQL client using the credentials in `<install dir>\resources\nextjs\.env.local` (port 5433 on 127.0.0.1, only while the app is running) |
@@ -370,6 +372,13 @@ CLI). Completed/cancelled job history is intentionally not imported.
 This section is for importing a brand-new customer's external spreadsheet
 data; if you're instead moving an existing WhiteVanOps installation and its
 database to new hardware, see §13 (Hardware Upgrades and Transfers).
+
+> **No terminal access needed on site:** the same import engine is also
+> available in the app itself under **Settings → Onboarding Data Import**
+> (superuser only) — upload the spreadsheets, review the proposed mapping,
+> dry-run, and commit from the browser. See the Administrator manual,
+> "Settings: Onboarding Data Import". The CLI flow below remains the
+> reference for scripted/off-machine onboarding.
 
 1. **Collect the data** into one folder as `.csv`/`.xlsx`. Convert PDFs or
    other FSM exports to spreadsheets first.

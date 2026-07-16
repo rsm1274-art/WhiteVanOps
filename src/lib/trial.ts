@@ -34,6 +34,7 @@ export interface TrialStatus {
   daysRemaining: number;
   isLocked: boolean;
   machineId: string | null;
+  installedAt?: string;
 }
 
 function getTrialAnchorPath(): string {
@@ -71,7 +72,20 @@ export function getTrialStatus(now: Date = new Date()): TrialStatus {
 
   const machineId = machineIdSync();
 
-  if (fs.existsSync(getTrialUnlockPath())) {
+  const unlockPath = getTrialUnlockPath();
+  let trialUnlocked = false;
+  if (fs.existsSync(unlockPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(unlockPath, "utf8"));
+      if (verifyTrialUnlock(data, machineId)) {
+        trialUnlocked = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (trialUnlocked) {
     return { isTrial: true, daysRemaining: 0, isLocked: false, machineId };
   }
 
@@ -95,7 +109,7 @@ export function getTrialStatus(now: Date = new Date()): TrialStatus {
     const daysRemaining = Math.max(0, Math.ceil((TRIAL_LENGTH_MS - elapsedMs) / (24 * 60 * 60 * 1000)));
     const isLocked = !sigValid || elapsedMs >= TRIAL_LENGTH_MS;
 
-    return { isTrial: true, daysRemaining, isLocked, machineId };
+    return { isTrial: true, daysRemaining, isLocked, machineId, installedAt: anchor.installedAt };
   } catch {
     // Corrupt/unreadable anchor (truncated JSON, disk error, etc). Fail
     // closed rather than let this throw out of the login route and 500 every

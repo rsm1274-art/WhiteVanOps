@@ -26,12 +26,13 @@ function termsToDays(terms: string): number {
 
 interface Props {
   data: DashboardData;
+  mode: "scratch" | "job";
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
 }
 
-export default function AddInvoiceModal({ data, onClose, onSuccess, onError }: Props) {
+export default function AddInvoiceModal({ data, mode, onClose, onSuccess, onError }: Props) {
   const today = todayLocalStr();
   const [clientId, setClientId] = useState("");
   const [jobId, setJobId] = useState("");
@@ -40,7 +41,11 @@ export default function AddInvoiceModal({ data, onClose, onSuccess, onError }: P
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ ...BLANK_LINE }]);
 
-  const clientJobs = data.jobs.filter((j) => j.clientId === clientId && j.status === "Completed");
+  // Filter completed jobs that do not currently have an invoice associated with them
+  const invoicedJobIds = new Set(data.invoices.map((inv) => inv.jobId).filter(Boolean));
+  const completedUninvoicedJobs = data.jobs.filter(
+    (j) => j.status === "Completed" && !invoicedJobIds.has(j.id)
+  );
 
   const selectClient = (id: string) => {
     setClientId(id);
@@ -49,18 +54,29 @@ export default function AddInvoiceModal({ data, onClose, onSuccess, onError }: P
     if (client) setDueDate(addDays(issueDate, termsToDays(client.paymentTerms)));
   };
 
-  // Prefill line items from the selected job's parts/materials
+  // Prefill line items and client info from the selected completed job
   const selectJob = (id: string) => {
     setJobId(id);
     const job = data.jobs.find((j) => j.id === id);
-    if (job && job.lineItems.length > 0) {
-      setLines(
-        job.lineItems.map((li) => ({
-          description: li.description || li.inventoryItem.name,
-          quantity: String(li.quantity),
-          rate: String(li.rate),
-        }))
-      );
+    if (job) {
+      setClientId(job.clientId);
+      const client = data.clients.find((c) => c.id === job.clientId);
+      if (client) setDueDate(addDays(issueDate, termsToDays(client.paymentTerms)));
+      
+      if (job.lineItems.length > 0) {
+        setLines(
+          job.lineItems.map((li) => ({
+            description: li.description || li.inventoryItem.name,
+            quantity: String(li.quantity),
+            rate: String(li.rate),
+          }))
+        );
+      } else {
+        setLines([{ ...BLANK_LINE }]);
+      }
+    } else {
+      setClientId("");
+      setLines([{ ...BLANK_LINE }]);
     }
   };
 
@@ -103,28 +119,45 @@ export default function AddInvoiceModal({ data, onClose, onSuccess, onError }: P
 
   return (
     <Modal onClose={onClose} maxWidth="xl">
-      <ModalHeader title="Create Invoice" subtitle="Internal AR ledger — independent of QuickBooks sync" onClose={onClose} />
+      <ModalHeader
+        title={mode === "scratch" ? "Create Manual Invoice" : "Bill Completed Job"}
+        subtitle="Internal AR ledger — independent of QuickBooks sync"
+        onClose={onClose}
+      />
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Client">
-            <select required value={clientId} onChange={(e) => selectClient(e.target.value)} className={selectCls}>
-              <option value="">— Select Client —</option>
-              {data.clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Prefill from Completed Job (Optional)">
-            <select value={jobId} onChange={(e) => selectJob(e.target.value)} disabled={!clientId} className={selectCls}>
-              <option value="">— None —</option>
-              {clientJobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  #{j.id.substring(0, 8)} — {dateToLocalStr(j.completionDate || j.scheduledDate)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        {mode === "scratch" ? (
+          <div className="grid grid-cols-1 gap-4">
+            <Field label="Client">
+              <select required value={clientId} onChange={(e) => selectClient(e.target.value)} className={selectCls}>
+                <option value="">— Select Client —</option>
+                {data.clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Select Completed Job">
+              <select required value={jobId} onChange={(e) => selectJob(e.target.value)} className={selectCls}>
+                <option value="">— Select Completed Job —</option>
+                {completedUninvoicedJobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    #{j.id.substring(0, 8)} — {j.client.name} — {dateToLocalStr(j.completionDate || j.scheduledDate)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Client">
+              <select disabled required value={clientId} className={`${selectCls} opacity-60`}>
+                <option value="">— Select Client —</option>
+                {data.clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Issue Date">

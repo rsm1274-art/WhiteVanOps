@@ -28,7 +28,7 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigi
 
 interface Props {
   data: DashboardData;
-  onAddInvoice: () => void;
+  onAddInvoice: (mode: "scratch" | "job") => void;
   onMarkSent: (invoice: Invoice) => void;
   onRecordPayment: (invoice: Invoice) => void;
   onVoidInvoice: (invoice: Invoice) => void;
@@ -68,13 +68,22 @@ export default function InvoicingTab({
             Internal accounts-receivable ledger with PDF invoices. Independent of the QuickBooks CSV export.
           </p>
         </div>
-        <button
-          onClick={onAddInvoice}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 text-white hover:bg-blue-800 text-xs font-bold uppercase tracking-wider rounded transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Create Invoice
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onAddInvoice("scratch")}
+            className="inline-flex items-center gap-1.5 px-3 py-2 border border-zinc-300 hover:bg-zinc-100 text-zinc-700 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create Manual Invoice
+          </button>
+          <button
+            onClick={() => onAddInvoice("job")}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-700 text-white hover:bg-blue-800 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Bill Completed Job
+          </button>
+        </div>
       </div>
 
       {/* AR summary */}

@@ -25,6 +25,7 @@ interface Props {
   onOpenResources: (job: Job) => void;
   onOpenCosts: (job: Job) => void;
   onEditJob: (job: Job) => void;
+  onReopenJob: (jobId: string) => void;
   onAddRecurringJob: () => void;
   onEditRecurringJob: (template: RecurringJobTemplate) => void;
   onGenerateRecurringJob: (template: RecurringJobTemplate) => void;
@@ -49,6 +50,7 @@ export default function CRMTab({
   onOpenResources,
   onOpenCosts,
   onEditJob,
+  onReopenJob,
   onAddRecurringJob,
   onEditRecurringJob,
   onGenerateRecurringJob,
@@ -423,6 +425,14 @@ export default function CRMTab({
                       >
                         <Copy className="h-3 w-3" />
                         Clone
+                      </button>
+
+                      <button
+                        onClick={() => onReopenJob(job.id)}
+                        className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide text-blue-700 hover:text-blue-900 rounded inline-flex items-center gap-1"
+                        title="Re-open this completed job"
+                      >
+                        Re-open
                       </button>
 
                       {job.status === "Scheduled" && (
