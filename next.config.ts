@@ -14,18 +14,27 @@ const nextConfig: NextConfig = {
   // "the whole project" into .next/standalone. Without these excludes that
   // includes dist-electron/ (previous multi-GB installers — each build would
   // swallow the last one's output until NSIS dies on a >2GB archive), the
-  // pgsql/ + pgsql-linux/ binaries (bundled separately via extraResources),
-  // pg_data/, the multi-GB Linux build tarballs under "Linux builds/", and the
-  // postgres-linux.tar.gz staging tarball at the project root.
+  // pgsql/ binaries (bundled separately via extraResources), and pg_data/.
+  //
+  // The second group is only ~5 MB, but it ships our TypeScript sources,
+  // internal handoff notes, and marketing copy to every customer. The
+  // standalone server runs the compiled output in .next/, so none of it is
+  // reachable at runtime.
   outputFileTracingExcludes: {
     "*": [
       "./dist-electron/**",
       "./pgsql/**",
-      "./pgsql-linux/**",
       "./pg_data/**",
-      "./Linux builds/**",
-      "./postgres-linux.tar.gz",
       "./node_modules/.cache/**",
+      "./src/**",
+      "./docs/**",
+      "./marketing/**",
+      "./prisma/**",
+      "./scripts/**",
+      "./*.md",
+      "./package-lock.json",
+      "./tsconfig.json",
+      "./tsconfig.tsbuildinfo",
     ],
   },
 };

@@ -133,14 +133,34 @@ class Upgrade {
 // ==========================================
 // TARGET: Full App Installer (Base or Plus)
 // ==========================================
-// Clean only the temporary build output directories/configs to preserve previously generated installers
-const winUnpacked = path.join(distElectron, 'win-unpacked');
-if (fs.existsSync(winUnpacked)) {
-  fs.rmSync(winUnpacked, { recursive: true, force: true });
+// Clean only the temporary build output to preserve previously generated
+// installers. Do NOT blanket-delete dist-electron/: the finished installers
+// live here, they are built one tier at a time (--base, then --plus, then
+// --trial), and WhiteVanOps-Plus-Upgrade.exe comes from the separate --upgrade
+// path that exits before packaging — a wipe would destroy artifacts this run
+// cannot rebuild.
+//
+const unpackedForTarget = path.join(distElectron, 'win-unpacked');
+if (fs.existsSync(unpackedForTarget)) {
+  fs.rmSync(unpackedForTarget, { recursive: true, force: true });
 }
-const builderConfig = path.join(distElectron, 'builder-effective-config.yaml');
-if (fs.existsSync(builderConfig)) {
-  fs.unlinkSync(builderConfig);
+
+// Disposable per-build metadata and staging artifacts. Each build drops a fresh
+// .blockmap/latest.yml, so these accumulate indefinitely; none of them ship.
+function isBuildRemnant(entry) {
+  return (
+    entry === 'builder-effective-config.yaml' ||
+    entry === 'builder-debug.yml' ||
+    entry === 'latest.yml' ||
+    entry === '.icon-set' ||
+    entry === '.icon-ico' ||
+    entry.endsWith('.blockmap')
+  );
+}
+if (fs.existsSync(distElectron)) {
+  for (const entry of fs.readdirSync(distElectron).filter(isBuildRemnant)) {
+    fs.rmSync(path.join(distElectron, entry), { recursive: true, force: true });
+  }
 }
 
 // 1. Build Next.js with fallback build-time env vars if missing, so compiler doesn't fail during static page generation
@@ -167,8 +187,10 @@ copyDir(
 // output. next.config.ts excludes these via outputFileTracingExcludes, but a
 // regression here is catastrophic — dist-electron/ holds previous multi-GB
 // installers, so one bad trace makes every later build bigger until NSIS
-// fails on a >2GB archive. Remove them unconditionally and loudly.
-for (const dir of ['dist-electron', 'pgsql', 'pg_data']) {
+// fails on a >2GB archive. src/, docs/ and marketing/ are small by comparison
+// but would ship our sources and internal notes to every customer. Remove them
+// unconditionally and loudly.
+for (const dir of ['dist-electron', 'pgsql', 'pg_data', 'src', 'docs', 'marketing']) {
   const p = path.join(standalone, dir);
   if (fs.existsSync(p)) {
     console.warn(`\nWARNING: file tracing pulled ${dir}/ into .next/standalone — pruning it. Check outputFileTracingExcludes in next.config.ts.`);
@@ -223,16 +245,59 @@ run('npx electron-builder --win');
 
 // 7b. Assert the packaged output actually contains the pieces electron-builder
 // is known to drop silently (missing extraResources sources, node_modules).
+const unpackedDir = 'win-unpacked';
 for (const rel of [
   ['resources', 'pgsql', 'bin', 'pg_ctl.exe'],
   ['resources', 'nextjs', 'node_modules', 'next'],
+  ['resources', 'app.asar'],
 ]) {
-  const p = path.join(distElectron, 'win-unpacked', ...rel);
+  const p = path.join(distElectron, unpackedDir, ...rel);
   if (!fs.existsSync(p)) {
     console.error(`\n❌ Error: packaged output is missing ${rel.join('/')} — the installer in dist-electron/ is broken, do not ship it.`);
     process.exit(1);
   }
 }
+
+// 7c. Assert app.asar still carries every module electron/*.js requires at
+// launch. electron-builder copies production dependencies only, so demoting one
+// of these to devDependencies in package.json yields an installer that dies
+// with "Cannot find module" on first launch — on the customer's machine, not
+// here. Everything else the app needs is resolved from resources/nextjs by the
+// Next.js server, which is why only these five stay in "dependencies".
+const ELECTRON_RUNTIME_MODULES = ['bcryptjs', 'firebase', 'node-cron', 'node-machine-id', 'pg'];
+
+// Parse the asar header: 16-byte pickle prefix, header length at offset 12.
+function asarTopLevelModules(asarPath) {
+  const fd = fs.openSync(asarPath, 'r');
+  try {
+    const prefix = Buffer.alloc(16);
+    fs.readSync(fd, prefix, 0, 16, 0);
+    const headerLen = prefix.readUInt32LE(12);
+    const headerBuf = Buffer.alloc(headerLen);
+    fs.readSync(fd, headerBuf, 0, headerLen, 16);
+    const header = JSON.parse(headerBuf.toString('utf8').replace(/\0+$/, ''));
+    return Object.keys((header.files && header.files.node_modules && header.files.node_modules.files) || {});
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+const asarPath = path.join(distElectron, unpackedDir, 'resources', 'app.asar');
+let bundledModules;
+try {
+  bundledModules = asarTopLevelModules(asarPath);
+} catch (err) {
+  console.error(`\n❌ Error: could not read the app.asar header (${err.message}) — cannot verify the installer, do not ship it.`);
+  process.exit(1);
+}
+const missingModules = ELECTRON_RUNTIME_MODULES.filter((m) => !bundledModules.includes(m));
+if (missingModules.length) {
+  console.error(`\n❌ Error: app.asar is missing Electron runtime dependencies: ${missingModules.join(', ')}`);
+  console.error('electron/*.js requires these at launch. Move them from "devDependencies" back to "dependencies" in package.json.\n');
+  process.exit(1);
+}
+const asarMb = (fs.statSync(asarPath).size / (1024 * 1024)).toFixed(0);
+console.log(`\nVerified app.asar (${asarMb} MB, ${bundledModules.length} modules) carries all ${ELECTRON_RUNTIME_MODULES.length} Electron runtime deps.`);
 
 // 8. Rename resulting installer file for clarity
 try {
@@ -252,4 +317,4 @@ try {
   console.warn('\nNote: Could not automatically rename the installer file:', err.message);
 }
 
-console.log('\nBuild complete. Installer is in dist-electron/.');
+console.log('\nBuild complete.');
