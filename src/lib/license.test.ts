@@ -277,8 +277,130 @@ describe("getLicense with cryptographic validation", () => {
     );
   });
 
-  it("bypasses files and activates plus when WVO_DEFAULT_TIER environment variable is plus", async () => {
+  // Regression: WVO_DEFAULT_TIER="plus" used to grant Plus outright. It was
+  // written by electron-build.js into resources/nextjs/.env.local — a plain
+  // text file on the customer's disk — so unlocking the paid tier was a
+  // one-word edit in Notepad, and the DB self-heal never fired because the env
+  // var satisfied the very check meant to catch tampering.
+  it("ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base", async () => {
     vi.stubEnv("WVO_DEFAULT_TIER", "plus");
+
+    // A real, correctly-signed Base activation — i.e. a paying Base customer
+    // who edited resources/nextjs/.env.local hoping to unlock Plus.
+    const baseKey = "WVO-BASE-CUSTOMER";
+    const sigBase = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id:base`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation(
+      (p: fs.PathLike) =>
+        p.toString().endsWith("license.json") && !p.toString().endsWith("plus_license.json")
+    );
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      if (p.toString().endsWith("license.json")) {
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", tier: "base", sig: sigBase });
+      }
+      throw new Error("File not found");
+    });
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "plus",
+      licenseKey: "PRE-ACTIVATED-PLUS-BUILD",
+      notes: "Activated via Plus Installer Build",
+      activatedAt: new Date(),
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    vi.mocked(prisma.license.update).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: "PRE-ACTIVATED-PLUS-BUILD",
+      notes: "Activated via Plus Installer Build",
+      activatedAt: null,
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const license = await getLicense();
+    expect(license.tier).toBe("base");
+    expect(prisma.license.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: LICENSE_ROW_ID },
+        data: expect.objectContaining({ tier: "base", activatedAt: null }),
+      })
+    );
+  });
+
+  it("activates plus from a license.json whose signed tier is plus", async () => {
+    const baseKey = "WVO-PLUS-KEY";
+    const sigBase = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id:plus`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation(
+      (p: fs.PathLike) =>
+        p.toString().endsWith("license.json") && !p.toString().endsWith("plus_license.json")
+    );
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      if (p.toString().endsWith("license.json")) {
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", tier: "plus", sig: sigBase });
+      }
+      throw new Error("File not found");
+    });
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.mocked(prisma.license.update).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "plus",
+      licenseKey: baseKey,
+      notes: "Activated via Plus license key",
+      activatedAt: new Date(),
+      expiresAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const license = await getLicense();
+    expect(license.tier).toBe("plus");
+    expect(license.licenseKey).toBe(baseKey);
+  });
+
+  // The tier is inside the signed payload, so promoting it by hand breaks the
+  // signature and the whole file is rejected — no Plus, and the install falls
+  // back to base rather than silently honouring the edit.
+  it("rejects a license.json whose tier was hand-edited from base to plus", async () => {
+    const baseKey = "WVO-BASE-KEY";
+    const sigForBase = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id:base`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation(
+      (p: fs.PathLike) =>
+        p.toString().endsWith("license.json") && !p.toString().endsWith("plus_license.json")
+    );
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      if (p.toString().endsWith("license.json")) {
+        // tier promoted to "plus", signature still the one minted for "base"
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", tier: "plus", sig: sigForBase });
+      }
+      throw new Error("File not found");
+    });
 
     vi.mocked(prisma.license.upsert).mockResolvedValue({
       id: LICENSE_ROW_ID,
@@ -291,32 +413,48 @@ describe("getLicense with cryptographic validation", () => {
       updatedAt: new Date(),
     });
 
-    vi.mocked(prisma.license.update).mockResolvedValue({
+    const license = await getLicense();
+    expect(license.tier).toBe("base");
+    expect(prisma.license.update).not.toHaveBeenCalled();
+  });
+
+  // Installs activated before the tier existed have no `tier` field and a
+  // signature over `key:machineId`. They must keep working, as base.
+  it("accepts a legacy untiered license.json and treats it as base", async () => {
+    const baseKey = "WVO-LEGACY-KEY";
+    const legacySig = crypto
+      .createHmac("sha256", LICENSE_SIGNING_SECRET)
+      .update(`${baseKey}:test-machine-id`)
+      .digest("hex");
+
+    vi.spyOn(fs, "existsSync").mockImplementation(
+      (p: fs.PathLike) =>
+        p.toString().endsWith("license.json") && !p.toString().endsWith("plus_license.json")
+    );
+    vi.spyOn(fs, "readFileSync").mockImplementation((p: any) => {
+      if (p.toString().endsWith("license.json")) {
+        return JSON.stringify({ key: baseKey, machineId: "test-machine-id", sig: legacySig });
+      }
+      throw new Error("File not found");
+    });
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
       id: LICENSE_ROW_ID,
-      tier: "plus",
-      licenseKey: "PRE-ACTIVATED-PLUS-BUILD",
-      notes: "Activated via Plus Installer Build",
-      activatedAt: new Date(),
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
       expiresAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
     const license = await getLicense();
-    expect(license.tier).toBe("plus");
-    expect(license.notes).toBe("Activated via Plus Installer Build");
-    expect(prisma.license.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: LICENSE_ROW_ID },
-        data: expect.objectContaining({ tier: "plus", licenseKey: "PRE-ACTIVATED-PLUS-BUILD" }),
-      })
-    );
-    vi.unstubAllEnvs();
+    expect(license.tier).toBe("base");
   });
 
   it("a valid trial-unlock.json for tier 'plus' wins over the trial's pre-activated-Plus default", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.stubEnv("WVO_DEFAULT_TIER", "plus");
 
     const expiresAt = "2027-06-01T00:00:00.000Z";
     const sig = crypto
@@ -359,7 +497,6 @@ describe("getLicense with cryptographic validation", () => {
 
   it("a valid trial-unlock.json for tier 'base' overrides the trial's pre-activated-Plus default and self-heals a tampered plus DB row", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.stubEnv("WVO_DEFAULT_TIER", "plus");
 
     const sig = crypto
       .createHmac("sha256", LICENSE_SIGNING_SECRET)
@@ -405,7 +542,6 @@ describe("getLicense with cryptographic validation", () => {
 
   it("with no trial-unlock.json, an unconverted trial build still forces plus", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.stubEnv("WVO_DEFAULT_TIER", "plus");
 
     vi.spyOn(fs, "existsSync").mockReturnValue(false);
 
@@ -437,10 +573,18 @@ describe("getLicense with cryptographic validation", () => {
     expect(license.notes).toBe("30-Day Evaluation Period");
   });
 
-  it("ignores a trial-unlock.json signed for a different machine and self-heals a tampered plus DB row to base", async () => {
+  // A forged unlock (signed for someone else's machine) must not buy a
+  // permanent licence. The install falls back to being what it already was —
+  // an unconverted trial: Plus for the evaluation, still expiring, still lock
+  // governed. So forging gains the attacker nothing they didn't already have.
+  //
+  // This previously asserted a downgrade to base, which only held because the
+  // test left WVO_DEFAULT_TIER unset — a state no real trial build was ever
+  // in, since electron-build.js stamped WVO_IS_TRIAL and the tier together.
+  // That env var is gone; a trial build is now identified by WVO_IS_TRIAL
+  // alone, and an unconverted trial is Plus by definition.
+  it("ignores a trial-unlock.json signed for a different machine and stays an ordinary expiring trial", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
-    // WVO_DEFAULT_TIER intentionally left unset ("base") to isolate the
-    // trial-unlock-ignored path from the separate unconverted-trial force.
 
     const sig = crypto
       .createHmac("sha256", LICENSE_SIGNING_SECRET)
@@ -465,23 +609,22 @@ describe("getLicense with cryptographic validation", () => {
 
     vi.mocked(prisma.license.update).mockResolvedValue({
       id: LICENSE_ROW_ID,
-      tier: "base",
-      licenseKey: "WVO-KEY-123",
-      notes: "Tampered Notes",
-      activatedAt: null,
-      expiresAt: null,
+      tier: "plus",
+      licenseKey: "TRIAL-ACTIVE",
+      notes: "30-Day Evaluation Period",
+      activatedAt: new Date(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
     const license = await getLicense();
-    expect(license.tier).toBe("base");
-    expect(prisma.license.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: LICENSE_ROW_ID },
-        data: expect.objectContaining({ tier: "base", activatedAt: null }),
-      })
-    );
+    // Not the forged payload's claim, and not the tampered permanent-looking
+    // row — the plain unconverted-trial state.
+    expect(license.tier).toBe("plus");
+    expect(license.licenseKey).toBe("TRIAL-ACTIVE");
+    expect(license.notes).toBe("30-Day Evaluation Period");
+    expect(license.expiresAt).not.toBeNull();
   });
 });
 

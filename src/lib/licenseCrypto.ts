@@ -29,9 +29,45 @@ export function timingSafeEqualStrings(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
+export type LicenseTier = "base" | "plus";
+
+// ---------------------------------------------------------------------------
+// Base activation license (license.json) signing.
+//
+// The tier is part of the signed payload, so an activated install's plan is
+// cryptographically bound to its key and machine. This replaced the old
+// WVO_DEFAULT_TIER env var, which granted Plus from a plain-text line in
+// resources/nextjs/.env.local that anyone could edit in Notepad.
+//
+// electron/main.js duplicates these two functions in plain JS (it runs before
+// the Next.js bundle loads and cannot import TypeScript). Any change to the
+// signature format MUST be mirrored there, or activation and runtime disagree.
+// ---------------------------------------------------------------------------
+
+/** Signs a tiered base activation license. Mirrored in electron/main.js. */
+export function signBaseLicense(key: string, machineId: string, tier: LicenseTier): string {
+  return crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(`${key}:${machineId}:${tier}`)
+    .digest("hex");
+}
+
+/**
+ * Signs a pre-tier ("legacy") base activation license, whose payload was just
+ * `key:machineId`. Kept so installs activated before the tiered format keep
+ * working without a forced re-activation — they read back as tier "base",
+ * which is what they were. Remove once no legacy installs remain in the field.
+ */
+export function signLegacyBaseLicense(key: string, machineId: string): string {
+  return crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(`${key}:${machineId}`)
+    .digest("hex");
+}
+
 export interface TrialUnlockPayload {
   machineId: string;
-  tier: "base" | "plus";
+  tier: LicenseTier;
   expiresAt: string | null;
   notes: string | null;
   sig: string;

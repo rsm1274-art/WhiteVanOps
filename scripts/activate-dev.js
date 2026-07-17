@@ -24,15 +24,22 @@ function activate() {
   const machineId = machineIdSync();
   const baseKey = "WVO-DEV-LOCAL-ACTIVATION";
 
-  // 1. Generate Base License (license.json)
+  // 1. Generate Base License (license.json).
+  // The signature covers the tier — mirrors signBaseLicense() in
+  // src/lib/licenseCrypto.ts and signLicense() in electron/main.js. The dev
+  // activation is minted as tier "base"; the plus_license.json written below
+  // is what grants Plus locally, so dev exercises the same signed-upgrade path
+  // a real Base customer takes rather than a shortcut only dev has.
+  const baseTier = "base";
   const baseSig = crypto
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${baseKey}:${machineId}`)
+    .update(`${baseKey}:${machineId}:${baseTier}`)
     .digest("hex");
 
   const baseLicense = {
     key: baseKey,
     machineId,
+    tier: baseTier,
     sig: baseSig
   };
 

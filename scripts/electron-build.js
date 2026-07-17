@@ -12,8 +12,25 @@ const isPlus = args.includes('--plus');
 const isUpgrade = args.includes('--upgrade');
 const isTrial = args.includes('--trial');
 
+// --plus as an INSTALLER variant is gone: the tier now rides inside the signed
+// activation key, so Base and Plus are byte-identical builds and one installer
+// serves both. (`--upgrade --key ...` — the Plus-upgrade patch for an install
+// already in the field — is a different thing and still supported.) Fail loudly
+// rather than silently producing a "Plus installer" that no longer means
+// anything, which would send a customer a build whose name promises a tier it
+// cannot grant.
+if (isPlus && !isUpgrade) {
+  console.error('\n❌ --plus is no longer an installer variant.');
+  console.error('   The tier now travels inside the activation key, so one installer serves both plans:');
+  console.error('     1. Build it:  npm run electron:build          → WhiteVanOps-Setup.exe');
+  console.error('     2. Mint the key with the tier the customer paid for:');
+  console.error('          node scripts/license-manager.js --tier plus');
+  console.error('   To upgrade an existing Base install in the field, use:');
+  console.error('     node scripts/electron-build.js --upgrade --key <theirBaseKey>\n');
+  process.exit(1);
+}
+
 let tier = 'base';
-if (isPlus) tier = 'plus';
 if (isUpgrade) tier = 'upgrade';
 if (isTrial) tier = 'trial';
 
@@ -131,14 +148,14 @@ class Upgrade {
 }
 
 // ==========================================
-// TARGET: Full App Installer (Base or Plus)
+// TARGET: Full App Installer (Base and Plus — same binary)
 // ==========================================
 // Clean only the temporary build output to preserve previously generated
 // installers. Do NOT blanket-delete dist-electron/: the finished installers
-// live here, they are built one tier at a time (--base, then --plus, then
-// --trial), and WhiteVanOps-Plus-Upgrade.exe comes from the separate --upgrade
-// path that exits before packaging — a wipe would destroy artifacts this run
-// cannot rebuild.
+// live here, they are built one target at a time (the default full installer,
+// then --trial), and WhiteVanOps-Plus-Upgrade.exe comes from the separate
+// --upgrade path that exits before packaging — a wipe would destroy artifacts
+// this run cannot rebuild.
 //
 const unpackedForTarget = path.join(distElectron, 'win-unpacked');
 if (fs.existsSync(unpackedForTarget)) {
@@ -205,16 +222,21 @@ let envContent = '';
 if (fs.existsSync(envSrc)) {
   envContent = fs.readFileSync(envSrc, 'utf8');
 }
-// Append WVO_DEFAULT_TIER to build. Trial builds default to Plus (so the
-// prospect experiences the full feature set) and set WVO_IS_TRIAL so
-// src/lib/trial.ts activates the 30-day lock.
-const effectiveTier = tier === 'trial' ? 'plus' : tier;
-envContent += `\nWVO_DEFAULT_TIER="${effectiveTier}"\n`;
+// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock
+// and src/lib/license.ts grants Plus for the evaluation period.
+//
+// There is deliberately NO tier stamp here. WVO_DEFAULT_TIER used to be
+// written into this file to pre-activate Plus builds, which meant the paid
+// tier hung off a plain-text line in resources/nextjs/.env.local that a
+// customer could flip from "base" to "plus" in Notepad. The tier now travels
+// inside the signed, machine-bound activation key
+// (scripts/license-manager.js --tier plus), so Base and Plus ship the SAME
+// installer and the key decides. Do not reintroduce a tier env var.
 if (tier === 'trial') {
-  envContent += `WVO_IS_TRIAL="true"\n`;
+  envContent += `\nWVO_IS_TRIAL="true"\n`;
 }
 fs.writeFileSync(envDest, envContent, 'utf8');
-console.log(`\nCopied .env.local into standalone bundle with WVO_DEFAULT_TIER="${effectiveTier}"${tier === 'trial' ? ' and WVO_IS_TRIAL="true"' : ''}.`);
+console.log(`\nCopied .env.local into standalone bundle${tier === 'trial' ? ' with WVO_IS_TRIAL="true"' : ' (tier comes from the activation key)'}.`);
 
 // 5. Concatenate Prisma migrations into a single schema.sql — applied by
 // electron/postgres.js when the bundled PostgreSQL initializes on first run.
@@ -304,8 +326,8 @@ try {
   const files = fs.readdirSync(distElectron);
   const setupFile = files.find(f => f.startsWith('WhiteVanOps Setup') && f.endsWith('.exe'));
   if (setupFile) {
-    let newName = 'WhiteVanOps-Base-Setup.exe';
-    if (tier === 'plus') newName = 'WhiteVanOps-Plus-Setup.exe';
+    // One installer for both plans — the activation key decides the tier.
+    let newName = 'WhiteVanOps-Setup.exe';
     if (tier === 'trial') newName = 'WhiteVanOps-Trial-Setup.exe';
     fs.renameSync(
       path.join(distElectron, setupFile),

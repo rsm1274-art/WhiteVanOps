@@ -142,20 +142,46 @@ function generateKey() {
   return `WVO-${segment()}-${segment()}-${segment()}-${segment()}`;
 }
 
+// The tier is stamped onto the Firestore record at mint time and travels with
+// the key: electron/main.js reads it during activation and bakes it into the
+// machine-bound signed license.json. This is what replaced WVO_DEFAULT_TIER —
+// a customer's plan is now proven by their key, not declared by a text file on
+// their disk that they could edit.
+function resolveTier() {
+  const tierIdx = args.indexOf("--tier");
+  if (tierIdx === -1) return "base";
+  const tier = args[tierIdx + 1]?.trim();
+  if (tier !== "base" && tier !== "plus") {
+    console.error(`Error: --tier must be 'base' or 'plus' (got '${tier ?? ""}')`);
+    console.error("Usage: node scripts/license-manager.js [--tier base|plus] [--notes <notes>]");
+    process.exit(1);
+  }
+  return tier;
+}
+
 async function createLicense() {
+  const tier = resolveTier();
+  const notesIdx = args.indexOf("--notes");
+  const notes = notesIdx !== -1 && notesIdx + 1 < args.length ? args[notesIdx + 1].trim() : null;
+
   const key = generateKey();
   const licenseRef = db.collection('licenses').doc(key);
-  
+
   await licenseRef.set({
     key: key,
     machineId: null,
+    tier: tier,
     active: true,
+    notes: notes,
     createdAt: FieldValue.serverTimestamp()
   });
 
-  console.log(`\n✅ Success! New License Key Generated:`);
+  console.log(`\n✅ Success! New ${tier.toUpperCase()} License Key Generated:`);
   console.log(`\n   ${key}\n`);
+  console.log(`Tier: ${tier}${tier === "base" ? `  (upgrade later with: --plus --key ${key})` : ""}`);
   console.log(`This key is now active in Firestore and ready to be given to a customer.`);
+  console.log(`\n⚠️  Record this key against the customer's name — you will need it to`);
+  console.log(`   free the machine lock if they ever replace their PC.`);
   process.exit(0);
 }
 

@@ -8,7 +8,11 @@ import {
   LICENSE_SIGNING_SECRET,
   getAppDataWvoDir,
   verifyTrialUnlock,
+  signBaseLicense,
+  signLegacyBaseLicense,
+  timingSafeEqualStrings,
   TrialUnlockPayload,
+  LicenseTier,
 } from "./licenseCrypto";
 import { getTrialStatus } from "./trial";
 
@@ -20,10 +24,9 @@ import { getTrialStatus } from "./trial";
 // ---------------------------------------------------------------------------
 
 export { LICENSE_SIGNING_SECRET, getAppDataWvoDir };
+export type { LicenseTier };
 
 export const LICENSE_ROW_ID = "singleton";
-
-export type LicenseTier = "base" | "plus";
 
 export interface LicenseState {
   tier: LicenseTier;
@@ -36,6 +39,8 @@ export interface LicenseState {
 export interface BaseLicense {
   key: string;
   machineId: string;
+  /** The plan this key was sold with. Covered by `sig` — see getBaseLicense. */
+  tier: LicenseTier;
   sig: string;
 }
 
@@ -47,7 +52,20 @@ export interface PlusLicense {
   sig: string;
 }
 
-/** Reads the base activation license from disk, verifying its HMAC signature and machine ID */
+/**
+ * Reads the base activation license from disk, verifying its HMAC signature
+ * and machine ID. The returned `tier` is the authoritative plan for an
+ * activated install: it is part of the signed payload, so hand-editing
+ * `"tier": "base"` to `"plus"` invalidates the signature and the file is
+ * rejected outright — the app asks for activation rather than granting Plus.
+ *
+ * Two on-disk formats are accepted:
+ *  - Tiered (current): has a `tier` field; signature covers key:machineId:tier.
+ *  - Legacy (pre-tier): no `tier` field; signature covers key:machineId only.
+ *    Read back as "base", which is all such installs ever were. This is what
+ *    keeps installs activated before the tiered format from being forced
+ *    through re-activation.
+ */
 export function getBaseLicense(): BaseLicense | null {
   try {
     const dir = getAppDataWvoDir();
@@ -57,23 +75,19 @@ export function getBaseLicense(): BaseLicense | null {
     const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!data.key || !data.machineId || !data.sig) return null;
 
-    // Verify machine ID
+    // Verify against THIS machine's real id, never the file's claimed one.
     const hwid = machineIdSync();
     if (data.machineId !== hwid) return null;
 
-    // Verify signature
-    const expected = crypto
-      .createHmac("sha256", LICENSE_SIGNING_SECRET)
-      .update(`${data.key}:${data.machineId}`)
-      .digest("hex");
+    const isTiered = typeof data.tier === "string";
+    const tier: LicenseTier = data.tier === "plus" ? "plus" : "base";
+    const expected = isTiered
+      ? signBaseLicense(data.key, data.machineId, tier)
+      : signLegacyBaseLicense(data.key, data.machineId);
 
-    const actualBuf = Buffer.from(String(data.sig));
-    const expectedBuf = Buffer.from(expected);
+    if (!timingSafeEqualStrings(String(data.sig), expected)) return null;
 
-    if (actualBuf.length !== expectedBuf.length) return null;
-    if (!crypto.timingSafeEqual(actualBuf, expectedBuf)) return null;
-
-    return data;
+    return { key: data.key, machineId: data.machineId, tier, sig: data.sig };
   } catch (e) {
     return null;
   }
@@ -161,12 +175,13 @@ export async function getLicense(): Promise<LicenseState> {
     }
   }
 
-  // 3. Read the database state
-  const defaultTier = process.env.WVO_DEFAULT_TIER === "plus" ? "plus" : "base";
+  // 3. Read the database state. The row is always created as "base": the tier
+  // is never taken from configuration, only from a verified signature below.
+  const isTrialBuild = process.env.WVO_IS_TRIAL === "true";
   const row = await prisma.license.upsert({
     where: { id: LICENSE_ROW_ID },
     update: {},
-    create: { id: LICENSE_ROW_ID, tier: defaultTier },
+    create: { id: LICENSE_ROW_ID, tier: "base" },
   });
 
   // 4. In test mode, if no activation file is present, bypass the strict file-verification
@@ -175,7 +190,7 @@ export async function getLicense(): Promise<LicenseState> {
   // Plus, or honor a validated trial-unlock.json) — including the anti-tamper
   // self-heal — so they must not take this test-only DB-passthrough shortcut.
   const isTest = process.env.NODE_ENV === "test";
-  if (isTest && !baseLicense && !plusLicense && defaultTier !== "plus" && process.env.WVO_IS_TRIAL !== "true") {
+  if (isTest && !baseLicense && !plusLicense && !isTrialBuild) {
     return {
       tier: row.tier === "plus" ? "plus" : "base",
       licenseKey: row.licenseKey,
@@ -192,10 +207,23 @@ export async function getLicense(): Promise<LicenseState> {
   let targetExpires: Date | null = null;
   let targetActivated: Date | null = null;
 
-  // A validated trial-unlock.json (day-30 conversion) outranks the trial's
-  // pre-activated-Plus default: the unlocked tier — base or plus — is what
-  // actually runs, not whatever the build was stamped with.
-  const trialUnlock = process.env.WVO_IS_TRIAL === "true" ? getVerifiedTrialUnlock() : null;
+  // Tier precedence. Every branch below is gated on something signed — a
+  // machine-bound HMAC over the payload it is claiming. Configuration alone
+  // (an env var, a DB column) never grants Plus: WVO_DEFAULT_TIER used to,
+  // which meant editing one word of resources/nextjs/.env.local in Notepad
+  // unlocked the paid tier. An activated install's tier now comes only from
+  // its own signed license.json (or a signed upgrade bound to that key).
+  //
+  //   1. trial-unlock.json  — a paid day-30 conversion; outranks the trial's
+  //      pre-activated Plus, so a base-tier unlock correctly drops Plus.
+  //   2. trial build, not yet converted — Plus for the 30-day evaluation.
+  //      Only reachable when NO base license exists, i.e. a genuine trial
+  //      install (trial builds skip activation entirely). A customer install
+  //      that sets WVO_IS_TRIAL by hand still loses to its own license.json,
+  //      and would only be trading a permanent license for a 30-day lockout.
+  //   3. license.json's signed tier — a key sold as Plus.
+  //   4. plus_license.json — a signed upgrade for an install sold as Base.
+  const trialUnlock = isTrialBuild ? getVerifiedTrialUnlock() : null;
 
   if (trialUnlock) {
     targetTier = trialUnlock.tier;
@@ -203,17 +231,17 @@ export async function getLicense(): Promise<LicenseState> {
     targetNotes = trialUnlock.notes;
     targetExpires = trialUnlock.expiresAt ? new Date(trialUnlock.expiresAt) : null;
     targetActivated = row.activatedAt || new Date();
-  } else if (process.env.WVO_IS_TRIAL === "true" && defaultTier === "plus") {
+  } else if (isTrialBuild && !baseLicense) {
     const trialStatus = getTrialStatus();
     targetTier = "plus";
     targetKey = "TRIAL-ACTIVE";
     targetNotes = "30-Day Evaluation Period";
     targetExpires = trialStatus.installedAt ? new Date(new Date(trialStatus.installedAt).getTime() + 30 * 24 * 60 * 60 * 1000) : null;
     targetActivated = trialStatus.installedAt ? new Date(trialStatus.installedAt) : (row.activatedAt || new Date());
-  } else if (defaultTier === "plus") {
+  } else if (baseLicense && baseLicense.tier === "plus") {
     targetTier = "plus";
-    targetKey = "PRE-ACTIVATED-PLUS-BUILD";
-    targetNotes = "Activated via Plus Installer Build";
+    targetKey = baseLicense.key;
+    targetNotes = "Activated via Plus license key";
     targetExpires = null;
     targetActivated = row.activatedAt || new Date();
   } else if (baseLicense && plusLicense && !isLicenseExpired(plusLicense.expiresAt)) {
