@@ -153,19 +153,19 @@ To upgrade an installation from Base to Plus:
 
 We support four installer build paths depending on the customer's package:
 
-### 1. Base Setup Installer (Standard)
-Builds the standard installer. On first boot, the app defaults to the **Base** tier.
+### 1. Setup Installer (serves BOTH Base and Plus)
+Builds the customer installer. There is only one — **the activation key decides the tier**, so the same `.exe` becomes a Base or a Plus install depending on which key you mint for that customer.
 ```bash
-npm run electron:build:base
+npm run electron:build
 ```
-* **Output:** `dist-electron/WhiteVanOps-Base-Setup.exe`
-
-### 2. Base + Plus Setup Installer (Pre-Activated)
-Builds the combined installer. On first boot, the app defaults to the **Plus** tier directly without requiring an offline upgrade license payload.
-```bash
-npm run electron:build:plus
-```
-* **Output:** `dist-electron/WhiteVanOps-Plus-Setup.exe`
+* **Output:** `dist-electron/WhiteVanOps-Setup.exe`
+* **Set the tier when you mint the key, not when you build:**
+  ```bash
+  node scripts/license-manager.js --tier base     # Base customer
+  node scripts/license-manager.js --tier plus     # Plus customer
+  ```
+  The tier is stamped onto the key's Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC.
+* **Changed 2026-07-15 — `npm run electron:build:plus` and `WhiteVanOps-Plus-Setup.exe` no longer exist.** Plus used to be pre-activated by stamping `WVO_DEFAULT_TIER="plus"` into the bundled `.env.local`. That put the paid tier in a plain text file on the customer's disk, where changing one word in Notepad unlocked it. Running the build with `--plus` now fails with an explanatory error rather than producing an installer whose name promises a tier it cannot grant. Do not add a tier env var back.
 
 ### 3. Plus Upgrade Installer (Patch Utility)
 Generates a lightweight, native Windows executable that installs the signed `plus_license.json` payload directly into the target machine's AppData directory (`%APPDATA%\whitevanops\`).
@@ -194,7 +194,7 @@ npm run electron:build:trial
 
 ### What the build commands do (Full installers):
 1. Compile the Next.js production build
-2. Set the default license tier (`WVO_DEFAULT_TIER`) inside the Next.js standalone bundle environment
+2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only — **no tier is stamped**; the tier comes from the activation key)
 3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
 4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single NSIS installer
 5. Output and rename the resulting executable in `dist-electron/`

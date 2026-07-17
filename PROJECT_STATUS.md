@@ -127,8 +127,7 @@ Implemented a secure, offline cryptographic licensing model for the Plus tier up
 - **Reworked UI**: Replaced Settings tab Plan dropdown with active License Key display, Copy button, upload zone, text area for JSON payload, and confirmable downgrade controls.
 - **CLI Minting Script**: Added `--plus` offline mode to `scripts/license-manager.js` to mint signed Plus upgrade payloads for any base key.
 - **Multi-Target Installer builds**: Upgraded the pipeline (`scripts/electron-build.js`) to clean build-only artifacts and compile:
-  - `WhiteVanOps-Base-Setup.exe` (standard Base installer)
-  - `WhiteVanOps-Plus-Setup.exe` (pre-activated Plus installer)
+  - `WhiteVanOps-Setup.exe` (customer installer — serves **both** Base and Plus; the activation key's tier decides which, so there is no separate Plus build)
   - `WhiteVanOps-Plus-Upgrade.exe` (lightweight, native upgrade patch executable compiled via `csc.exe` on the fly)
 
 ---

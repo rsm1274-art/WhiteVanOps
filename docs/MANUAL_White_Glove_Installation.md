@@ -72,6 +72,8 @@
 
 ## 4. Troubleshooting Roadblocks
 
+> The four install-day roadblocks below are the ones you hit with your hands on the machine. For ongoing support after handoff — dead PCs and license reactivation, CGNAT, backups, activation failures, port conflicts — see **`docs/MANUAL_Troubleshooting.md`**, which is organized by customer-reported symptom.
+
 **Roadblock: The QR code won't load on phones off the office Wi-Fi.**
 - *Fix*: Check in this order — (1) CGNAT: compare `whatismyip.com` to the router's WAN IP, if they differ nothing else here will work until the ISP fixes it; (2) the port-forward rule is pointing at the PC's *current* local IP (did the DHCP reservation actually take?); (3) Windows Firewall allows inbound TCP 3000; (4) the DDNS hostname resolves to the correct current IP (`nslookup`, check the Task Scheduler updater's last run). Full detail and exact steps: `MANUAL_Setup_Installation.md` §7 and §11.
 

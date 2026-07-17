@@ -23,6 +23,15 @@ npx prisma db seed                      # Seed with mock data (uses prisma/seed.
 npx prisma studio                       # Visual DB browser
 npx tsx prisma/bootstrap.ts            # Create/reset the initial admin superuser (admin/admin, forced password change)
 
+# Customer-machine admin recovery (total lockout — no admin/superuser can log in).
+# Runs on a PC with no Node and no repo: the .ps1 borrows the Node runtime inside the
+# installed Electron binary (ELECTRON_RUN_AS_NODE=1) and resolves pg/bcryptjs from the
+# app's own bundled node_modules. Copy BOTH files to the machine; WhiteVanOps must be
+# running (its bundled PostgreSQL only runs with the app open). See MANUAL_Troubleshooting.md §3.4.
+scripts/recovery/reset-admin-password.ps1 -List     # Show admin/superuser accounts, change nothing
+scripts/recovery/reset-admin-password.ps1           # Reset 'admin' to a random temp password
+scripts/recovery/reset-admin-password.ps1 -Create   # Recreate the account if it was deleted
+
 # Onboarding data import (migrating a customer's existing data — see MANUAL_Setup_Installation.md)
 npx tsx scripts/import/analyze.ts <data-dir>   # Propose <data-dir>/mapping.json from customer CSV/Excel files (--force to overwrite an existing one)
 npx tsx scripts/import/run.ts <data-dir>       # Validate + dry-run report; add --commit to import (fresh DB only)
@@ -101,10 +110,14 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 - `License` model in `prisma/schema.prisma` — singleton row with fixed id `"singleton"`, **upserted on read** by `src/lib/license.ts` (`getLicense()`), so every install path self-heals without a seed step. Fields: `tier` ("base"|"plus"), `licenseKey`, `notes`, `activatedAt`, `expiresAt` (null = perpetual).
 - `src/lib/license.ts` mirrors `auth.ts`'s shape: `hasPlusLicense()` (tier is plus **and** unexpired), `requirePlus(licensed)` returns a `403 NextResponse` or `null`. It is called explicitly alongside `requireRole` in every Plus route — deliberately not folded into `requireRole`, so `requirePlus` stays greppable as the complete list of Plus-gated routes.
+- **The tier travels inside the activation key — never in configuration.** `scripts/license-manager.js --tier base|plus` stamps `tier` onto the Firestore `licenses/<key>` record at mint time; `electron/main.js` reads it during activation and bakes it into the machine-bound, HMAC-signed `%APPDATA%\whitevanops\license.json`; `getBaseLicense()` returns it as the authoritative plan for an activated install. Because the tier is inside the signed payload, hand-editing it invalidates the signature and the file is rejected outright. **Consequence: Base and Plus are the SAME installer** (`WhiteVanOps-Setup.exe`) and the key decides — there is no `--plus` build target and `electron:build:plus` no longer exists.
+- **Do not reintroduce a tier env var.** `WVO_DEFAULT_TIER` was removed on 2026-07-15 because it granted Plus outright from a plain-text line in `resources/nextjs/.env.local`: changing `"base"` to `"plus"` in Notepad unlocked the paid tier, and the anti-tamper self-heal never fired because the env var satisfied the very check meant to catch tampering (it made `verifiedPlus` true). `src/lib/license.test.ts` carries a regression test — `"ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base"` — specifically to stop this coming back.
+- **Legacy `license.json` compatibility:** installs activated before the tiered format have no `tier` field and a signature over `key:machineId` only. `getBaseLicense()` accepts that shape via `signLegacyBaseLicense()` and reads it as tier "base" — all such installs ever were — so nobody is forced through re-activation. Remove once no legacy installs remain in the field.
+- **`electron/main.js` duplicates the signing functions in plain JS** (`signLicense`/`signLegacyLicense`) because it runs before the Next.js bundle loads and cannot import TypeScript. They must stay byte-identical to `signBaseLicense`/`signLegacyBaseLicense` in `src/lib/licenseCrypto.ts`, or activation writes a file the running app then rejects. `scripts/activate-dev.js` mirrors them a third time.
 - **Every Plus API route gates server-side** (`/api/clients/[id]/notes`, `/api/clients/[id]/follow-ups`, `/api/follow-ups/[id]`, `/api/analytics`, `/api/invoices/**`, and the Plus-data branches of `/api/dashboard`). The UI hiding tabs is convenience only, not security.
 - `/api/dashboard` returns `license: { tier, expiresAt, plus }` in `DashboardData` and only populates Plus data (client `notes`/`followUps` includes, `invoices`) when licensed — a downgraded install doesn't leak Plus data through the full-reload pattern.
 - `GET/POST /api/license` — GET is admin/superuser; POST (plan change) is **superuser-only** + audited. UI: Settings → License & Plan (`SettingsTab.tsx`). Cryptographically validated offline signature, bound to the machine-locked base activation key.
-- Downgrade/expiry hides tabs and 403s the APIs but never deletes Plus data. All Plus tables ship in the normal migration set to every install and stay empty until licensed. If database is tampered (manually set to plus), `getLicense` self-heals by reverting to base.
+- Downgrade/expiry hides tabs and 403s the APIs but never deletes Plus data. All Plus tables ship in the normal migration set to every install and stay empty until licensed. If the database is tampered with (`License.tier` set to plus by hand), `getLicense` self-heals by reverting to base — **but note the self-heal only catches what it can't verify.** It fires when `verifiedPlus` is false, so anything that makes `verifiedPlus` true bypasses it entirely rather than being caught by it; that is exactly how `WVO_DEFAULT_TIER` defeated it. Every branch that can set `verifiedPlus` must therefore be gated on a signature, which is the invariant `getLicense()`'s tier-precedence chain now maintains.
 - Invoicing: statuses Draft → Sent (manual) → PartiallyPaid/Paid (derived from payments in `src/lib/invoice.ts`, never set by hand) or Void; numbering via a `SystemSetting` counter (`invoice_next_number`) incremented in the same transaction as the create; PDF via `pdf-lib` (pure JS — chosen over puppeteer for Electron installer size). Charts: Recharts.
 
 ### Trial/Demo installer (separate mechanism from the License/Plus tier above)
