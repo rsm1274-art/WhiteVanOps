@@ -1,6 +1,6 @@
 # WhiteVanOps — Project Status Summary
 
-*As of July 5, 2026*
+*As of July 19, 2026*
 
 ---
 
@@ -130,6 +130,24 @@ Implemented a secure, offline cryptographic licensing model for the Plus tier up
   - `WhiteVanOps-Setup.exe` (customer installer — serves **both** Base and Plus; the activation key's tier decides which, so there is no separate Plus build)
   - `WhiteVanOps-Plus-Upgrade.exe` (lightweight, native upgrade patch executable compiled via `csc.exe` on the fly)
 
+### Phase 12 — Field Sync Stuck-Record Resolution (July 15, 2026)
+
+Offline field techs can produce sync ops that permanently fail (deleted parent record, stale reference, etc.) and previously stalled the entire IndexedDB sync queue forever. Added a `stuckOps` quarantine store (IDB v2) that classifies rejections as permanent/auth/transient and drains the queue past permanent failures instead of blocking on them; techs get a client-side resolution panel (discard/retarget/handoff) gated by an acknowledgement invariant, and unresolved handoffs surface to admins as a `SyncReviewItem` with a dashboard review card/modal (`POST /api/field/sync-resolution`, `/api/sync-review/[id]`). Also fixed a duplicate-submission bug from concurrent `drainSyncQueue` runs and deleted a divergent, never-fired background-sync copy of the drain logic in `public/sw.js`.
+
+### Phase 13 — License Tier Bound to Signed Key; Trial/Demo Installer (July 15–16, 2026)
+
+- **Tier now lives inside the signed activation key**, not a plaintext env var: `WVO_DEFAULT_TIER` (which let anyone edit `.env.local` in Notepad to unlock Plus) was removed entirely. `scripts/license-manager.js` mints `tier` into the key at vendor-side mint time; `electron/main.js` bakes it into the machine-bound, HMAC-signed `license.json` at activation. Legacy pre-tier license files still verify and read back as Base. See `CLAUDE.md` "License / Plus tier" for the full precedence chain.
+- **Trial/Demo installer** (`npm run electron:build:trial` → `WhiteVanOps-Trial-Setup.exe`): pre-activated on Plus for sales demos, locked 30 days from first launch via a separate signed `trial.json` anchor (`src/lib/trial.ts`), independent of the License/Plus gate above. Skips native activation entirely — boots straight to login. Conversion (`POST /api/license` `unlock-trial`) verifies against the machine's real ID and sets `License.tier` to whatever the purchased key grants (Base or Plus), not the trial's pre-activated Plus default.
+- **In-app data import**: the existing CLI onboarding-import engine (`src/lib/import/`) is now also reachable from Settings → Onboarding Data Import (superuser-only), sharing validation/dry-run/commit logic with `scripts/import/analyze.ts` and `run.ts`.
+- **Server-identity health probe**: `GET /api/health` returns `{ app: "whitevanops" }` so `electron/main.js` can tell a real WhiteVanOps server apart from a foreign listener on port 3000 (e.g. a Docker container) before deciding to reuse it or self-boot on a free port.
+- **Admin recovery tooling**: `scripts/recovery/reset-admin-password.ps1`/`.js` reset or recreate the admin/superuser account on a customer machine with no Node/repo installed, by borrowing the Node runtime bundled inside the installed Electron binary (`ELECTRON_RUN_AS_NODE=1`).
+
+### Phase 14 — Installer Size & Packaging Hardening (July 15–19, 2026)
+
+- **Base installer halved**: 274 MB → 156 MB (`app.asar` 477 MB/242 modules → 123 MB/51). electron-builder bundles everything left in `package.json` `dependencies` into `app.asar` regardless of `files` globs, duplicating what Next.js file tracing already ships in `resources/nextjs/node_modules`; only the five packages `electron/*.js` bare-requires (`bcryptjs`, `firebase`, `node-cron`, `node-machine-id`, `pg`) now stay in `dependencies`. `electron-build.js` step 7c hard-fails the build if a required module is missing from the packaged asar.
+- **Linux build target removed** — it had never produced a shipped artifact.
+- **Fixed a packaged-installer login 500**: Next 16 defaulted to Turbopack, which emitted an unresolvable external require for the Prisma client, and the standalone output trace didn't copy Prisma 7's runtime packages either way. `npm run build` now runs `prisma generate && next build --webpack`, and `next.config.ts`'s `outputFileTracingIncludes` explicitly lists the Prisma runtime closure; `electron-build.js` step 7b asserts those directories landed in the packaged output. See `CLAUDE.md` for the full writeup.
+
 ---
 
 ## Current State (What Works)
@@ -139,7 +157,9 @@ Implemented a secure, offline cryptographic licensing model for the Plus tier up
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
 | Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
-| License tier (Plus Upgrade) | Complete — Offline cryptographically signed license verification bound to machine ID. Supports Base, Base+Plus (pre-activated), and lightweight Upgrade Patch installers compiled on the fly |
+| License tier (Plus Upgrade) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is now encoded inside the signed activation key itself (no plaintext override). One customer installer serves both Base and Plus, plus a lightweight Upgrade Patch installer compiled on the fly |
+| Trial/Demo installer | Complete — `WhiteVanOps-Trial-Setup.exe`, pre-activated Plus, 30-day machine-locked timer, converts to the purchased tier on unlock; see Phase 13 |
+| Field sync stuck-record resolution | Complete — offline sync queue quarantines permanently-failed ops instead of stalling, with a tech-facing resolution panel and an admin sync-review dashboard card; see Phase 12 |
 | Audit logging | Complete — every write action recorded |
 | Field tech module | Complete — mobile-optimized, auto-selects linked tech |
 | QuickBooks CSV export | Complete — Invoice and Time exports, sync-lock via `/api/sync` |
@@ -152,7 +172,7 @@ Implemented a secure, offline cryptographic licensing model for the Plus tier up
 | Automated tests | Started — 36 Vitest tests on pure-logic modules; see Phase 10. Not comprehensive (no API route, component, or e2e tests yet) |
 | Offline / PWA | Complete — IndexedDB cache and Service Worker sync queue. Field module functions fully offline |
 | Electron desktop app | Complete — dev and production build pipelines, NSIS installer |
-| End-user manuals | Complete — three manuals covering setup, admin, and field roles |
+| End-user/internal manuals | Complete — `MANUAL_Setup_Installation.md`, `MANUAL_Administrator.md`, `MANUAL_Field_Tech.md`, plus `docs/MANUAL_Troubleshooting.md`, `docs/MANUAL_White_Glove_Installation.md`, `docs/MANUAL_Golden_State_Demo.md`, `docs/MANUAL_Live_Demo.md`, and `docs/BUSINESS_Purchase_to_Install_Playbook.md` |
 | Job editing | Complete — `EditJobModal` updates client/vehicle/date/notes on Scheduled/In Progress jobs; `PUT /api/jobs` re-runs the same double-booking, repair, and time-off checks used at creation (shared via `src/lib/jobConflicts.ts`), and blocks edits once a job is Completed |
 | Scheduling conflict warnings | Complete — server-side checks now also cover job edits and Resources-panel equipment changes, not just creation; Add/Edit Job and Allocate Resources modals show a live amber warning (`src/lib/clientJobConflicts.ts`) as soon as a conflicting date/vehicle/crew/equipment combination is picked, before the form is even submitted |
 | In-app notifications | Complete — a bell icon in the dashboard header (`NotificationBell`) surfaces overdue jobs and low-stock items in one place with a count badge; clicking an alert jumps to the relevant tab. Alert logic lives in `src/lib/alerts.ts`, shared with the Overview tab's scorecards so the two never disagree on what counts as "overdue" or "low stock." In-app only — still no push/email/SMS delivery (that remains future scope) |
