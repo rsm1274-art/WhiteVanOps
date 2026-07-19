@@ -37,6 +37,31 @@ const nextConfig: NextConfig = {
       "./tsconfig.tsbuildinfo",
     ],
   },
+  // Prisma 7 + Next standalone packaging gotcha. Two independent problems bit
+  // the self-booting installer (the office PM2 box masks both — it runs against
+  // the full project node_modules; a dev running .next/standalone/server.js is
+  // masked too, because Node walks up to the project node_modules):
+  //   1. Next 16's default Turbopack bundler emitted a broken external require
+  //      `require("@prisma/client-<hash>")` for a name that never resolves ->
+  //      login 500 "Cannot find module". Fixed by building with `--webpack`
+  //      (see the "build" script), whose Prisma externalization is correct.
+  //   2. The trace still won't COPY Prisma's runtime packages, and
+  //      outputFileTracingIncludes is a dumb file-copy that does NOT follow the
+  //      dependencies of what it copies. So list the whole runtime require
+  //      closure of @prisma/client (with the pg driver adapter) explicitly.
+  //      Deliberately NOT @prisma/** — that drags in ~95 MB of engines/studio/
+  //      dev that driver-adapter mode never loads. (electron-build.js step 7b
+  //      asserts these landed; `build` runs `prisma generate` first.)
+  outputFileTracingIncludes: {
+    "*": [
+      "./node_modules/.prisma/client/**",
+      "./node_modules/@prisma/client/**",
+      "./node_modules/@prisma/client-runtime-utils/**",
+      "./node_modules/@prisma/debug/**",
+      "./node_modules/@prisma/driver-adapter-utils/**",
+      "./node_modules/@prisma/adapter-pg/**",
+    ],
+  },
 };
 
 export default nextConfig;

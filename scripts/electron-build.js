@@ -271,6 +271,15 @@ const unpackedDir = 'win-unpacked';
 for (const rel of [
   ['resources', 'pgsql', 'bin', 'pg_ctl.exe'],
   ['resources', 'nextjs', 'node_modules', 'next'],
+  // Turbopack externalizes @prisma/client but the standalone trace does not
+  // copy it (or the generated .prisma/client) into the bundle. Without these,
+  // the packaged server throws "Cannot find module '@prisma/client-<hash>'" at
+  // runtime and every DB-backed route 500s — the login-500 bug that shipped in
+  // the first self-booting installer. next.config.ts forces them in via
+  // outputFileTracingIncludes; assert they actually landed.
+  ['resources', 'nextjs', 'node_modules', '@prisma', 'client'],
+  ['resources', 'nextjs', 'node_modules', '@prisma', 'client-runtime-utils'],
+  ['resources', 'nextjs', 'node_modules', '.prisma', 'client'],
   ['resources', 'app.asar'],
 ]) {
   const p = path.join(distElectron, unpackedDir, ...rel);
