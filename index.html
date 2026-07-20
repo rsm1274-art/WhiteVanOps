@@ -385,7 +385,7 @@
       <span class="kicker"><span class="no">Field Operations Management</span></span>
       <h1>Run your fleet.<br/>Own your data.<br/><span class="accent">No cloud required.</span></h1>
       <p class="lead">
-        Scheduling, fleet &amp; service, inventory, time tracking and QuickBooks-ready exports —
+        Scheduling, fleet &amp; service, inventory, time tracking and QuickBooks-compatible exports —
         installed from a single <b>.exe</b> with the database built in.
         Your operations data lives on <b>your</b> machine, not someone else's server.
       </p>
@@ -412,7 +412,7 @@
           <div class="it" data-view="inventory">Inventory Control</div>
           <div class="it" data-view="analytics">Analytics<span class="mini-plus">Plus</span></div>
           <div class="it" data-view="invoicing">Invoicing<span class="mini-plus">Plus</span></div>
-          <div class="it" data-view="qb">QuickBooks Sync</div>
+          <div class="it" data-view="qb">QuickBooks Export</div>
         </div>
         <div class="mock-main" id="hero-main">
           <div class="ttl">Operations Overview</div>
@@ -446,7 +446,7 @@
         <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div><b>The database ships in the installer</b><span>Industrial-grade PostgreSQL is bundled and configured automatically on first launch. No IT project, no separate download, no DBA.</span></div></li>
         <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.97A7 7 0 0 1 19.8 10.4 4.5 4.5 0 0 1 18.5 18H7z"/><path d="M4 4l16 16"/></svg></div><div><b>No cloud dependency</b><span>Internet down? Vendor "sunsets" a product? Price hike email? None of it can touch a system running in your own office.</span></div></li>
         <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><path d="M12 17V4"/><path d="M6 10l6-6 6 6"/><path d="M4 21h16"/></svg></div><div><b>Leave anytime, take everything</b><span>Your data sits in a standard PostgreSQL database with CSV exports built in. No export fees, no ransom, no proprietary lock-in.</span></div></li>
-        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><div><b>Private by architecture</b><span>Every install gets its own unique encryption secret and database credentials, generated on your machine. Field access runs directly through your own office router — no middlemen, no subscriptions, and no cloud servers.</span></div></li>
+        <li><div class="ic"><svg class="icon" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div><div><b>Private by architecture</b><span>Every install gets its own unique session-signing secret and database credentials, generated on your machine. Field access runs directly through your own office router — no middlemen, no subscriptions, and no cloud servers.</span></div></li>
       </ul>
     </div>
 
@@ -456,8 +456,9 @@
       <div class="tline"><span class="path">PostgreSQL 17 (bundled)</span><span class="ok">RUNNING · 127.0.0.1</span></div>
       <div class="tline"><span class="path">%APPDATA%\whitevanops\pgdata</span><span class="ok">2,148 records</span></div>
       <div class="tline"><span class="path">Session secret</span><span class="ok">UNIQUE TO THIS INSTALL</span></div>
-      <div class="tline"><span class="path">Outbound data to vendor cloud</span><span style="color:var(--red)">0 BYTES — EVER</span></div>
-      <div class="cloudless"><svg class="icon" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.97A7 7 0 0 1 19.8 10.4 4.5 4.5 0 0 1 18.5 18H7z"/><path d="M4 4l16 16"/></svg>Nothing leaves your office</div>
+      <div class="tline"><span class="path">Vendor contact</span><span class="ok">ONCE · LICENSE ACTIVATION ONLY</span></div>
+      <div class="tline"><span class="path">Outbound job / client / financial data</span><span style="color:var(--red)">0 BYTES</span></div>
+      <div class="cloudless"><svg class="icon" viewBox="0 0 24 24"><path d="M7 18a5 5 0 0 1-.6-9.97A7 7 0 0 1 19.8 10.4 4.5 4.5 0 0 1 18.5 18H7z"/><path d="M4 4l16 16"/></svg>Your business data never leaves your office</div>
     </div>
   </div>
 </section>
@@ -467,13 +468,13 @@
   <div class="container">
     <span class="kicker"><span class="no">Sec. 02</span> Everything a service fleet runs on</span>
     <h2>Eight modules on Base.<br/>Three more on Plus.</h2>
-    <p class="muted" style="max-width:40rem">Built for HVAC, electrical, plumbing and specialty trade contractors. No penalty for success. No fees for additional employees, material or vehicles. Everything below ships in <b>Base</b>; the <span class="plus-badge" style="vertical-align:1px">Plus</span> cards are the paid upgrade — switched on with a license, no reinstall.</p>
+    <p class="muted" style="max-width:40rem">Built for HVAC, electrical, plumbing and specialty trade contractors. No penalty for success. No fees for additional employees, material or vehicles. The first eight modules make up <b>Base</b>; the three <span class="plus-badge" style="vertical-align:1px">Plus</span> cards are a paid upgrade you can add whenever your business is ready.</p>
     <div class="features-grid">
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16"/><path d="M3 10h18"/><path d="M8 3v4M16 3v4"/></svg></div><b>Scheduling &amp; Jobs</b><p>Job ledger with clients, line items, crew assignment and recurring job templates — set a cadence once, generate the next batch of visits with one click.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M2 17V7h11v10"/><path d="M13 10h4l3 4v3h-3"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg></div><b>Fleet &amp; Service</b><p>Track every van, its maintenance history and repair reports. Know which vehicle is due before it breaks down.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg></div><b>Inventory Control</b><p>Warehouse and per-van stock levels with minimum thresholds. Completing a job deducts parts from the right van automatically.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><b>Time Tracking</b><p>Techs log hours against jobs from their phone. Admins see labor cost per job in real time.</p></div>
-      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h13"/><path d="M14 3l4 4-4 4"/><path d="M20 17H7"/><path d="M10 13l-4 4 4 4"/></svg></div><b>QuickBooks-Ready Export</b><p>One-click CSV exports for invoices and time, with a sync-lock so nothing gets double-billed.</p></div>
+      <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h13"/><path d="M14 3l4 4-4 4"/><path d="M20 17H7"/><path d="M10 13l-4 4 4 4"/></svg></div><b>QuickBooks-Compatible Export</b><p>One-click CSV exports for invoices and time, with an export lock so nothing gets double-billed.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></svg></div><b>Roles &amp; Audit Log</b><p>Superuser, admin and tech roles with forced password changes and a full audit trail of every change.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><b>Offline-First Field App</b><p>Techs lose signal? No problem. The field application caches jobs locally and silently syncs when reconnected.</p></div>
       <div class="fcard reveal"><div class="fi"><svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><b>Ironclad Local Backups</b><p>Configure a target mirror directory. The system automatically executes a full backup every night.</p></div>
@@ -543,7 +544,7 @@
   <div class="container">
     <span class="kicker"><span class="no">Sec. 05</span> Pricing &amp; Plans</span>
     <h2>Buy it once. It's yours.</h2>
-    <p class="muted">No per-seat rent. No data hostage fees. Two plans, one install — Plus is a license switch, not a different product.</p>
+    <p class="muted">No per-seat rent. No data hostage fees. No subscriptions — buy it once and own it for life.</p>
     <div class="price-grid">
       <div class="pcard reveal">
         <div class="pn">Single Office Base</div>
@@ -560,14 +561,14 @@
       </div>
       <div class="pcard featured reveal">
         <div class="pn" style="color:var(--blue)">Single Office Plus <span class="plus-badge">Upgrade</span></div>
-        <div class="pv">$500 <small>one-time</small></div>
+        <div class="pv">+$500 <small style="display:block;margin-top:.15rem">one-time upgrade to Base · $1,000 for a fresh Base + Plus install</small></div>
         <ul>
           <li>Everything in Base</li>
           <li>Client CRM notes &amp; communication log</li>
           <li>Follow-up reminders with alerts</li>
           <li>Business Analytics — revenue, hours, fleet cost</li>
           <li>Invoicing with PDF &amp; payment tracking</li>
-          <li>Activate anytime — no reinstall</li>
+          <li>Lifetime license — no subscription</li>
         </ul>
         <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Go Plus</a>
       </div>
@@ -597,7 +598,7 @@
       </div>
     </div>
     <div class="tier-note reveal">
-      <b>How the Plus upgrade works:</b> every install ships with the full software. Upgrading to Plus is a license flag your superuser flips in Settings — the Analytics and Invoicing tabs and CRM follow-ups appear on the next refresh, with no reinstall and no downtime.
+      <b>Base now, Plus when you're ready:</b> start on Base and add the Plus tools — CRM notes &amp; follow-ups, business analytics, and invoicing — whenever your business needs them. Plus is a one-time purchase, licensed to you for life with no subscription and nothing to renew. However you buy, your data always belongs to you.
     </div>
   </div>
 </section>
@@ -716,8 +717,8 @@ function renderInventory() {
 }
 
 function renderAccounting() {
-  dpTitle.textContent = 'QuickBooks Sync';
-  dpNote.textContent = 'CSV export + one-way sync lock';
+  dpTitle.textContent = 'QuickBooks Export';
+  dpNote.textContent = 'CSV export + one-way export lock';
   const done = demo.jobs.filter(j => j.status === 'Completed').length;
   const hours = [6,8,5,9,7];
   dpBody.innerHTML = `
@@ -862,7 +863,7 @@ const heroViews = {
     <div class="rowline"><div><div class="jn">INV-0140 — Marina Storage</div><div class="jc">$6,200 · check #1042</div></div><span class="pill p3">Paid</span></div>
   `,
   qb: `
-    <div class="ttl">QuickBooks Sync</div>
+    <div class="ttl">QuickBooks Export</div>
     <div class="kpis">
       <div class="kpi"><div class="kl">Pending Invoices</div><div class="kv">4</div></div>
       <div class="kpi"><div class="kl">Pending Time</div><div class="kv">12</div></div>

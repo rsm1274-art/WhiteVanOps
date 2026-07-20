@@ -12,14 +12,16 @@ Search `index.html` for `[` — every bracketed value is a placeholder:
 
 | Placeholder | Where |
 |---|---|
-| `[sales@yourcompany.com]`, `[+1 (555) 000-0000]`, `[Mon–Fri, 8am–6pm CT]` | Contact section |
 | `[Your Company Name]`, `[Privacy Policy]`, `[Terms]` | Footer |
+| `[connect to your CRM or email service here]` | Contact form success notice (`#form-ok`) |
 | Demo form backend | `#contact-form` submit handler shows a notice instead of sending — wire it to your CRM/email service |
+
+The contact section is a demo-request form plus a short intro line; it does not list a public email, phone, or hours.
 
 ## What's on the page
 
 - **Hero** with animated stat counters and a live-look dashboard mockup
-- **Data ownership section** (the core pitch): bundled PostgreSQL, no cloud dependency, no lock-in, per-install secrets — with a "server status card" visual showing `Outbound data to vendor cloud: 0 bytes`
+- **Data ownership section** (the core pitch): bundled PostgreSQL, no runtime cloud dependency, no lock-in, per-install secrets — with a "server status card" visual showing `Outbound job / client / financial data: 0 bytes` and a transparent one-time `Vendor contact: license activation only` line (the app's only network call to the vendor is a one-time Firebase license check at activation)
 - **Interactive demo**: a clickable Clients & Jobs ledger (click rows to cycle status), Inventory and Accounting tabs, and a phone-frame Field Module demo whose job cards stay in sync with the dashboard table (Start / Log Time / Complete with toasts)
 - **How it works** (installer → QR → dispatch), **pricing** (one-time purchase framing), **contact** with demo-request form
 
