@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, ArrowLeftRight } from "lucide-react";
 import { DashboardData, StockLevel } from "@/types";
 import { AdjustStockContext } from "@/types";
 
@@ -14,12 +14,15 @@ interface RemoveStockContext {
 interface Props {
   data: DashboardData;
   onAddItem: () => void;
+  onAddWarehouse: () => void;
+  onTransferStock: () => void;
   onAdjustStock: (context: AdjustStockContext) => void;
   onRemoveStock: (context: RemoveStockContext) => void;
   onDeleteItem: (itemId: string, itemName: string) => void;
+  onDeleteLocation: (locationId: string, locationName: string) => void;
 }
 
-export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveStock, onDeleteItem }: Props) {
+export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransferStock, onAdjustStock, onRemoveStock, onDeleteItem, onDeleteLocation }: Props) {
   const { inventoryItems, stockLocations } = data;
 
   // Build lookup: itemId -> locationId -> StockLevel
@@ -43,13 +46,22 @@ export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveS
             Master catalog with totals across all locations, plus per-location breakdowns.
           </p>
         </div>
-        <button
-          onClick={onAddItem}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 text-white hover:bg-blue-800 text-xs font-bold uppercase tracking-wider rounded transition-colors"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add Catalog Product
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onTransferStock}
+            className="inline-flex items-center gap-1.5 px-4 py-2 border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Transfer Stock
+          </button>
+          <button
+            onClick={onAddItem}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-700 text-white hover:bg-blue-800 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Catalog Product
+          </button>
+        </div>
       </div>
 
       {/* ── Master catalog table ── */}
@@ -144,10 +156,19 @@ export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveS
 
       {/* ── Per-location cards ── */}
       <section>
-        <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">
-          By Location
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="text-xs font-bold uppercase tracking-widest text-zinc-500">
+            By Location
+          </h4>
+          <button
+            onClick={onAddWarehouse}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-[10px] font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <Plus className="h-3 w-3" />
+            Add Warehouse
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {stockLocations.length === 0 ? (
             <p className="text-sm text-zinc-500 col-span-3">No stock locations configured.</p>
           ) : (
@@ -165,6 +186,14 @@ export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveS
                       {loc.vehicle.make} {loc.vehicle.model}
                     </span>
                   )}
+                  {loc.type === "Warehouse" && (
+                    <button
+                      onClick={() => onDeleteLocation(loc.id, loc.name)}
+                      className="px-2 py-1 border border-red-200 text-red-400 hover:bg-red-50 rounded text-[10px] font-bold uppercase tracking-wide transition-colors whitespace-nowrap"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-3 flex-1">
@@ -176,14 +205,14 @@ export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveS
                       return (
                         <div
                           key={level.id}
-                          className="flex justify-between items-center text-xs pb-3 border-b border-zinc-100 last:border-0"
+                          className="text-xs pb-3 border-b border-zinc-100 last:border-0"
                         >
-                          <div>
-                            <span className="font-medium text-zinc-700">{level.inventoryItem.name}</span>
-                            <span className="text-[9px] text-zinc-400 block">{level.inventoryItem.category}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
+                          <div className="flex justify-between items-start gap-2">
+                            <div className="min-w-0">
+                              <span className="font-medium text-zinc-700 break-words">{level.inventoryItem.name}</span>
+                              <span className="text-[9px] text-zinc-400 block">{level.inventoryItem.category}</span>
+                            </div>
+                            <div className="text-right shrink-0">
                               <span className={`font-mono font-bold ${isLow ? "text-red-600" : "text-zinc-900"}`}>
                                 {level.quantity}
                               </span>
@@ -194,36 +223,36 @@ export default function InventoryTab({ data, onAddItem, onAdjustStock, onRemoveS
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() =>
-                                  onAdjustStock({
-                                    itemId: level.inventoryItem.id,
-                                    locationId: loc.id,
-                                    itemName: level.inventoryItem.name,
-                                    locationName: loc.name,
-                                    currentQty: level.quantity,
-                                    currentMin: level.minThreshold,
-                                  })
-                                }
-                                className="p-1 border border-zinc-300 text-zinc-500 hover:bg-zinc-100 rounded text-[10px] font-bold uppercase tracking-wide transition-colors"
-                              >
-                                Adjust
-                              </button>
-                              <button
-                                onClick={() =>
-                                  onRemoveStock({
-                                    itemId: level.inventoryItem.id,
-                                    locationId: loc.id,
-                                    itemName: level.inventoryItem.name,
-                                    locationName: loc.name,
-                                  })
-                                }
-                                className="p-1 border border-red-200 text-red-400 hover:bg-red-50 rounded text-[10px] font-bold uppercase tracking-wide transition-colors"
-                              >
-                                Remove
-                              </button>
-                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-2">
+                            <button
+                              onClick={() =>
+                                onAdjustStock({
+                                  itemId: level.inventoryItem.id,
+                                  locationId: loc.id,
+                                  itemName: level.inventoryItem.name,
+                                  locationName: loc.name,
+                                  currentQty: level.quantity,
+                                  currentMin: level.minThreshold,
+                                })
+                              }
+                              className="px-2 py-1 border border-zinc-300 text-zinc-500 hover:bg-zinc-100 rounded text-[10px] font-bold uppercase tracking-wide transition-colors"
+                            >
+                              Adjust
+                            </button>
+                            <button
+                              onClick={() =>
+                                onRemoveStock({
+                                  itemId: level.inventoryItem.id,
+                                  locationId: loc.id,
+                                  itemName: level.inventoryItem.name,
+                                  locationName: loc.name,
+                                })
+                              }
+                              className="px-2 py-1 border border-red-200 text-red-400 hover:bg-red-50 rounded text-[10px] font-bold uppercase tracking-wide transition-colors"
+                            >
+                              Remove
+                            </button>
                           </div>
                         </div>
                       );

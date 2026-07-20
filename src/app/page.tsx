@@ -42,6 +42,8 @@ import AddPersonnelModal from "@/components/modals/AddPersonnelModal";
 import AddVehicleModal from "@/components/modals/AddVehicleModal";
 import AddMaintenanceModal from "@/components/modals/AddMaintenanceModal";
 import AddItemModal from "@/components/modals/AddItemModal";
+import AddWarehouseModal from "@/components/modals/AddWarehouseModal";
+import TransferStockModal from "@/components/modals/TransferStockModal";
 import EditPersonnelModal from "@/components/modals/EditPersonnelModal";
 import ReportRepairModal from "@/components/modals/ReportRepairModal";
 import AdjustStockModal from "@/components/modals/AdjustStockModal";
@@ -537,6 +539,33 @@ export default function Dashboard() {
     }
   };
 
+  const deleteLocation = async (stockLocationId: string) => {
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_location", stockLocationId }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to delete warehouse");
+      handleSuccess("Warehouse deleted.");
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to delete warehouse");
+    }
+  };
+
+  const requestDeleteLocation = (locationId: string, locationName: string) => {
+    setConfirm({
+      title: "Delete Warehouse",
+      message: `Permanently delete "${locationName}"? All stock counts recorded at this warehouse will be removed. Catalog items are kept.`,
+      destructive: true,
+      onConfirm: () => {
+        setConfirm(null);
+        deleteLocation(locationId);
+      },
+    });
+  };
+
   const removeStock = async (inventoryItemId: string, stockLocationId: string) => {
     try {
       const res = await fetch("/api/inventory", {
@@ -884,9 +913,12 @@ export default function Dashboard() {
             <InventoryTab
               data={data}
               onAddItem={() => setActiveModal("addItem")}
+              onAddWarehouse={() => setActiveModal("addWarehouse")}
+              onTransferStock={() => setActiveModal("transferStock")}
               onAdjustStock={(ctx) => { setAdjustStockCtx(ctx); setActiveModal("adjustStock"); }}
               onRemoveStock={requestRemoveStock}
               onDeleteItem={requestDeleteItem}
+              onDeleteLocation={requestDeleteLocation}
             />
           )}
 
@@ -944,6 +976,18 @@ export default function Dashboard() {
       )}
       {activeModal === "addItem" && (
         <AddItemModal onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
+      )}
+      {activeModal === "addWarehouse" && (
+        <AddWarehouseModal onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
+      )}
+      {activeModal === "transferStock" && (
+        <TransferStockModal
+          items={data.inventoryItems}
+          locations={data.stockLocations}
+          onClose={closeModal}
+          onSuccess={handleSuccess}
+          onError={handleError}
+        />
       )}
       {activeModal === "adjustStock" && adjustStockCtx && (
         <AdjustStockModal

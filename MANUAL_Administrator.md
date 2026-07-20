@@ -275,9 +275,18 @@ Click **Add Item** to create a catalog entry. Fields:
 
 To permanently delete an item from the catalog, click **Delete Item**. Items that have been used on completed jobs (and thus appear on invoice exports) cannot be deleted.
 
+### Stock Locations
+
+There are two kinds of stock location:
+
+- **Vans** — created automatically when you add a vehicle in Fleet & Service. You cannot add or delete a van location here; it is tied to the vehicle.
+- **Warehouses** — click **Add Warehouse** (top of the *By Location* section) and give it a name (e.g., "Main Warehouse"). Every catalog item is immediately added to the new warehouse at zero stock, so it shows up as its own column in the master catalog table and as its own card below. A fresh install has no warehouse until you add one — add at least one so inventory can be stocked somewhere other than the vans.
+
+To remove a warehouse, click **Delete** on its location card. This removes the warehouse and its recorded stock counts; your catalog items are kept. (Van locations have no Delete button — remove the vehicle instead.)
+
 ### Stock Levels
 
-Stock locations are created automatically when vehicles are added. The warehouse appears as a separate location.
+New catalog items are automatically mapped to every existing stock location (all warehouses and vans) at zero quantity.
 
 For each item at each location:
 - **Qty** — current quantity on hand
@@ -286,6 +295,14 @@ For each item at each location:
 Click **Adjust Stock** on any item-location row to update the quantity or minimum threshold. Use this to record restocking, manual counts, or corrections.
 
 Click **Remove** (trash icon) to remove an item from a specific location without deleting it from the catalog.
+
+### Transferring Stock Between Locations
+
+Click **Transfer Stock** (top of the Inventory tab) to move units of an item from one location to another — most commonly restocking a van from the warehouse. Pick the **item**, the **From** location, the **To** location, and the **quantity**; the modal shows how many are on hand at the source. The transfer decrements the source and increments the destination in one step.
+
+Typical weekly workflow: when a field tech signs for stock pulled from the warehouse, an office admin records it here (From = warehouse, To = that tech's van). Techs do not transfer stock themselves — it is a desktop/office action so the counts match what was physically signed for.
+
+A transfer is blocked if the quantity exceeds what is on hand at the source, so a location can never go negative.
 
 **Important:** When a job is marked Completed, the system automatically deducts the job's material quantities from the assigned van's stock location. You do not need to manually adjust stock after completing a job.
 
