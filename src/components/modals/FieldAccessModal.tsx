@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Smartphone } from "lucide-react";
 import Modal, { ModalHeader, Field, inputCls } from "../shared/Modal";
@@ -9,23 +9,65 @@ interface Props {
   onClose: () => void;
 }
 
+const SETTING_KEY = "field_access_url";
+
 /**
  * Shows a QR code pointing at the field module so techs can scan it with
- * their phone camera and install /field as a home-screen app. The URL
- * defaults to this browser's origin but is editable — on the office server
- * the phones reach the app via the Dynamic DNS hostname, not localhost.
+ * their phone camera and install /field as a home-screen app. The URL is
+ * persisted server-side (SystemSetting), not just this browser's
+ * localStorage — otherwise a fresh browser/profile/device falls back to
+ * `window.location.origin`, which on the Electron desktop app is always
+ * `http://localhost:3000` and produces a QR code that only "works" on the
+ * machine running the dashboard, never on a phone (ERR_CONNECTION_FAILED).
+ * QR generation is refused outright while the URL is a localhost address so
+ * a broken code can never be handed to a tech looking fine.
  */
 export default function FieldAccessModal({ onClose }: Props) {
   // The modal only mounts in the browser (opened by a click), so window and
-  // localStorage are safe to read in the initializer.
+  // localStorage are safe to read in the initializer. This is just the
+  // first-paint guess — the server value (fetched below) is authoritative.
   const [url, setUrl] = useState(
     () => localStorage.getItem("wvo.fieldAccessUrl") ?? `${window.location.origin}/field`
   );
   const [qr, setQr] = useState<string | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    if (!url) return;
-    localStorage.setItem("wvo.fieldAccessUrl", url);
+    let cancelled = false;
+    fetch(`/api/settings?key=${SETTING_KEY}`)
+      .then((res) => res.json())
+      .then((setting: { value?: string }) => {
+        if (!cancelled && setting?.value) {
+          setUrl(setting.value);
+          localStorage.setItem("wvo.fieldAccessUrl", setting.value);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => () => clearTimeout(saveTimer.current), []);
+
+  function handleUrlChange(next: string) {
+    setUrl(next);
+    localStorage.setItem("wvo.fieldAccessUrl", next);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: SETTING_KEY, value: next }),
+      }).catch(() => {});
+    }, 500);
+  }
+
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url);
+  const isPlainHttp = /^http:\/\//i.test(url) && !isLocalhost;
+
+  useEffect(() => {
+    // Render guards on `!isLocalhost` too, so no need to clear `qr` here —
+    // avoids a synchronous setState-in-effect on the localhost branch.
+    if (!url || isLocalhost) return;
     let cancelled = false;
     QRCode.toDataURL(url, {
       width: 480,
@@ -36,10 +78,7 @@ export default function FieldAccessModal({ onClose }: Props) {
       .then((dataUrl) => { if (!cancelled) setQr(dataUrl); })
       .catch(() => { if (!cancelled) setQr(null); });
     return () => { cancelled = true; };
-  }, [url]);
-
-  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url);
-  const isPlainHttp = /^http:\/\//i.test(url) && !isLocalhost;
+  }, [url, isLocalhost]);
 
   return (
     <Modal onClose={onClose} maxWidth="sm">
@@ -53,18 +92,19 @@ export default function FieldAccessModal({ onClose }: Props) {
         <input
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => handleUrlChange(e.target.value)}
           className={inputCls}
           placeholder="http://your-client.duckdns.org:3000/field"
         />
       </Field>
 
       {isLocalhost && (
-        <p className="text-[11px] text-amber-600 leading-relaxed">
-          This is a localhost address — phones can&apos;t reach it. Enter the
-          server&apos;s public DDNS address (e.g. your{" "}
-          <span className="font-mono">http://&lt;client&gt;.duckdns.org:3000/field</span>{" "}
-          hostname) so the QR code works from a phone.
+        <p className="text-[11px] text-red-600 leading-relaxed font-medium">
+          This is a localhost address — a phone scanning it will get
+          &quot;localhost is unreachable,&quot; not the field module. Enter
+          the server&apos;s public DDNS address instead (e.g.{" "}
+          <span className="font-mono">http://&lt;client&gt;.duckdns.org:3000/field</span>
+          ) — the QR code below is disabled until this is fixed.
         </p>
       )}
       {isPlainHttp && (
@@ -75,7 +115,7 @@ export default function FieldAccessModal({ onClose }: Props) {
         </p>
       )}
 
-      {url && qr ? (
+      {url && qr && !isLocalhost ? (
         <div className="flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qr} alt="QR code for field module" className="w-60 h-60 border border-zinc-200 rounded" />
@@ -87,6 +127,8 @@ export default function FieldAccessModal({ onClose }: Props) {
             to install it like an app.
           </p>
         </div>
+      ) : isLocalhost ? (
+        <p className="text-xs text-zinc-400 text-center py-8">Fix the address above to generate a working QR code.</p>
       ) : (
         <p className="text-xs text-zinc-400 text-center py-8">Enter a URL to generate a QR code.</p>
       )}
