@@ -9,18 +9,16 @@ domain live, zone Active, `cloudflared` installed and authorized. **Next action:
 `docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md`** — create the tunnel, write
 `config.yml`, route DNS.
 
-## ⚠ Do this first
+## Credential note — ✅ resolved, no action needed
 
-**A Cloudflare API token was exposed.** The contents of `%USERPROFILE%\.cloudflared\cert.pem`
-were pasted into the session transcript; it contains the account ID, zone ID, and a live
-`cfut_…` API token for `whitevanops.com`.
+A Cloudflare API token was exposed (the contents of `%USERPROFILE%\.cloudflared\cert.pem`
+were pasted into the session transcript). **The user rotated it on 2026-07-20 before any
+tunnel was created**, so nothing was built on the burned credential. No follow-up required.
 
-1. Cloudflare dashboard → My Profile → API Tokens → delete the Argo Tunnel / cloudflared token.
-2. Delete `C:\Users\rober\.cloudflared\cert.pem`.
-3. Re-run `cloudflared tunnel login` to mint a fresh one.
+Standing rule this produced: `cert.pem` and `<UUID>.json` are live credentials. To check
+whether they exist, test the *path* — never read or paste the contents.
 
-Do this **before** creating tunnels, or they'll be built on a burned credential.
-Also: the dev `admin` password was shared in-session — rotate when convenient.
+Still open: the dev `admin` password was shared in-session — rotate when convenient.
 
 ---
 
@@ -73,8 +71,8 @@ of the runbook is its first real exercise.**
 |---|---|
 | 1. Zone added | ✅ Active, DNS Setup: Full. Delegation to `ignacio`/`raina.ns.cloudflare.com` verified resolving publicly |
 | 2. Install `cloudflared` | ✅ v2026.7.2 at `C:\Program Files (x86)\cloudflared\` |
-| 3. `tunnel login` | ✅ `cert.pem` written — **but rotate it, see above** |
-| 4. Create tunnel + route DNS | ⬜ **NEXT** |
+| 3. `tunnel login` | ✅ `cert.pem` written; token rotated after exposure — current cert is clean |
+| 4. Create tunnel + route DNS | ⬜ **NEXT — start here** |
 | 5–7. Verify, cellular test, service install | ⬜ |
 
 **Hostname scheme decided and corrected (`88d30d0`):** flat `<customer>.whitevanops.com`,
@@ -136,7 +134,9 @@ caught precisely because it was flagged as unverified instead of asserted.
   → `88d30d0` (hostname scheme).
 - **Nothing pushed.** A remote exists (`github.com/rsm1274-art/whitevanops-app`) but is
   untouched by choice — pushing is outward-facing and wasn't authorized.
-- **Left running:** Next.js dev server on :3000 and bundled Postgres on :5433
-  (`pg_ctl -D %APPDATA%\whitevanops\pgdata`). Stop them or reuse for Step 5.
+- **Nothing left running.** The dev server (:3000) and bundled Postgres (:5433) were started
+  for the smoke test and have been stopped; both ports are free, matching the state at
+  session start. Step 5 needs the app up again — start Postgres with
+  `./pgsql/bin/pg_ctl.exe -D "$env:APPDATA\whitevanops\pgdata" -w start`, then `npm run dev`.
 - Dev `admin` password was reset via `npx tsx prisma/bootstrap.ts` and then changed by the
   user; `mustChangePassword` is false.
