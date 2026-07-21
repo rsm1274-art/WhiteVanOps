@@ -117,15 +117,27 @@ Spoofing `x-forwarded-proto: https` only makes the cookie *more* restrictive —
 `getSessionCookieOptions()` gains a request/protocol parameter. Three call sites:
 `login`, `change-password`, `logout`.
 
-### 2. Fix `clearSessionCookie` (latent bug)
+### 2. `clearSessionCookie` consistency (NOT a bug — corrected 2026-07-20)
 
 ```ts
 res.cookies.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
 ```
 
-Drops `secure`/`httpOnly`/`sameSite`. Once cookies are `Secure`, a mismatched clear can
-fail to delete in some browsers, leaving users unable to log out cleanly. Must reuse the
-same options object used to set it.
+> **Correction.** This section originally called the above a latent bug — that dropping
+> `secure`/`httpOnly`/`sameSite` could "fail to delete in some browsers", breaking logout.
+> **That is wrong, and it was implemented and shipped before anyone checked it.** A browser
+> identifies a cookie by **(name, domain, path)** only; `secure`/`httpOnly`/`sameSite` are
+> not part of that identity, so the clear above matches and deletes the cookie. Verified
+> empirically: it emits `session=; Path=/; Max-Age=0`, and `NextResponse.cookies.delete(name)`
+> (used in `src/middleware.ts`) emits `session=; Path=/; Expires=…1970` — both carry the
+> `Path=/` that actually matters. Logout was never broken.
+>
+> The one genuinely scheme-dependent case is the reverse direction: a request over plain
+> `http://` cannot overwrite a cookie carrying `Secure`.
+
+Still worth doing, on its actual merit: derive the clear from `getSessionCookieOptions(req)`
+and override only `maxAge: 0`, so set and clear cannot drift if `path` (or an added `domain`)
+ever changes. Treat it as a consistency cleanup, not a defect fix.
 
 ### 3. Rate limiting: layered, IP-tolerant
 
@@ -175,9 +187,11 @@ tunnel means dead field access and an unpaid support call.
 
 ## Phases
 
-- **Phase 0 — App hardening.** Cookie per-request `secure` (+ delete `REQUIRE_HTTPS`),
-  `clearSessionCookie` fix, layered rate limiting, client-IP resolution. Unit tests for all
-  of it (no DB needed; follows existing `auth.test.ts` patterns). Zero infra dependency.
+- **Phase 0 — App hardening. ✅ DONE 2026-07-20 (`276515f`).** Cookie per-request `secure`
+  (+ `REQUIRE_HTTPS` deleted), `clearSessionCookie` consistency, layered rate limiting,
+  client-IP resolution. 14 new unit tests; rate limiting also verified live against the dev
+  server. The `Secure`-on-https branch is unit-tested only until Phase 1 provides a real
+  HTTPS front end.
 - **Phase 1 — Tunnel proof of concept.** Buy domain, add to Cloudflare, create one tunnel
   by hand, verify end-to-end from cellular. Confirms the approach before automating.
 - **Phase 2 — Provisioning automation.** Script the per-customer steps; resilient service
@@ -200,7 +214,7 @@ Phase 1 is not complete until all of these are observed, not assumed:
 - [ ] `https://<customer>.field.<vendordomain>/field` loads from a phone **on cellular, WiFi off**.
 - [ ] Field tech login succeeds and the session persists across navigation (`Secure` cookie accepted).
 - [ ] **Electron desktop login still works** on `http://localhost:3000` — the specific regression this design is built to prevent.
-- [ ] Logout clears the session cleanly in a browser (validates the `clearSessionCookie` fix).
+- [x] Logout clears the session cleanly in a browser. *(Verified 2026-07-20 on plain http: after Sign Out, `/api/auth/me` goes 200 → redirect. Re-check once a `Secure` cookie is actually in play.)*
 - [ ] Rate limiting observes distinct client IPs — two devices on different networks land in different buckets, and a shared NAT does not cross-lock users.
 - [ ] Tunnel auto-recovers after the office PC reboots and after killing the service.
 - [ ] No inbound port forward exists on the customer router.
