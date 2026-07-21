@@ -279,7 +279,11 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `SESSION_SECRET` | Yes | Random string for signing session JWTs — keep secret and consistent across restarts |
 | `WVO_FIREBASE_SERVICE_ACCOUNT` | Vendor only | Absolute path to the Firebase service-account key used by `scripts/license-manager.js` to mint license keys. **Store this file OUTSIDE the repository** (e.g. `%APPDATA%\whitevanops-secrets\`) — it is a highly privileged credential and is now gitignored so it can never be committed. `GOOGLE_APPLICATION_CREDENTIALS` is accepted as an alias. Not needed on customer machines. |
-| `REQUIRE_HTTPS` | No | Set to `true` only if you've put a real HTTPS front end (e.g. a reverse proxy) in front of the app. Locks the session cookie to HTTPS-only (`Secure` flag). **Leave unset for the standard Port Forwarding + DDNS setup in §7**, which is plain `http://` — setting this without HTTPS in place will silently break field-tech logins. |
+
+> **`REQUIRE_HTTPS` was removed.** The session cookie's `Secure` flag is now decided per
+> request from the `X-Forwarded-Proto` header, so one server can serve the desktop app over
+> `http://localhost:3000` and field techs over `https://` at the same time. There is nothing
+> to configure — delete the line from `.env.local` if you still have it.
 
 ---
 

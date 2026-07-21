@@ -107,7 +107,7 @@ export async function POST(request: Request) {
         plus: unlockPayload.tier === "plus",
         trial,
       });
-      setSessionCookie(res, token);
+      setSessionCookie(res, token, request);
       return res;
     }
 

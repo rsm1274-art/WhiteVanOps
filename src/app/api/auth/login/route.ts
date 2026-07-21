@@ -2,27 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { Role, setSessionCookie, signSessionToken } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rateLimit";
+import { checkLoginRateLimit, getClientIp } from "@/lib/rateLimit";
 import { getTrialStatus } from "@/lib/trial";
 
-// Per-IP: slows down credential-stuffing across many usernames from one source.
-const IP_MAX_ATTEMPTS = 20;
-const IP_WINDOW_MS = 5 * 60 * 1000;
-
 // Per-account: locks a specific account out after repeated wrong passwords,
-// persisted on the User row so it survives server restarts.
+// persisted on the User row so it survives server restarts. This is the real
+// brute-force control; the in-memory limits in rateLimit.ts layer around it.
 const ACCOUNT_MAX_ATTEMPTS = 5;
 const ACCOUNT_LOCKOUT_MS = 15 * 60 * 1000;
-
-function getClientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || "unknown";
-}
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
 
-  if (!username || !password) {
+  // Typed explicitly: these come from untrusted JSON, and a non-string would
+  // otherwise reach the rate-limit key and the Prisma lookup.
+  if (typeof username !== "string" || typeof password !== "string" || !username || !password) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
   }
 
@@ -30,8 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Server not configured" }, { status: 500 });
   }
 
-  const ip = getClientIp(req);
-  if (!checkRateLimit(`login:${ip}`, IP_MAX_ATTEMPTS, IP_WINDOW_MS)) {
+  if (!checkLoginRateLimit(getClientIp(req), username)) {
     return NextResponse.json(
       { error: "Too many login attempts. Please try again later." },
       { status: 429 }
@@ -97,7 +90,7 @@ export async function POST(req: NextRequest) {
     role: user.role,
     mustChangePassword: user.mustChangePassword,
   });
-  setSessionCookie(res, token);
+  setSessionCookie(res, token, req);
 
   return res;
 }

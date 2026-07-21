@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   });
 
   const res = NextResponse.json({ ok: true, role: updated.role });
-  setSessionCookie(res, token);
+  setSessionCookie(res, token, req);
 
   return res;
 }

@@ -18,20 +18,25 @@ export interface SessionUser {
 export const SESSION_COOKIE_NAME = "session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-// The session cookie is only marked Secure (HTTPS-only) when REQUIRE_HTTPS=true.
-// Browsers refuse to persist Secure cookies over plain http:// on a non-localhost
-// origin. The documented field-access path (MANUAL_Setup_Installation.md §7) is
-// router Port Forwarding + Dynamic DNS, which is plain http:// by design — leave
-// REQUIRE_HTTPS unset for that setup. Only set it to true if a real HTTPS front
-// end (e.g. a reverse proxy) is in front of the app.
-function isHttpsRequired(): boolean {
-  return process.env.NODE_ENV === "production" && process.env.REQUIRE_HTTPS === "true";
+// `secure` is a PER-REQUEST property, not a deployment setting. One server
+// answers both http://localhost:3000 (the Electron desktop window) and the
+// https:// tunnel the field techs come in on, so any single global flag is
+// guaranteed to be wrong for one of them — and a wrong value fails silently:
+// the browser refuses to persist a Secure cookie over http://, so login
+// appears to submit and then bounces straight back to /login with no error.
+//
+// A tunnel or reverse proxy sets X-Forwarded-Proto on the way in; a direct
+// plain-http request has no such header. Only the first hop matters — it is
+// the one that faced the client.
+export function isSecureRequest(req: Request): boolean {
+  const proto = req.headers.get("x-forwarded-proto");
+  return proto?.split(",")[0]?.trim().toLowerCase() === "https";
 }
 
-export function getSessionCookieOptions() {
+export function getSessionCookieOptions(req: Request) {
   return {
     httpOnly: true,
-    secure: isHttpsRequired(),
+    secure: isSecureRequest(req),
     sameSite: "lax" as const,
     maxAge: SESSION_MAX_AGE_SECONDS,
     path: "/",
@@ -48,12 +53,18 @@ export async function signSessionToken(payload: SessionUser): Promise<string> {
     .sign(key);
 }
 
-export function setSessionCookie(res: NextResponse, token: string): void {
-  res.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions());
+export function setSessionCookie(res: NextResponse, token: string, req: Request): void {
+  res.cookies.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions(req));
 }
 
-export function clearSessionCookie(res: NextResponse): void {
-  res.cookies.set(SESSION_COOKIE_NAME, "", { maxAge: 0, path: "/" });
+// Clears using the same options the cookie was set with, so the two can't drift.
+// Note on what actually matters: a browser identifies a cookie by (name, domain,
+// path) only — `secure`/`httpOnly`/`sameSite` are NOT part of that identity, so
+// omitting them does not break the delete. `path` is the attribute that must
+// match, and it is the one this shares. Deriving the whole set from one place
+// means a future change to `path` (or an added `domain`) stays in sync here.
+export function clearSessionCookie(res: NextResponse, req: Request): void {
+  res.cookies.set(SESSION_COOKIE_NAME, "", { ...getSessionCookieOptions(req), maxAge: 0 });
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {

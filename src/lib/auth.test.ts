@@ -29,31 +29,43 @@ const testUser: SessionUser = {
   role: "admin",
 };
 
+function reqWith(headers: Record<string, string> = {}): Request {
+  return new Request("http://localhost:3000/api/auth/login", { headers });
+}
+
 describe("getSessionCookieOptions", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it("is not secure when NODE_ENV is not production, regardless of REQUIRE_HTTPS", () => {
-    vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("REQUIRE_HTTPS", "true");
-    expect(getSessionCookieOptions().secure).toBe(false);
+  it("is secure when the request arrived over HTTPS at the proxy", () => {
+    expect(getSessionCookieOptions(reqWith({ "x-forwarded-proto": "https" })).secure).toBe(true);
   });
 
-  it("is not secure in production when REQUIRE_HTTPS is unset (the Port Forwarding + DDNS default)", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("REQUIRE_HTTPS", undefined);
-    expect(getSessionCookieOptions().secure).toBe(false);
+  it("is not secure for a direct plain-http request (the Electron localhost case)", () => {
+    expect(getSessionCookieOptions(reqWith()).secure).toBe(false);
   });
 
-  it("is secure only when both NODE_ENV=production and REQUIRE_HTTPS=true", () => {
+  it("derives secure per request, so one server can serve both http and https clients", () => {
+    // The exact case a single global flag gets wrong: the desktop app hits
+    // http://localhost:3000 while techs come in over the https tunnel.
+    expect(getSessionCookieOptions(reqWith()).secure).toBe(false);
+    expect(getSessionCookieOptions(reqWith({ "x-forwarded-proto": "https" })).secure).toBe(true);
+  });
+
+  it("reads only the first hop of a comma-joined X-Forwarded-Proto chain", () => {
+    expect(getSessionCookieOptions(reqWith({ "x-forwarded-proto": "https, http" })).secure).toBe(true);
+    expect(getSessionCookieOptions(reqWith({ "x-forwarded-proto": "http, https" })).secure).toBe(false);
+  });
+
+  it("ignores REQUIRE_HTTPS, which no longer exists", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("REQUIRE_HTTPS", "true");
-    expect(getSessionCookieOptions().secure).toBe(true);
+    expect(getSessionCookieOptions(reqWith()).secure).toBe(false);
   });
 
   it("always sets httpOnly, sameSite=lax, and a 7-day maxAge", () => {
-    const opts = getSessionCookieOptions();
+    const opts = getSessionCookieOptions(reqWith());
     expect(opts.httpOnly).toBe(true);
     expect(opts.sameSite).toBe("lax");
     expect(opts.maxAge).toBe(60 * 60 * 24 * 7);
@@ -111,16 +123,38 @@ describe("signSessionToken / getSessionUser round trip", () => {
 describe("setSessionCookie / clearSessionCookie", () => {
   it("setSessionCookie sets the session cookie with the signed token", () => {
     const res = NextResponse.json({ ok: true });
-    setSessionCookie(res, "fake-token-value");
+    setSessionCookie(res, "fake-token-value", reqWith());
     const cookie = res.cookies.get(SESSION_COOKIE_NAME);
     expect(cookie?.value).toBe("fake-token-value");
   });
 
-  it("clearSessionCookie empties the session cookie", () => {
+  it("setSessionCookie marks the cookie Secure on an https request", () => {
     const res = NextResponse.json({ ok: true });
-    clearSessionCookie(res);
+    setSessionCookie(res, "t", reqWith({ "x-forwarded-proto": "https" }));
+    expect(res.cookies.get(SESSION_COOKIE_NAME)?.secure).toBe(true);
+  });
+
+  it("clearSessionCookie empties the session cookie and expires it immediately", () => {
+    const res = NextResponse.json({ ok: true });
+    clearSessionCookie(res, reqWith());
     const cookie = res.cookies.get(SESSION_COOKIE_NAME);
     expect(cookie?.value).toBe("");
+    expect(cookie?.maxAge).toBe(0);
+  });
+
+  it("clearSessionCookie derives its attributes from the same options setSessionCookie uses", () => {
+    // `path` is the attribute that must match for the delete to land (cookie
+    // identity is name+domain+path). The rest are kept aligned so the set and
+    // clear can't drift apart if `path`/`domain` ever change.
+    const req = reqWith({ "x-forwarded-proto": "https" });
+    const res = NextResponse.json({ ok: true });
+    clearSessionCookie(res, req);
+    const cookie = res.cookies.get(SESSION_COOKIE_NAME);
+    const setOpts = getSessionCookieOptions(req);
+    expect(cookie?.secure).toBe(setOpts.secure);
+    expect(cookie?.httpOnly).toBe(setOpts.httpOnly);
+    expect(cookie?.sameSite).toBe(setOpts.sameSite);
+    expect(cookie?.path).toBe(setOpts.path);
   });
 });
 
