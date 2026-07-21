@@ -76,7 +76,14 @@ Field tech phone ──HTTPS──> Cloudflare edge ──outbound tunnel──>
                                                             + bundled PostgreSQL
 ```
 
-- Hostname: `https://<customer>.field.<vendordomain>/field` — **no `:3000` in the URL.**
+- Hostname: `https://<customer>.<vendordomain>/field` — **no `:3000` in the URL.**
+
+  > **Corrected 2026-07-20.** This originally specified `<customer>.field.<vendordomain>`.
+  > That does not work on the free plan: Cloudflare's Universal SSL covers the root domain
+  > and **first-level subdomains only** (confirmed on the zone's own Overview page), so a
+  > second-level host like `acme.field.whitevanops.com` gets no certificate. Covering it
+  > requires Advanced Certificate Manager (~$10/mo), reintroducing the recurring cost this
+  > design exists to avoid. **Use the flat scheme:** `acme.whitevanops.com`.
 - TLS terminates at Cloudflare's edge; the origin hop is loopback on the office PC, so the
   unencrypted segment never leaves the machine.
 - Data continues to live entirely on-prem. Only transit is proxied.
@@ -177,7 +184,7 @@ state is DB-persisted in layer 1).
 Per-customer setup must be **scripted**, or it is not repeatable:
 
 1. Create named tunnel (`cloudflared` CLI).
-2. Create DNS record for `<customer>.field.<vendordomain>` (Cloudflare API).
+2. Create DNS record for `<customer>.<vendordomain>` (Cloudflare API) — flat, see Architecture.
 3. Write credentials + config to the office PC.
 4. Install and start `cloudflared` as an auto-restarting Windows service.
 5. Verify end-to-end **from cellular with WiFi off** — testing on office WiFi proves nothing.
@@ -211,7 +218,7 @@ removed outright rather than grandfathered.
 
 Phase 1 is not complete until all of these are observed, not assumed:
 
-- [ ] `https://<customer>.field.<vendordomain>/field` loads from a phone **on cellular, WiFi off**.
+- [ ] `https://<customer>.<vendordomain>/field` loads from a phone **on cellular, WiFi off**.
 - [ ] Field tech login succeeds and the session persists across navigation (`Secure` cookie accepted).
 - [ ] **Electron desktop login still works** on `http://localhost:3000` — the specific regression this design is built to prevent.
 - [x] Logout clears the session cleanly in a browser. *(Verified 2026-07-20 on plain http: after Sign Out, `/api/auth/me` goes 200 → redirect. Re-check once a `Secure` cookie is actually in play.)*

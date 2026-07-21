@@ -14,14 +14,16 @@ automating it in Phase 2. Do this on the dev machine first, not a customer's PC.
 The spec proposed `<customer>.field.whitevanops.com`. **Recommend flat
 `<customer>.whitevanops.com` instead.**
 
-Reason: Cloudflare's free Universal SSL covers the apex plus a **single** wildcard level
-(`*.whitevanops.com`). A third-level host like `acme.field.whitevanops.com` is not covered
-by that certificate, and the paid fix (Advanced Certificate Manager, ~$10/mo) reintroduces
-the recurring per-vendor cost this design exists to avoid.
+Reason: Cloudflare's free Universal SSL covers the root domain plus **first-level
+subdomains** only. `acme.field.whitevanops.com` is a second-level subdomain and gets no
+certificate, and the paid fix (Advanced Certificate Manager, ~$10/mo) reintroduces the
+recurring per-vendor cost this design exists to avoid.
 
-> ⚠ **Unverified as of writing** — believed correct but not checked against current
-> Cloudflare documentation. Settle it in Step 5 below: if the flat name serves valid HTTPS
-> and a `field.` name does not, that is the answer. Costs nothing to prefer the flat name.
+> ✅ **CONFIRMED 2026-07-20 by Cloudflare's own dashboard**, on this zone's Overview page:
+> *"We will issue you a free universal SSL certificate to cover your root domain
+> (example.com) and **first-level subdomains** (www.example.com, blog.example.com, etc.)."*
+> `<customer>.field.whitevanops.com` is a second-level subdomain and is therefore **not**
+> covered. **Decision closed: use the flat scheme.** Do not create a `field.` hostname.
 
 Naming: `acme.whitevanops.com` per customer. Keep `www`/apex free for marketing.
 
@@ -88,11 +90,9 @@ cloudflared tunnel run wvo-demo
 
 Leave it running and watch its output — foreground first, service later, so failures are visible.
 
-1. Load `https://demo.whitevanops.com/field` in a desktop browser. Confirm a **valid
-   padlock**, not a certificate warning.
-2. **Settles Decision 0:** if this serves valid HTTPS, the flat scheme works. Only if you
-   want the `field.` tier, test `demo.field.whitevanops.com` too and see whether the
-   certificate holds.
+Load `https://demo.whitevanops.com/field` in a desktop browser. Confirm a **valid padlock**,
+not a certificate warning. (Decision 0 is already closed — flat scheme, confirmed by
+Cloudflare's own SSL wording. This step just verifies the cert actually issued.)
 
 ## Step 6 — Verify from cellular (the only test that counts)
 
