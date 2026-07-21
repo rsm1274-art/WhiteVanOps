@@ -304,6 +304,23 @@ node scripts/license-manager.js --plus --key <THEIR EXACT BASE KEY>
 
 ---
 
+### 3.3b ✅ "Login says 'Invalid credentials' or just spins — and nothing has ever worked on this PC"
+
+**Symptom:** a **fresh install** reaches the login page fine, admin/admin is correct, but signing in fails. In the browser devtools it's a **500** on `POST /api/auth/login`, not a 401. Every other data screen would fail the same way.
+
+**What's actually happening:** the packaged app can't load its database driver at all — a **build/packaging** fault, not a database, password, or network fault. The database is usually perfectly healthy. Two causes, both fixed in builds after 2026-07-19:
+
+- The app was built with Turbopack (Next.js 16's default), which emitted a broken internal reference to the Prisma client that resolves to nothing.
+- The packaging step didn't copy Prisma's runtime files into the installer.
+
+**Fix:** there is no on-site fix — **the customer needs a newer installer.** Rebuild from a current source tree and reinstall. Nothing in `.env.local`, the database, or the router is involved.
+
+**How to tell it apart from §3.2:** §3.2 ("Failed to load dashboard data") means the web layer is up and the *database* isn't answering — a restart usually helps. This one fails at *login itself* on a brand-new install, and restarting never helps. If reinstalling the same installer changes nothing, it's this.
+
+**For the builder, not the customer:** verify a packaged build by running the installed `server.js` through the app's own Electron binary in isolation — running `.next/standalone/server.js` from inside the project does **not** reproduce it (Node finds the project's own `node_modules` and the fault disappears). A correct build fails with a Prisma **P1001 / DatabaseNotReachable** when the database is off; **any `Cannot find module` means it's still broken.** See `CLAUDE.md` for the build invariants (`next build --webpack`, Prisma runtime closure in `outputFileTracingIncludes`).
+
+---
+
 ### 3.4 ✅ "I forgot the admin password"
 
 **Symptom:** nobody can get into the dashboard.
