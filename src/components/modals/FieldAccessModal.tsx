@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Smartphone } from "lucide-react";
 import Modal, { ModalHeader, Field, inputCls } from "../shared/Modal";
+import { classifyFieldUrl } from "@/lib/fieldAccessUrl";
 
 interface Props {
   onClose: () => void;
@@ -19,8 +20,9 @@ const SETTING_KEY = "field_access_url";
  * `window.location.origin`, which on the Electron desktop app is always
  * `http://localhost:3000` and produces a QR code that only "works" on the
  * machine running the dashboard, never on a phone (ERR_CONNECTION_FAILED).
- * QR generation is refused outright while the URL is a localhost address so
- * a broken code can never be handed to a tech looking fine.
+ * Field access is served over an HTTPS tunnel, so the working shape is
+ * `https://<customer-host>/field` with no port. QR generation is refused
+ * while the URL is localhost so a broken code is never handed to a tech.
  */
 export default function FieldAccessModal({ onClose }: Props) {
   // The modal only mounts in the browser (opened by a click), so window and
@@ -61,8 +63,7 @@ export default function FieldAccessModal({ onClose }: Props) {
     }, 500);
   }
 
-  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url);
-  const isPlainHttp = /^http:\/\//i.test(url) && !isLocalhost;
+  const { isLocalhost, isPlainHttp } = classifyFieldUrl(url);
 
   useEffect(() => {
     // Render guards on `!isLocalhost` too, so no need to clear `qr` here —
@@ -94,7 +95,7 @@ export default function FieldAccessModal({ onClose }: Props) {
           value={url}
           onChange={(e) => handleUrlChange(e.target.value)}
           className={inputCls}
-          placeholder="http://your-client.duckdns.org:3000/field"
+          placeholder="https://acme.whitevanops.com/field"
         />
       </Field>
 
@@ -102,16 +103,18 @@ export default function FieldAccessModal({ onClose }: Props) {
         <p className="text-[11px] text-red-600 leading-relaxed font-medium">
           This is a localhost address — a phone scanning it will get
           &quot;localhost is unreachable,&quot; not the field module. Enter
-          the server&apos;s public DDNS address instead (e.g.{" "}
-          <span className="font-mono">http://&lt;client&gt;.duckdns.org:3000/field</span>
+          the tunnel address instead (e.g.{" "}
+          <span className="font-mono">https://acme.whitevanops.com/field</span>
           ) — the QR code below is disabled until this is fixed.
         </p>
       )}
       {isPlainHttp && (
         <p className="text-[11px] text-amber-600 leading-relaxed">
-          Plain HTTP is fine for local port forwarding with DDNS. However, ensure
-          the app is configured to allow plain HTTP cookies, otherwise techs will
-          not stay signed in.
+          This is a plain <span className="font-mono">http://</span> address —
+          credentials would travel unencrypted over the public internet. Field
+          access is served over an HTTPS tunnel; use the{" "}
+          <span className="font-mono">https://</span> address so logins are
+          encrypted and the session cookie is accepted.
         </p>
       )}
 
