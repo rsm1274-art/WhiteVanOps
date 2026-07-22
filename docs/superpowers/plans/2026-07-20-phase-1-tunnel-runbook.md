@@ -123,18 +123,49 @@ Cloudflare's own SSL wording. This step just verifies the cert actually issued.)
 
 ## Step 7 — Install as a service, then break it on purpose
 
+**Requires an elevated shell.** Installing a Windows service needs Administrator rights;
+a normal PowerShell (and any non-interactive automation) fails here because it can't answer
+the UAC prompt. Open PowerShell via **Run as Administrator** for every command below.
+
+**First stop any foreground `cloudflared tunnel run`** so the service is unambiguously what's
+serving the tunnel. (Cloudflare tolerates two connectors on one tunnel — it load-balances —
+but a clean test needs the service to be the only one up.)
+
+Install the service, **pinning the config explicitly** with the global `--config` flag (this
+sidesteps the LocalSystem config-location gotcha in the warning below):
+
 ```powershell
-cloudflared service install
+cloudflared --config C:\Users\rober\.cloudflared\config.yml service install
 ```
 
-- [ ] Reboot the PC → tunnel comes back with no human action
-- [ ] Kill the `cloudflared` process → it restarts on its own
+Confirm it registered and connected:
 
-> ⚠ **Verify against `cloudflared service install --help` before relying on this.** The
-> Windows service runs as a different account than your user, so the config and credentials
-> file must be readable from where the service looks for them — a common failure is a
-> service that installs cleanly and then cannot find `config.yml`. Confirm behavior during
-> the PoC rather than assuming; whatever proves true here becomes the Phase 2 script.
+```powershell
+Get-Service cloudflared | Format-List Name,Status,StartType   # Status=Running, StartType=Automatic
+```
+
+Then load `https://demo.whitevanops.com/field` — it should still serve, now via the service.
+
+- [ ] Reboot the PC → tunnel comes back with no human action *(proves `Automatic` start)*
+- [ ] `Stop-Process -Name cloudflared -Force` → the service manager restarts it on its own
+
+> ⚠ **Config-location gotcha (verified 2026-07-22 environment).** The service runs as
+> `LocalSystem`, whose home is `C:\Windows\System32\config\systemprofile\.cloudflared\`, not
+> your `%USERPROFILE%\.cloudflared\`. Two things de-risk this here: (1) `config.yml` references
+> the credentials by **absolute path** (`C:\Users\rober\.cloudflared\<UUID>.json`), so the
+> creds resolve regardless of account; (2) the `--config` flag above pins `config.yml`'s
+> location. If the site still stops resolving after install, copy the config into LocalSystem's
+> home and restart the service:
+>
+> ```powershell
+> $sys = "C:\Windows\System32\config\systemprofile\.cloudflared"
+> New-Item -ItemType Directory -Force $sys
+> Copy-Item C:\Users\rober\.cloudflared\config.yml,C:\Users\rober\.cloudflared\cert.pem,C:\Users\rober\.cloudflared\3eedf1be-d538-4693-8022-58f281eb18b5.json $sys
+> Restart-Service cloudflared
+> ```
+>
+> Uninstall with `cloudflared service uninstall`. cloudflared version confirmed here: 2026.7.2.
+> Whatever proves true during this PoC becomes the Phase 2 script.
 
 ---
 
