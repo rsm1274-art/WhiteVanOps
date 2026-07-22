@@ -3,6 +3,14 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Dev-only: Next 16's dev server blocks cross-origin requests to /_next/*
+  // resources (JS chunks, HMR) by default. When the dev server is reached
+  // through the Cloudflare tunnel the browser's origin is the public hostname,
+  // not localhost, so the chunks are blocked and the page never hydrates —
+  // login appears to do nothing on a phone. Allow the tunnel host so field
+  // testing works against `npm run dev`. Has no effect on production builds
+  // (`next start` / the Electron standalone server impose no such restriction).
+  allowedDevOrigins: ["demo.whitevanops.com"],
   // Pin the project root explicitly. Without this, Next.js/Turbopack can
   // misinfer the workspace root when a stray lockfile exists in a parent
   // directory (e.g. C:\Users\<name>\package-lock.json), which nests the

@@ -88,6 +88,15 @@ Start the app first (`npm run dev`, or the installed app), then:
 cloudflared tunnel run wvo-demo
 ```
 
+> ⚠ **If testing against `npm run dev`:** Next 16's dev server blocks cross-origin
+> requests to `/_next/*` (JS chunks + HMR) by default. Reached through the tunnel the
+> browser's origin is `demo.whitevanops.com`, not `localhost`, so the chunks are blocked,
+> the page never hydrates, and login silently does nothing on a phone (no request, no
+> error — see the 2026-07-22 resolution in `HANDOFF_2026-07-21-phase1-cellular-login.md`).
+> `next.config.ts` now sets `allowedDevOrigins: ["demo.whitevanops.com"]` to fix this.
+> Production (`next start` / Electron standalone / PM2) imposes no such restriction — this
+> is a dev-only concern, but the dev server is the usual thing behind the tunnel while iterating.
+
 Leave it running and watch its output — foreground first, service later, so failures are visible.
 
 Load `https://demo.whitevanops.com/field` in a desktop browser. Confirm a **valid padlock**,
@@ -98,9 +107,12 @@ Cloudflare's own SSL wording. This step just verifies the cert actually issued.)
 
 **Phone, WiFi OFF.** Office WiFi proves nothing — it never leaves the LAN.
 
-- [ ] `https://demo.whitevanops.com/field` loads on cellular
-- [ ] Field tech login succeeds; session persists across navigation
+- [x] `https://demo.whitevanops.com/field` loads on cellular
+- [x] Field tech login succeeds; session persists across navigation
       *(first real exercise of the Phase 0 `Secure`-cookie branch — unit-tested only until now)*
+      **Verified 2026-07-22 from iPhone over cellular:** login → `POST /api/auth/login 200`
+      → session cookie retained and resent → change-password → dashboard, all clean. Required
+      the dev-mode `allowedDevOrigins` fix above.
 - [ ] Logout clears the session over HTTPS *(re-check of the one criterion validated only on plain http)*
 - [ ] **Electron desktop login still works** on `http://localhost:3000` — the specific
       regression the per-request cookie change exists to prevent. Test on the same machine
