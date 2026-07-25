@@ -125,7 +125,7 @@ function downloadCSV(filename: string, headers: string[], rows: string[][]) {
 // Main component
 // ---------------------------------------------------------------------------
 export default function Dashboard() {
-  const { data, loading, error, reload } = useDashboardData();
+  const { data, loading, error, reload, refresh } = useDashboardData();
 
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
 
@@ -951,6 +951,7 @@ export default function Dashboard() {
               onShowToast={showToast}
               isSuperuser={currentUser?.role === "superuser"}
               onLicenseChanged={reload}
+              onDataImported={refresh}
             />
           )}
         </div>

@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Start every session by reading the most recent handoff
+
+Handoff notes live in the project root as `HANDOFF_YYYY-MM-DD-<topic>.md`. **Read the newest one
+before doing anything else** — `ls HANDOFF_*.md` and take the latest date. It carries what the
+last session shipped, what was deliberately left undone, which installers are stale, and the goal
+the owner wants picked up next. That intent is recorded nowhere else: not in the code, not in the
+git history, not in this file.
+
+Read the one before it as well when the newest says to — handoffs chain, and an older one's
+manual-verification checklist is often still open.
+
+When you finish a session's work, write the next handoff in the same format and commit it.
+
 ## Commands
 
 ```bash

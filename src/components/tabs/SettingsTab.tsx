@@ -365,10 +365,13 @@ export default function SettingsTab({
   onShowToast,
   isSuperuser = false,
   onLicenseChanged = () => {},
+  onDataImported = () => {},
 }: {
   onShowToast: (text: string, isError?: boolean) => void;
   isSuperuser?: boolean;
   onLicenseChanged?: () => void;
+  /** Reloads the dashboard so imported records appear in the other tabs. */
+  onDataImported?: () => void;
 }) {
   const [backupDir, setBackupDir] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -604,7 +607,7 @@ export default function SettingsTab({
       </div>
 
       {isSuperuser && (
-        <DataImportSection onShowToast={onShowToast} />
+        <DataImportSection onShowToast={onShowToast} onImported={onDataImported} />
       )}
     </div>
   );
