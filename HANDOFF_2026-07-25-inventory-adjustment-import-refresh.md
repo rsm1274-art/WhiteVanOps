@@ -1,4 +1,4 @@
-# Handoff — Bulk Inventory Adjustment + Import Refresh Fix (2026-07-25)
+# Handoff — Bulk Inventory Adjustment + Import Refresh + Field-Access LAN Bind (2026-07-25)
 
 **Branch:** `feat/wifi-sync-base-tier` (still not merged to `main` — the 2026-07-24 handoff's merge path is unchanged and still open).
 **Previous handoff:** `HANDOFF_2026-07-24-wifi-sync-base-tier.md` — read it too; its manual-verification checklist and marketing-repo note are still outstanding.
@@ -45,7 +45,7 @@ partial implementation needs auditing first.
 
 ---
 
-## What shipped today (2 commits on the branch)
+## What shipped today (3 commits on the branch)
 
 ### 1. Bulk inventory adjustment — `3790227`
 
@@ -96,32 +96,90 @@ wipe + commit → success panel appears and persists → imported clients visibl
 with no manual refresh and no loading splash. Dev seed data was wiped for the test and restored
 with `npx prisma db seed`.
 
+### 3. Field access from phones was completely broken — `62878fe`
+
+**Symptom reported:** none of the addresses offered by the Field Access QR modal worked. Each
+gave "a white screen that never finishes loading" on the phone. The dashboard on the office PC
+worked perfectly.
+
+**Root cause: the packaged server was bound to IPv6 loopback only.** `electron/main.js` set
+`process.env.HOSTNAME = 'localhost'` before `require()`ing the standalone Next server, which
+passes it straight to `server.listen(port, hostname)`. Windows resolves `localhost` to `::1`
+first, so `netstat` on the customer machine showed a lone `TCP [::1]:3000 LISTENING` — no
+`0.0.0.0`, not even `127.0.0.1`. **Nothing was listening on any LAN address**, so every phone got
+a dropped SYN (dropped, not refused — hence a hang rather than an error). The dashboard was
+unaffected because it dials itself, which made a dead transport look like a healthy install.
+
+This silently broke the entire premise of Base tier. Fixed to `0.0.0.0` at
+`electron/main.js:145`. The standalone server already defaults to `0.0.0.0` when `HOSTNAME` is
+unset, so the override was pure harm. Loopback callers are unaffected — Node `autoSelectFamily`
+(default since Node 20; Electron 42 ships Node 22) and Chromium both fall back to `127.0.0.1`,
+verified empirically, so the existing `http://localhost:${PORT}` probes and `loadURL` still work.
+
+Two contributing defects fixed alongside it, because either alone reproduces the same symptom:
+
+1. **The modal offered addresses no phone can reach.** Hyper-V/WSL (`172.23.x`) and VirtualBox
+   host-only (`192.168.56.x`) pass every RFC1918 check but exist only inside the host PC. New
+   `src/lib/lanAddresses.ts` (+12 tests) filters by adapter name *and* MAC OUI, with a deliberate
+   fallback to the unfiltered list so the modal is never left empty.
+   `src/app/api/field-access/lan-address/route.ts` is now a thin wrapper over it.
+2. **Windows Firewall is the second gate** — it drops inbound TCP rather than refusing it,
+   reproducing the identical hang. The per-user NSIS installer cannot create firewall rules, and
+   the 2026-07-24 WiFi-sync rewrite had **dropped the firewall step from `MANUAL_Setup_Installation.md`
+   §7**, so the documented setup path never opened the port. Added
+   `scripts/recovery/allow-field-access.ps1` (admin, Private profile only, idempotent) and
+   restored the manual step as §7 Step 3.
+
+`CLAUDE.md` records the bind invariant ("don't tidy this back to `localhost`") and the
+**bind → firewall → AP isolation** diagnostic order.
+
+**Verification status — read this before assuming it works.** Verified here: the fix is present in
+the packaged `app.asar` (`HOSTNAME = '0.0.0.0'` appears once, the old `localhost` value zero
+times), 287 tests, `tsc` clean. **Not verified: the end-to-end phone connection**, which is only
+provable on the customer machine. The confirming check there is `netstat -ano | findstr :3000`
+returning `0.0.0.0:3000` rather than `[::1]:3000`. If that shows `0.0.0.0`, the firewall rule is
+in, and a phone still hangs, the remaining suspect is AP/client isolation on the router —
+`192.168.68.x` is the Google/Nest WiFi default range, whose guest network isolates clients by
+design.
+
 ---
 
 ## State at end of session
 
-- **Tests:** 276/276 vitest, `tsc --noEmit` clean. Lint at its pre-existing baseline — the
+- **Tests:** 287/287 vitest, `tsc --noEmit` clean. Lint at its pre-existing baseline — the
   `any` findings in `DataImportSection.tsx` predate this work.
-- **Installers:** `dist-electron/WhiteVanOps-Base-Trial-Setup.exe` was rebuilt at 09:15 and
-  contains the inventory adjustment feature. See the rebuild note below.
+- **Installers:** `dist-electron/WhiteVanOps-Base-Trial-Setup.exe` was rebuilt at **17:47** and
+  is current — it contains all three of today's changes. **Every other artifact in
+  `dist-electron/` is stale and ships the broken `[::1]`-only bind.** See the rebuild note below.
 - **Dev database:** restored to seed fixture. The bundled PostgreSQL is **stopped**; start it
   with `./pgsql/bin/pg_ctl.exe -D "$APPDATA/whitevanops/pgdata" start` before dev work.
 - **`sample-import-data/`** is still untracked, carried over from an earlier session. It holds
   six CSVs and **no `mapping.json`** — fine for the in-app importer, which proposes one, but the
   CLI (`scripts/import/run.ts`) requires `analyze.ts` to be run first.
 
-## ⚠ Rebuild required before further installer testing
+## ⚠ Three installers still ship the broken bind — rebuild before shipping to anyone
 
-The 09:15 Base trial installer **predates the import refresh fix**. Any install made from it
-still shows the original symptom. Rebuild all needed artifacts before the next round of manual
-testing:
+The Base trial (17:47) is current. These three are from 08:26–08:32, **predate `62878fe`, and
+therefore still bind `[::1]` only** — field access is non-functional in any install made from
+them, on any network:
+
+| Artifact | Built | Rebuild with |
+|---|---|---|
+| `WhiteVanOps-Base-Setup.exe` | 08:26 | `npm run electron:build` |
+| `WhiteVanOps-Plus-Setup.exe` | 08:29 | `npm run electron:build:plus` |
+| `WhiteVanOps-Plus-Trial-Setup.exe` | 08:32 | `npm run electron:build:trial:plus` |
+
+This is not a "nice to refresh" — it is a shipping blocker. **Any customer already installed from
+one of these has broken field access right now**, and the fix reaches them only through a
+reinstall, since the bind is set in `main.js` after `.env.local` loads and no configuration can
+override it.
+
+After rebuilding, confirm the fix landed rather than trusting the build log:
 
 ```
-npm run electron:build:trial          # Base 30-day trial
+grep -c "HOSTNAME = '0.0.0.0'" dist-electron/win-unpacked/resources/app.asar   # expect 1
+grep -c "HOSTNAME = 'localhost'" dist-electron/win-unpacked/resources/app.asar # expect 0
 ```
-
-The 2026-07-24 handoff's warning also still stands: the Base/Plus customer installers and the
-Plus trial in `dist-electron/` are older still and need rebuilding before shipping.
 
 ## Note on testing installs on the dev machine
 
