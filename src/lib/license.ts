@@ -8,6 +8,7 @@ import {
   LICENSE_SIGNING_SECRET,
   getAppDataWvoDir,
   verifyTrialUnlock,
+  verifyTrialPlan,
   signBaseLicense,
   signLegacyBaseLicense,
   timingSafeEqualStrings,
@@ -216,11 +217,13 @@ export async function getLicense(): Promise<LicenseState> {
   //
   //   1. trial-unlock.json  — a paid day-30 conversion; outranks the trial's
   //      pre-activated Plus, so a base-tier unlock correctly drops Plus.
-  //   2. trial build, not yet converted — Plus for the 30-day evaluation.
-  //      Only reachable when NO base license exists, i.e. a genuine trial
-  //      install (trial builds skip activation entirely). A customer install
-  //      that sets WVO_IS_TRIAL by hand still loses to its own license.json,
-  //      and would only be trading a permanent license for a 30-day lockout.
+  //   2. trial build, not yet converted — the plan its SIGNED stamp grants,
+  //      for the 30-day evaluation. Only reachable when NO base license
+  //      exists, i.e. a genuine trial install (trial builds skip activation).
+  //      The stamp is HMAC-signed and verifyTrialPlan fails closed to "base",
+  //      so editing WVO_TRIAL_PLAN in the bundled .env.local grants nothing —
+  //      the WVO_DEFAULT_TIER lesson, applied to the one plan input that
+  //      genuinely has to come from the build.
   //   3. license.json's signed tier — a key sold as Plus.
   //   4. plus_license.json — a signed upgrade for an install sold as Base.
   const trialUnlock = isTrialBuild ? getVerifiedTrialUnlock() : null;
@@ -233,7 +236,7 @@ export async function getLicense(): Promise<LicenseState> {
     targetActivated = row.activatedAt || new Date();
   } else if (isTrialBuild && !baseLicense) {
     const trialStatus = getTrialStatus();
-    targetTier = "plus";
+    targetTier = verifyTrialPlan(process.env.WVO_TRIAL_PLAN, process.env.WVO_TRIAL_PLAN_SIG);
     targetKey = "TRIAL-ACTIVE";
     targetNotes = "30-Day Evaluation Period";
     targetExpires = trialStatus.installedAt ? new Date(new Date(trialStatus.installedAt).getTime() + 30 * 24 * 60 * 60 * 1000) : null;
