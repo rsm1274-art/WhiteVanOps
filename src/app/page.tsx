@@ -1093,7 +1093,7 @@ export default function Dashboard() {
       )}
 
       {activeModal === "fieldAccess" && (
-        <FieldAccessModal onClose={closeModal} />
+        <FieldAccessModal onClose={closeModal} isPlusLicensed={plus} />
       )}
 
       {activeModal === "addClientNote" && selectedClient && (
