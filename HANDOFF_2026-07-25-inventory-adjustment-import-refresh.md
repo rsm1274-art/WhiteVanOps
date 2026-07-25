@@ -148,38 +148,48 @@ design.
 
 - **Tests:** 287/287 vitest, `tsc --noEmit` clean. Lint at its pre-existing baseline — the
   `any` findings in `DataImportSection.tsx` predate this work.
-- **Installers:** `dist-electron/WhiteVanOps-Base-Trial-Setup.exe` was rebuilt at **17:47** and
-  is current — it contains all three of today's changes. **Every other artifact in
-  `dist-electron/` is stale and ships the broken `[::1]`-only bind.** See the rebuild note below.
+- **Installers:** **all four artifacts in `dist-electron/` are current** and carry the
+  `0.0.0.0` bind fix. Base Trial 17:47, Base 18:20, Plus 18:22, Plus Trial 18:23. See the
+  rebuild note below for what was verified on each.
 - **Dev database:** restored to seed fixture. The bundled PostgreSQL is **stopped**; start it
   with `./pgsql/bin/pg_ctl.exe -D "$APPDATA/whitevanops/pgdata" start` before dev work.
 - **`sample-import-data/`** is still untracked, carried over from an earlier session. It holds
   six CSVs and **no `mapping.json`** — fine for the in-app importer, which proposes one, but the
   CLI (`scripts/import/run.ts`) requires `analyze.ts` to be run first.
 
-## ⚠ Three installers still ship the broken bind — rebuild before shipping to anyone
+## ✅ All three stale installers rebuilt (18:20–18:23)
 
-The Base trial (17:47) is current. These three are from 08:26–08:32, **predate `62878fe`, and
-therefore still bind `[::1]` only** — field access is non-functional in any install made from
-them, on any network:
+The three artifacts that predated `62878fe` and shipped the `[::1]`-only bind were rebuilt at the
+end of this session from a clean tree at `1670412`, with 287/287 vitest and `tsc --noEmit` green
+beforehand:
 
-| Artifact | Built | Rebuild with |
+| Artifact | Rebuilt | Command |
 |---|---|---|
-| `WhiteVanOps-Base-Setup.exe` | 08:26 | `npm run electron:build` |
-| `WhiteVanOps-Plus-Setup.exe` | 08:29 | `npm run electron:build:plus` |
-| `WhiteVanOps-Plus-Trial-Setup.exe` | 08:32 | `npm run electron:build:trial:plus` |
+| `WhiteVanOps-Base-Setup.exe` | 18:20 | `npm run electron:build` |
+| `WhiteVanOps-Plus-Setup.exe` | 18:22 | `npm run electron:build:plus` |
+| `WhiteVanOps-Plus-Trial-Setup.exe` | 18:23 | `npm run electron:build:trial:plus` |
 
-This is not a "nice to refresh" — it is a shipping blocker. **Any customer already installed from
-one of these has broken field access right now**, and the fix reaches them only through a
-reinstall, since the bind is set in `main.js` after `.env.local` loads and no configuration can
-override it.
-
-After rebuilding, confirm the fix landed rather than trusting the build log:
+Each was verified against the packaged `app.asar` immediately after its own build rather than
+trusting the build log:
 
 ```
-grep -c "HOSTNAME = '0.0.0.0'" dist-electron/win-unpacked/resources/app.asar   # expect 1
-grep -c "HOSTNAME = 'localhost'" dist-electron/win-unpacked/resources/app.asar # expect 0
+grep -c "HOSTNAME = '0.0.0.0'" dist-electron/win-unpacked/resources/app.asar   # 1 on all three
+grep -c "HOSTNAME = 'localhost'" dist-electron/win-unpacked/resources/app.asar # 0 on all three
 ```
+
+Also confirmed per-artifact: both Plus builds carry `resources/cloudflared/cloudflared.exe`
+(the Base build's absence assertion is enforced by `electron-build.js` itself), and the Plus
+trial's bundled `resources/nextjs/.env.local` carries `WVO_IS_TRIAL`, `WVO_TRIAL_PLAN` and
+`WVO_TRIAL_PLAN_SIG`.
+
+**Still unverified, and only provable on a customer machine:** the end-to-end phone connection,
+per the verification note above — `netstat -ano | findstr :3000` must show `0.0.0.0:3000`.
+**The Cloudflare tunnel in the two Plus artifacts was not exercised** — no tunnel was provisioned
+this session, so Plus remote access is untested beyond the binary being present in the package.
+
+**Any customer installed from a pre-18:20 artifact still has broken field access**, and the fix
+reaches them only through a reinstall — the bind is set in `main.js` after `.env.local` loads and
+no configuration can override it.
 
 ## Note on testing installs on the dev machine
 
