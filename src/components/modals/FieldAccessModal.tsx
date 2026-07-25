@@ -119,12 +119,15 @@ export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
 
       {detected.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-          <span>Detected on this machine:</span>
+          <span>Use detected address:</span>
           {detected.map((addr) => (
             <button
               key={addr}
               type="button"
-              onClick={() => handleUrlChange(`http://${addr}:3000/field`)}
+              onClick={() => {
+                const port = window.location.port || "3000";
+                handleUrlChange(`http://${addr}:${port}/field`);
+              }}
               className="font-mono px-2 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
             >
               {addr}

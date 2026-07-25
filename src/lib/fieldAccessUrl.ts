@@ -1,7 +1,7 @@
 export interface FieldUrlClassification {
   /** Host is localhost / 127.0.0.1 — unreachable from a phone. */
   isLocalhost: boolean;
-  /** Plain http:// over a public host — credentials would travel unencrypted. */
+  /** Plain http:// on any non-localhost host — includes private-LAN addresses, which are fine on Base; use fieldUrlVerdict for advice. */
   isPlainHttp: boolean;
   /** https:// — the shape the Plus tunnel produces. */
   isHttps: boolean;

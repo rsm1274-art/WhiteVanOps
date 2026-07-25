@@ -164,8 +164,12 @@ if (fs.existsSync(envSrc)) {
 //
 // This must stay byte-identical to signTrialPlan() in src/lib/licenseCrypto.ts.
 function signTrialPlan(planName) {
+  // No env-var fallback: the verifier (src/lib/licenseCrypto.ts) uses ONLY the
+  // hardcoded literal below, so an env var set at build time would sign with a
+  // secret the verifier never checks against — Plus trials would silently
+  // verify as Base. Keep byte-identical to electron/main.js,
+  // scripts/activate-dev.js, and scripts/license-manager.js.
   const LICENSE_SIGNING_SECRET =
-    process.env.LICENSE_SIGNING_SECRET ||
     'wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765';
   return require('crypto')
     .createHmac('sha256', LICENSE_SIGNING_SECRET)

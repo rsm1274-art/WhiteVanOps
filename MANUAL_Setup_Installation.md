@@ -320,7 +320,7 @@ Choose the option that fits your situation:
   2. Copy this file to your USB drive.
 
 ### Step 3: Install on the New Machine
-1. Run the `WhiteVanOps Setup x.x.x.exe` installer on the new machine.
+1. Run the `WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe` installer (whichever matches the customer's plan) on the new machine.
 2. **IMPORTANT:** Do NOT launch the application yet. If it launches automatically, completely quit the application before proceeding.
 
 ### Step 4: Restore Key and Data

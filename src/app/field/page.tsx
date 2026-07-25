@@ -82,6 +82,13 @@ export default function FieldPage() {
     try {
       const q = await getSyncQueue();
       setPendingCount(q.length);
+      // A write just got queued (submitWrite caught a fetch failure) rather
+      // than going through drainSyncQueue, so lastStop was never set. Without
+      // this, the first off-network write shows the generic "pending" status
+      // instead of "office network not found" until the next drain attempt.
+      if (q.length > 0) {
+        setLastStop((prev) => (prev === null ? "unreachable" : prev));
+      }
       setStuckOps(await getStuckOps());
     } catch { }
   };
@@ -154,11 +161,6 @@ export default function FieldPage() {
     };
   }, [tech]); // processSync needs current tech for loadJobs
 
-  const onActionSuccess = () => {
-    checkSyncStatus();
-    if (tech) loadJobs(tech.id);
-  };
-
   // Load personnel list on mount; auto-select if session user is a tech with a linked record
   useEffect(() => {
     Promise.all([
@@ -228,7 +230,6 @@ export default function FieldPage() {
     // Intentional: load this tech's jobs whenever the selected tech changes.
     // `loadJobs` is a useCallback reused elsewhere (e.g. after status
     // updates), so it stays a named function rather than an inline effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tech) loadJobs(tech.id);
   }, [tech, loadJobs]);
 

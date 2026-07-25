@@ -29,20 +29,19 @@ export default function SyncStatusBar({ status, onSyncNow }: Props) {
   }
 
   const n = status.pendingCount;
-  const entries = `${n} change${n === 1 ? "" : "s"}`;
 
   if (status.kind === "draining") {
     return (
       <p className="text-[10px] text-amber-500 px-4 py-1 flex items-center gap-1">
-        <RefreshCw className="h-3 w-3 animate-spin" /> Saving {entries} to office…
+        <RefreshCw className="h-3 w-3 animate-spin" /> Syncing {n}…
       </p>
     );
   }
 
   if (status.kind === "auth") {
     return (
-      <p className="text-[10px] text-red-300 px-4 py-1 flex items-center gap-1">
-        <AlertTriangle className="h-3 w-3" /> {entries} waiting — sign in again to save
+      <p className="text-[10px] text-red-600 px-4 py-1 flex items-center gap-1">
+        <AlertTriangle className="h-3 w-3" /> {n} waiting — sign in again to save
       </p>
     );
   }
@@ -57,12 +56,12 @@ export default function SyncStatusBar({ status, onSyncNow }: Props) {
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-1">
       <p className="text-[10px] text-amber-500 flex items-center gap-1">
-        <CloudOff className="h-3 w-3" /> {entries} · {detail}
+        <CloudOff className="h-3 w-3" /> {n} waiting · {detail}
       </p>
       <button
         type="button"
         onClick={onSyncNow}
-        className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700"
+        className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white"
       >
         Try now
       </button>
