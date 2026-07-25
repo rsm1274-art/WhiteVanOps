@@ -19,6 +19,7 @@ export function DataImportSection({
   const [clearDatabase, setClearDatabase] = useState(false);
   const [skipRejected, setSkipRejected] = useState(false);
   const [importResult, setImportResult] = useState<any | null>(null);
+  const [confirmingExecute, setConfirmingExecute] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -177,7 +178,7 @@ export function DataImportSection({
 
   const handleExecute = async () => {
     if (!proposedMapping) return;
-    if (!confirm("Are you sure you want to commit these imported records to the database?")) return;
+    setConfirmingExecute(false);
 
     setLoading(true);
     try {
@@ -451,7 +452,7 @@ export function DataImportSection({
                   Dry Run (Validate)
                 </button>
                 <button
-                  onClick={handleExecute}
+                  onClick={() => setConfirmingExecute(true)}
                   disabled={loading || (validationResult && !validationResult.ok)}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
                 >
@@ -460,6 +461,32 @@ export function DataImportSection({
                 </button>
               </div>
             </div>
+
+            {/* Commit confirmation — an in-app banner, not window.confirm(): a native
+                dialog that returns false (a stray click, a webview quirk, focus loss)
+                leaves the user with zero feedback and looks like the button did nothing. */}
+            {confirmingExecute && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded flex items-center justify-between gap-4">
+                <span className="text-sm text-amber-800 font-semibold">
+                  Commit these imported records to the database? This cannot be undone.
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => setConfirmingExecute(false)}
+                    className="px-3 py-1.5 border border-zinc-300 hover:bg-zinc-100 text-zinc-700 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleExecute}
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
+                  >
+                    Yes, Commit
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Validation Dry-Run Result summary */}
             {validationResult && (
