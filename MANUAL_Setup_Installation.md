@@ -215,7 +215,19 @@ The Next.js server runs locally in the customer's office; nothing about field ac
 2. Click **Use detected address** — this calls `GET /api/field-access/lan-address` and fills in the office PC's actual LAN IP, so nobody has to type it (and can't typo it). A private address (`192.168.x`, `10.x`, `172.16–31.x`) is the correct, expected shape on Base and shows a green confirmation, not a warning.
 3. The modal generates a QR code for that address's `/field` path.
 
-**Step 3 — Hand out access to field techs.**
+**Step 3 — Allow the app through Windows Firewall. This is required, not advisory.** Windows blocks inbound connections by default, and it blocks them by *dropping* the packet rather than refusing it — so a tech's phone shows a white screen that never finishes loading instead of an error message. Meanwhile the dashboard on the office PC keeps working perfectly (it only ever talks to itself), which makes a closed port look like a broken app. The installer runs per-user and cannot create firewall rules, so this step is manual.
+
+1. On the office PC, open PowerShell **as Administrator** (right-click → Run as administrator).
+2. Run the helper script:
+   ```powershell
+   .\scripts\recovery\allow-field-access.ps1
+   ```
+   Add `-Port 3001` (etc.) if the app is not on 3000 — it scans upward when 3000 is already held. To undo, run it with `-Remove`.
+3. **Confirm the office WiFi is classified "Private", not "Public".** The rule is deliberately scoped to Private profiles so the app is never exposed on, say, a hotel network. The script warns you if any active network is Public; if the office WiFi is one of them, fix it under Settings → Network & Internet → WiFi → *(your network)* → Network profile type → **Private**.
+
+To do it by hand instead: Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port → TCP → 3000 → Allow → Private only. Don't rely on the one-time "Allow this app through the firewall" popup — it's easy to dismiss, and dismissing it creates a *block* rule that then has to be found and deleted.
+
+**Step 4 — Hand out access to field techs.**
 1. Have each tech, **while connected to the office WiFi**, scan the QR code with their phone camera and sign in.
 2. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
 3. **Offline support:** the PWA uses an offline-first architecture via IndexedDB. If a technician leaves the building or loses signal, they can continue logging time, viewing job details, and saving materials — their changes queue locally, the status strip shows how many entries are waiting, and everything flushes back to the office server automatically once the phone rejoins the office WiFi. Closing the app does not lose queued work. See `MANUAL_Field_Tech.md` for what the status strip tells a tech, and `MANUAL_Troubleshooting.md` if work isn't reaching the office.
