@@ -367,6 +367,8 @@ Check in this order — most likely first:
 
 4. It prints a temporary password **once**. Log in with it immediately; the app forces a new password to be set, after which the temporary one stops working.
 
+**It also clears the failed-attempt lockout.** Five wrong passwords lock an account for 15 minutes, and by the time someone reaches for this script they have usually just tripped that. The reset zeroes the attempt counter and removes the lock, so the temporary password works straight away — **you do not need to wait out the 15 minutes.** It also re-enables the account if it had been deactivated.
+
 If PowerShell blocks the script ("running scripts is disabled"), use:
 `powershell -ExecutionPolicy Bypass -File .\reset-admin-password.ps1`
 
