@@ -47,6 +47,7 @@ import TransferStockModal from "@/components/modals/TransferStockModal";
 import EditPersonnelModal from "@/components/modals/EditPersonnelModal";
 import ReportRepairModal from "@/components/modals/ReportRepairModal";
 import AdjustStockModal from "@/components/modals/AdjustStockModal";
+import BulkAdjustStockModal from "@/components/modals/BulkAdjustStockModal";
 import AddEquipmentModal from "@/components/modals/AddEquipmentModal";
 import AddJobModal from "@/components/modals/AddJobModal";
 import EditJobModal from "@/components/modals/EditJobModal";
@@ -915,6 +916,7 @@ export default function Dashboard() {
               onAddItem={() => setActiveModal("addItem")}
               onAddWarehouse={() => setActiveModal("addWarehouse")}
               onTransferStock={() => setActiveModal("transferStock")}
+              onBulkAdjust={() => setActiveModal("bulkAdjustStock")}
               onAdjustStock={(ctx) => { setAdjustStockCtx(ctx); setActiveModal("adjustStock"); }}
               onRemoveStock={requestRemoveStock}
               onDeleteItem={requestDeleteItem}
@@ -987,6 +989,15 @@ export default function Dashboard() {
           onClose={closeModal}
           onSuccess={handleSuccess}
           onError={handleError}
+        />
+      )}
+      {/* Reloads the dashboard only on close, so the page never re-renders
+          underneath the user between one item's adjustment and the next. */}
+      {activeModal === "bulkAdjustStock" && (
+        <BulkAdjustStockModal
+          items={data.inventoryItems}
+          locations={data.stockLocations}
+          onClose={() => { reload(); closeModal(); }}
         />
       )}
       {activeModal === "adjustStock" && adjustStockCtx && (

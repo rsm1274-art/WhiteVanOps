@@ -295,9 +295,15 @@ For each item at each location:
 - **Qty** — current quantity on hand
 - **Min** — minimum threshold; items below this are flagged as low stock
 
-Click **Adjust Stock** on any item-location row to update the quantity or minimum threshold. Use this to record restocking, manual counts, or corrections.
+There are two ways to change these numbers.
 
-Click **Remove** (trash icon) to remove an item from a specific location without deleting it from the catalog.
+**Inventory Adjustment (recommended for stocktakes).** Click **Inventory Adjustment** at the top of the Inventory tab. Pick one item — use the *Find Item* box to narrow a long catalog — and the modal lists every location at once: the warehouse first, then each van. Type the counted quantity and, if you want, the minimum for each, then click **Save & Adjust Another**. The item is saved, a green confirmation names it and how many locations were updated, and the picker clears ready for the next item — so you can work straight down a stocktake sheet without leaving the modal. Click **Done** when you have finished; the inventory page refreshes at that point.
+
+Only the rows you actually change are written, so leaving a location untouched never overwrites its count. Every count must be a whole number of zero or more; if one is blank or invalid the modal flags that row in red and saves nothing at all, leaving your other entries in place to correct.
+
+**Adjust (single location).** Click **Adjust** on any item-location row in the *By Location* cards to change just that one quantity or minimum. Quicker when you are already looking at one van's stock list and only one number is wrong.
+
+Click **Remove** to remove an item from a specific location without deleting it from the catalog.
 
 ### Transferring Stock Between Locations
 

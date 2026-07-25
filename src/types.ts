@@ -430,6 +430,7 @@ export type ModalType =
   | "addItem"
   | "addWarehouse"
   | "adjustStock"
+  | "bulkAdjustStock"
   | "transferStock"
   | "addEquipment"
   | "jobCosts"
