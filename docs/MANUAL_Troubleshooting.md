@@ -160,6 +160,22 @@ node scripts/license-manager.js --plus --key <THEIR EXACT BASE KEY>
 
 > This is where most of your install time goes and where most of the failures live. The app is the easy part; other people's routers are not.
 
+**As of 2026-07-24, remote field access (this Part's CGNAT/DDNS/port-forward material below) is a Plus-only concern.** Base doesn't do any of that — it serves the field module over the office WiFi only, and there is nothing to forward or resolve. If the customer is on Base, start with 2.0.
+
+### 2.0 ✅ "A tech's work isn't reaching the office" (Base)
+
+**Symptom:** a Base-plan tech's phone shows entries "waiting" in the sync status strip and they aren't clearing, or the field URL won't load at all.
+
+Check in this order — most likely first:
+
+1. **The phone isn't on the office WiFi.** Base only reaches the office server over the office network. This is normal, not a bug — the app queues the work locally and the status strip says so ("N waiting · office network not found"). Have the tech confirm which WiFi network they're on; nothing else in this list matters until that's ruled out.
+2. **The office PC's LAN address changed after a router reboot.** The giveaway: *it worked yesterday and now fails for every tech at once* — one address change breaks every phone's saved home-screen URL simultaneously, since they all point at the same bare IP. Fix: confirm (or set, if it was never done) a **DHCP reservation or static IP** for the office PC (see `MANUAL_Setup_Installation.md` §7), then open **Field Access QR → Use detected address** on the dashboard to pick up the current address, and have every tech re-scan and re-save the home-screen icon.
+3. **The office PC is off.** No server, no sync, for anyone. Check it's powered on and the app is running (§3.1).
+4. **The tech's session expired.** They'll see a prompt to sign in again before their work can save — this is expected after 7 days and isn't a sync failure. Have them sign back in; queued work sends once they're authenticated again.
+5. **An entry needs attention.** If the office deleted or reassigned the job an offline entry was for, that entry surfaces in the tech's stuck-record panel ("N entries need attention") rather than blocking everything else — see `MANUAL_Field_Tech.md`, "Entries that need attention."
+
+**Nothing is lost while any of the above is true.** Queued work sits on the tech's phone (IndexedDB) until it can reach the office; it survives closing the app and does not need to be re-entered once the underlying cause is fixed.
+
 ### 2.1 ✅ CGNAT — Check This Before You Sell, Not On Install Day
 
 **This is the most important entry in this manual.** It is the one problem that can make the sale undeliverable through no fault of yours, and it is trivially checkable in advance.

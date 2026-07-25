@@ -14,7 +14,10 @@ npm run test:watch       # Vitest in watch mode
 
 # Electron desktop app
 npm run electron:dev     # Start Next.js dev + open Electron window (do this instead of npm run dev for UI work)
-npm run electron:build   # Build production NSIS installer → dist-electron/
+npm run electron:build            # Base installer      → dist-electron/WhiteVanOps-Base-Setup.exe
+npm run electron:build:plus       # Plus installer      → dist-electron/WhiteVanOps-Plus-Setup.exe (bundles cloudflared)
+npm run electron:build:trial      # Base 30-day trial   → dist-electron/WhiteVanOps-Base-Trial-Setup.exe
+npm run electron:build:trial:plus # Plus 30-day trial   → dist-electron/WhiteVanOps-Plus-Trial-Setup.exe
 
 # Database
 npx prisma migrate dev --name <name>   # Create and apply a migration (also runs prisma generate)
@@ -80,7 +83,16 @@ This is load-bearing: **one server answers both `http://localhost:3000` (the Ele
 
 **`clearSessionCookie` derives its attributes from `getSessionCookieOptions(req)`**, overriding only `maxAge: 0` — don't hand-roll the option object, so set and clear can't drift. Be accurate about why: a browser identifies a cookie by **(name, domain, path)** only. `secure`/`httpOnly`/`sameSite` are *not* part of that identity, so a clear that omits them still deletes the cookie — the pre-2026-07-20 `{ maxAge: 0, path: "/" }` clear worked. `path` is the attribute that actually has to match. (Verified empirically: `NextResponse.cookies.delete(name)` emits `Path=/; Expires=…1970`, so the `catch` branch in `src/middleware.ts` is fine as written.) The one genuinely scheme-dependent case is the reverse direction: a request over plain `http://` cannot overwrite a cookie that carries `Secure`.
 
-**Transport:** the plain-`http://` port-forward + Dynamic DNS field-access path is being replaced by an HTTPS tunnel (`docs/superpowers/specs/2026-07-20-cgnat-tunnel-connectivity-design.md`, Phases 1–4 not yet implemented) — port forwarding is impossible for a customer behind CGNAT. Until that lands, field access may still be plain HTTP, in which case credentials travel unencrypted over the public-internet leg; see `docs/launch-checklist.md` Phase 4 for the history. The cookie logic above is correct either way and needs no change when the tunnel ships.
+**Transport is per-plan** (2026-07-24, `docs/superpowers/specs/2026-07-24-wifi-sync-base-tier-design.md`).
+**Base** serves the field module over the office LAN only: techs load
+`http://<office-lan-ip>:3000/field`, the existing IndexedDB queue holds writes made away from the
+building, and they drain when the phone rejoins the office WiFi. Base requires a DHCP reservation or
+static IP for the office PC — the saved PWA URL is a bare address, so a router reboot that moves it
+breaks every tech at once. **Plus** adds the Cloudflare tunnel (still provisioned by runbook, not
+code) for access from anywhere. `src/lib/fieldAccessUrl.ts`'s `fieldUrlVerdict()` encodes which
+address shape is correct on which plan; a private-LAN plain-http URL is **correct** on both and must
+never raise the plaintext warning. The per-request cookie `secure` logic above is correct for both
+and needs no change.
 
 ### Login rate limiting is layered — no shared buckets
 
@@ -125,7 +137,18 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 - `License` model in `prisma/schema.prisma` — singleton row with fixed id `"singleton"`, **upserted on read** by `src/lib/license.ts` (`getLicense()`), so every install path self-heals without a seed step. Fields: `tier` ("base"|"plus"), `licenseKey`, `notes`, `activatedAt`, `expiresAt` (null = perpetual).
 - `src/lib/license.ts` mirrors `auth.ts`'s shape: `hasPlusLicense()` (tier is plus **and** unexpired), `requirePlus(licensed)` returns a `403 NextResponse` or `null`. It is called explicitly alongside `requireRole` in every Plus route — deliberately not folded into `requireRole`, so `requirePlus` stays greppable as the complete list of Plus-gated routes.
-- **The tier travels inside the activation key — never in configuration.** `scripts/license-manager.js --tier base|plus` stamps `tier` onto the Firestore `licenses/<key>` record at mint time; `electron/main.js` reads it during activation and bakes it into the machine-bound, HMAC-signed `%APPDATA%\whitevanops\license.json`; `getBaseLicense()` returns it as the authoritative plan for an activated install. Because the tier is inside the signed payload, hand-editing it invalidates the signature and the file is rejected outright. **Consequence: Base and Plus are the SAME installer** (`WhiteVanOps-Setup.exe`) and the key decides — there is no `--plus` build target and `electron:build:plus` no longer exists.
+- **The tier travels inside the activation key — never in configuration.** `scripts/license-manager.js --tier base|plus` stamps `tier` onto the Firestore `licenses/<key>` record at mint time; `electron/main.js` reads it during activation and bakes it into the machine-bound, HMAC-signed `%APPDATA%\whitevanops\license.json`; `getBaseLicense()` returns it as the authoritative plan for an activated install. Because the tier is inside the signed payload, hand-editing it invalidates the signature and the file is rejected outright.
+- **Base and Plus are separate installers, but the key still decides entitlement** (changed
+  2026-07-24). The tier still travels only inside the signed activation key — no build flag grants
+  a feature. What differs between the artifacts is *payload*: `WhiteVanOps-Plus-Setup.exe` bundles
+  `cloudflared` via `extraResources`, `WhiteVanOps-Base-Setup.exe` does not. So a Base install
+  cannot open a tunnel for two independent reasons — no entitlement and no binary — and
+  `scripts/electron-build.js` asserts the binary's presence on Plus **and its absence on Base**.
+- **There is no in-place Plus upgrade.** `--upgrade`, `upgrade_installer.cs` and
+  `electron:build:upgrade` were removed 2026-07-24: a licence patch would unlock Plus features on
+  an install with no `cloudflared`. A Base customer moving to Plus buys Plus (25% off) and installs
+  the Plus artifact. `verifyPlusLicense` and the `plus_license.json` reader stay as **read-only
+  legacy** so an install already patched in the field keeps working.
 - **Do not reintroduce a tier env var.** `WVO_DEFAULT_TIER` was removed on 2026-07-15 because it granted Plus outright from a plain-text line in `resources/nextjs/.env.local`: changing `"base"` to `"plus"` in Notepad unlocked the paid tier, and the anti-tamper self-heal never fired because the env var satisfied the very check meant to catch tampering (it made `verifiedPlus` true). `src/lib/license.test.ts` carries a regression test — `"ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base"` — specifically to stop this coming back.
 - **Legacy `license.json` compatibility:** installs activated before the tiered format have no `tier` field and a signature over `key:machineId` only. `getBaseLicense()` accepts that shape via `signLegacyBaseLicense()` and reads it as tier "base" — all such installs ever were — so nobody is forced through re-activation. Remove once no legacy installs remain in the field.
 - **`electron/main.js` duplicates the signing functions in plain JS** (`signLicense`/`signLegacyLicense`) because it runs before the Next.js bundle loads and cannot import TypeScript. They must stay byte-identical to `signBaseLicense`/`signLegacyBaseLicense` in `src/lib/licenseCrypto.ts`, or activation writes a file the running app then rejects. `scripts/activate-dev.js` mirrors them a third time.
@@ -137,11 +160,19 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 ### Trial/Demo installer (separate mechanism from the License/Plus tier above)
 
-`npm run electron:build:trial` builds a fourth installer variant (`WhiteVanOps-Trial-Setup.exe`) for sales demos — pre-activated on Plus so a prospect can evaluate everything, but locked to 30 days from first launch regardless of `License.tier`. This is orthogonal to the Base/Plus gate: a normal customer install never has a trial lock at all.
+`npm run electron:build:trial` and `npm run electron:build:trial:plus` build the two trial installer variants (`WhiteVanOps-Base-Trial-Setup.exe`, `WhiteVanOps-Plus-Trial-Setup.exe`) for sales demos — locked to 30 days from first launch regardless of `License.tier`. This is orthogonal to the Base/Plus gate: a normal customer install never has a trial lock at all.
 
 - `src/lib/trial.ts` — `getTrialStatus()` reads/lazily-creates a signed, machine-bound anchor file (`%APPDATA%\whitevanops\trial.json`, HMAC'd with the same `LICENSE_SIGNING_SECRET`) and computes `isLocked`. No-op (zero file I/O) unless the build was stamped with `WVO_IS_TRIAL=true`. The shared HMAC signing/verification helpers (`LICENSE_SIGNING_SECRET`, `getAppDataWvoDir`, `signTrialUnlock`, `verifyTrialUnlock`, `timingSafeEqualStrings`) live in the leaf module `src/lib/licenseCrypto.ts` — imported by both `license.ts` and `trial.ts` to avoid a would-be import cycle.
 - Trial builds skip the native Electron base-activation window entirely (`electron/main.js`'s `isTrialBuild()` reads `WVO_IS_TRIAL="true"` from the bundled `.env.local` and bypasses `verifyLicenseSilent()`/`showActivationWindow()`) — a fresh trial install boots straight to password login, no `WVO-XXXX-XXXX-XXXX-XXXX` key or Firestore lookup required. Base/Plus customer builds are unaffected; they still require the native activation key.
-- After a day-30 unlock, the key's own tier — base or plus — determines which features run, not the trial's pre-activated-Plus default: `getLicense()` treats a signature- and machine-verified `trial-unlock.json` as the highest-precedence tier source (see `src/lib/license.ts`'s `getVerifiedTrialUnlock()`). A base-tier unlock key correctly drops Plus features; a plus-tier key keeps them.
+- After a day-30 unlock, the key's own tier — base or plus — determines which features run, not the trial build's stamped plan: `getLicense()` treats a signature- and machine-verified `trial-unlock.json` as the highest-precedence tier source (see `src/lib/license.ts`'s `getVerifiedTrialUnlock()`). A base-tier unlock key correctly drops Plus features; a plus-tier key keeps them.
+- **A trial build's plan comes from a signed stamp** (2026-07-24). `electron-build.js --trial --plan
+  base|plus` writes `WVO_TRIAL_PLAN` plus an HMAC `WVO_TRIAL_PLAN_SIG` into the bundled `.env.local`;
+  `verifyTrialPlan()` in `src/lib/licenseCrypto.ts` returns the tier and **fails closed to `base`**
+  for anything absent or edited. This is the one plan input that genuinely has to come from the build
+  (trial installs skip activation entirely), which is exactly why it is signed — an unsigned one
+  would be `WVO_DEFAULT_TIER` again. `src/lib/license.test.ts` carries the regression test
+  *"ignores an unsigned WVO_TRIAL_PLAN=plus and falls back to base"*. A Base trial demos WiFi sync
+  only and ships no `cloudflared`.
 - Enforcement mirrors the existing `mustChangePassword` forced-redirect pattern rather than adding filesystem/DB access to the edge-safe `src/middleware.ts`: `isLocked` is stamped into the session JWT at login (`src/app/api/auth/login/route.ts`) and the middleware redirects everywhere except `/trial-expired` + `/api/license` when the claim is set.
 - Conversion: `POST /api/license` with `{ action: "unlock-trial", licenseKey }` (superuser-only) verifies a signed payload against **this machine's real `machineIdSync()`** (never the payload's claimed value) and, if valid, writes `trial-unlock.json` (its presence permanently defeats the lock) and sets `License.tier` to whatever the key grants — `base` or `plus`, so a Base-only purchase correctly drops the Plus features being trialed. Keys are minted vendor-side via `node scripts/license-manager.js --unlock-trial --machine <id> --tier base|plus`.
 - Full design/build history: `docs/superpowers/specs/2026-07-13-trial-demo-installer-design.md` and `docs/superpowers/plans/2026-07-13-trial-demo-installer.md`. Customer-facing build/conversion steps: `MANUAL_Setup_Installation.md` §6.4.

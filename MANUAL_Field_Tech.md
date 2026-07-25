@@ -15,7 +15,9 @@ You do not need the full admin dashboard. Access the Field Module directly at:
 https://<your-server-address>/field
 ```
 
-Your supervisor or dispatcher will give you the exact address (it will look like `http://<your-company>.duckdns.org:3000/field`) — usually as a **QR code** shown from the office dashboard (sidebar → Field Access QR). Just point your phone camera at it and tap the link.
+Your supervisor or dispatcher will give you the exact address — usually as a **QR code** shown from the office dashboard (sidebar → Field Access QR). Just point your phone camera at it and tap the link.
+
+**On the Base plan**, that address is the office computer's own network address (something like `http://192.168.1.20:3000/field`), and it only works while your phone is connected to the **office WiFi**. **On the Plus plan**, the office has a secure tunnel address (`https://...`) that works from anywhere. Ask your dispatcher which applies to you.
 
 ### Install it as an app on your phone (recommended)
 
@@ -26,7 +28,7 @@ After signing in the first time, install the Field Module on your home screen so
 
 From then on, tap the **WVO Field** icon on your home screen to go straight to your jobs.
 
-**Important:** You do not need to install any VPN or special app on your phone to connect. Just open the link on your phone's browser. It works from anywhere (not just the office WiFi) because the office router is configured to forward the connection directly to the server.
+**Important:** You do not need to install any VPN or special app on your phone to connect. Just open the link on your phone's browser. Whether it works from anywhere or only from the office WiFi depends on your company's plan (see above) — either way, closing the app or losing signal never loses work you've already entered; see **Working Offline** below.
 
 ---
 
@@ -212,7 +214,22 @@ If you need any of these done, contact your dispatcher or supervisor.
 
 ## Working Offline
 
-The Field Module saves your changes to your phone's local storage, so you can continue logging time, notes, and materials even if the server is unreachable. When the server comes back online, all saved changes are sent automatically.
+The Field Module saves your changes to your phone's local storage, so you can continue logging time, notes, and materials even if the server is unreachable. When the server comes back online, all saved changes are sent automatically. **Closing the app never loses queued work** — it's saved on your phone until it can reach the office.
+
+**On the Base plan**, "the server is unreachable" normally just means you're away from the office — the app only reaches the office server over the office WiFi. That's expected, not an error: keep working, and your entries will save the next time you're back on-site.
+
+### The status line under the header
+
+A small status line under the job list header tells you what's happening with your saved-but-not-yet-sent work:
+
+| What it says | What it means |
+|---|---|
+| *(nothing shown)* + "Last saved to office 2:14pm" | Everything is caught up. The time shows when your entries last reached the office server. |
+| "Syncing 3…" | 3 entries are being sent to the office right now. |
+| "3 waiting · office network not found" | 3 entries are saved on your phone but the office server isn't reachable — normal and expected if you're off the office WiFi (Base) or off-network (Plus). Nothing is lost; it will send automatically once you're back in range. |
+| "3 waiting · office server busy" | The office server answered but asked to retry — usually brief. It will keep trying on its own. |
+
+Whenever entries are waiting, a **Try now** button appears next to the status line. Tap it to ask the app to retry immediately instead of waiting for the next automatic attempt — useful the moment you've just walked back into the office or reconnected to WiFi.
 
 ### Entries that need attention
 
@@ -248,7 +265,7 @@ Your account may not be linked to your personnel record. Contact the administrat
 Make sure your name is selected. Tap **Switch** and re-select yourself, then wait for the refresh. If the job still doesn't appear, your assignment may not have been saved yet — contact the dispatcher.
 
 **The page won't load or shows "Failed to connect to server."**
-Check your Wi-Fi or data connection. The server must be reachable from your device. If you're on a cellular connection, make sure the server is accessible from outside the local network, or switch to Wi-Fi.
+Check your Wi-Fi or data connection. On the Base plan, the server is only reachable while connected to the **office WiFi** — switch to it if you're elsewhere. On the Plus plan, the server should be reachable from cellular data or any Wi-Fi; if it isn't, contact the administrator.
 
 **I accidentally marked a job as Complete before logging time.**
 Contact the administrator. Completed status cannot be undone from the Field Module, but the administrator can log time entries on your behalf from the admin dashboard.
