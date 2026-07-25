@@ -92,3 +92,41 @@ export function verifyTrialUnlock(payload: unknown, machineId: string): payload 
   const expected = signTrialUnlock(machineId, p.tier, expiresAt);
   return timingSafeEqualStrings(p.sig, expected);
 }
+
+// ---------------------------------------------------------------------------
+// Trial plan stamp (WVO_TRIAL_PLAN / WVO_TRIAL_PLAN_SIG in the bundled
+// .env.local, written by scripts/electron-build.js).
+//
+// Trial builds are pre-activated — they skip the activation key entirely — so
+// the plan a trial demonstrates has to come from the build. That makes it
+// configuration, which is exactly what WVO_DEFAULT_TIER was, and exactly why
+// this is signed: the stamp ships as plain text on the prospect's disk, so
+// editing "base" to "plus" must grant nothing.
+//
+// verifyTrialPlan returns a tier rather than a boolean on purpose. Every
+// unverifiable input resolves to "base", so there is no failure branch a
+// caller can forget and default the other way.
+// ---------------------------------------------------------------------------
+
+/** Signs a trial build's plan stamp. Mirrored in scripts/electron-build.js. */
+export function signTrialPlan(plan: LicenseTier): string {
+  return crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(`trial-plan:${plan}`)
+    .digest("hex");
+}
+
+/**
+ * Resolves a trial build's plan from its stamp. Fails closed to "base" for
+ * anything absent, malformed, or unsigned — tampering can only ever cost
+ * features, never grant them.
+ */
+export function verifyTrialPlan(
+  plan: string | undefined,
+  sig: string | undefined
+): LicenseTier {
+  if (plan !== "base" && plan !== "plus") return "base";
+  if (typeof sig !== "string") return "base";
+  if (!timingSafeEqualStrings(sig, signTrialPlan(plan))) return "base";
+  return plan;
+}
