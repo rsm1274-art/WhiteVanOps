@@ -158,7 +158,7 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
 | Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
-| License tier (Plus Upgrade) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is now encoded inside the signed activation key itself (no plaintext override). One customer installer serves both Base and Plus, plus a lightweight Upgrade Patch installer compiled on the fly |
+| License tier (Base/Plus) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is encoded inside the signed activation key itself (no plaintext override). Since 2026-07-24 Base and Plus are separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; only Plus bundles cloudflared) and the in-place Upgrade Patch installer is gone — Base→Plus is a discounted Plus purchase |
 | Trial/Demo installer | Complete — `WhiteVanOps-{Base,Plus}-Trial-Setup.exe` (superseded 2026-07-24 from a single Plus-preactivated build), 30-day machine-locked timer, converts to the purchased tier on unlock; see Phase 13 |
 | Field sync stuck-record resolution | Complete — offline sync queue quarantines permanently-failed ops instead of stalling, with a tech-facing resolution panel and an admin sync-review dashboard card; see Phase 12 |
 | Audit logging | Complete — every write action recorded |
@@ -167,7 +167,7 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 | Fleet & equipment | Complete — vehicles, maintenance logs, repair records, equipment assets |
 | Personnel | Complete — qualifications, time-off, user account linking |
 | Inventory | Complete — multi-location stock levels, low-stock alerts, job deduction on completion |
-| Network & Access | Complete — Port Forwarding + Dynamic DNS for direct field device connection, no cloud relay. Documented as plain `http://` by deliberate choice (avoids subscription costs); see `MANUAL_Setup_Installation.md` §7 for the full per-customer setup and the accepted tradeoff |
+| Network & Access | Complete — per-plan transport since 2026-07-24: Base syncs field devices over the office LAN only (plain `http://` on a private address — traffic never leaves the building; DHCP reservation/static IP required), Plus adds a Cloudflare HTTPS tunnel for remote access. Port Forwarding + Dynamic DNS is retired; see `MANUAL_Setup_Installation.md` |
 | Backup & Recovery | Complete — Built-in Target Directory Mirror executing nightly automated `pg_dump` local backups; verified end-to-end producing a valid, restorable archive |
 | Security & Git | Complete — private git repo with pre-commit secret scanning; command injection, cookie-flag, and job-authorization bugs fixed; see Phase 9 |
 | Automated tests | Started — 36 Vitest tests on pure-logic modules; see Phase 10. Not comprehensive (no API route, component, or e2e tests yet) |
