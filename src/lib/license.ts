@@ -94,7 +94,18 @@ export function getBaseLicense(): BaseLicense | null {
   }
 }
 
-/** Cryptographically verifies an offline Plus license upgrade against the active Base license key */
+/**
+ * Cryptographically verifies an offline Plus license upgrade against the active
+ * Base license key.
+ *
+ * LEGACY, READ-ONLY as of 2026-07-24. The Plus Upgrade Installer that wrote
+ * plus_license.json is gone: Base and Plus are now separate products with
+ * different payloads (only Plus bundles cloudflared), so a licence patch would
+ * unlock Plus features on an install that physically cannot tunnel. No new
+ * plus_license.json is ever minted. This stays only so an install already
+ * patched in the field keeps working rather than silently dropping to Base.
+ * Remove once no such install remains.
+ */
 export function verifyPlusLicense(plusData: any, baseKey: string): boolean {
   if (!plusData || !plusData.licenseKey || plusData.tier !== "plus" || !plusData.sig) {
     return false;
@@ -160,6 +171,7 @@ export async function getLicense(): Promise<LicenseState> {
   // 1. Get the base license activation. If missing/invalid, we cannot run Plus.
   const baseLicense = getBaseLicense();
 
+  // Legacy read-only path — see verifyPlusLicense. No new patches are minted.
   // 2. Read plus_license.json if present
   let plusLicense: PlusLicense | null = null;
   const appDataDir = getAppDataWvoDir();

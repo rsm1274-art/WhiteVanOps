@@ -48,6 +48,10 @@ function activate() {
   console.log(`✅ Base license successfully written to: ${baseLicensePath}`);
 
   // 2. Generate Plus License (plus_license.json)
+  // Dev convenience only. This exercises the LEGACY plus_license.json path
+  // (see src/lib/license.ts) — customers never receive one any more. To mirror
+  // a real Plus customer instead, mint a Plus key:
+  //   node scripts/license-manager.js --tier plus
   const plusSig = crypto
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
     .update(`${baseKey}:plus:`)
