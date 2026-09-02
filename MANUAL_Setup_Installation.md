@@ -191,8 +191,18 @@ The tier is stamped onto the key's Firestore record, read during activation, and
 3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
 4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), `cloudflared/` (Plus variants only), and Electron shell into a single NSIS installer
 5. Output the resulting executable, named per the table above, in `dist-electron/`
+6. Write a build stamp so a leftover file from a previous run can't be mistaken for the one you just built (see below)
 
 Distribute the generated setup `.exe` matching the customer's plan to office staff. The installers upgrade any existing installation of the **same plan** in-place; moving plans means installing the other plan's artifact (see §5).
+
+### Telling a current build apart from a stale one
+
+The four artifact names above are fixed — rebuilding never renames the file, so an old `WhiteVanOps-Plus-Setup.exe` left over from a month ago looks identical to one built five minutes ago. Every successful build now writes:
+
+- **`<artifact-name>.buildinfo.txt`** next to that installer — its app version, git commit, build timestamp, and whether it was built with uncommitted changes (never ship one that says so).
+- **`dist-electron/BUILD-MANIFEST.txt`** — the same information for all four variants side by side, so you can tell at a glance if one of the other three is from an older commit and needs rebuilding before you ship a matched set.
+
+Before handing an installer to a customer, open its `.buildinfo.txt` and confirm the commit matches what you expect to be shipping.
 
 ---
 

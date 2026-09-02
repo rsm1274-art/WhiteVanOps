@@ -327,4 +327,67 @@ if (fs.existsSync(finalArtifact)) {
   console.warn(`\nNote: expected ${artifactName} in dist-electron/ but did not find it — check electron-builder output above.`);
 }
 
+// 9. Stamp this build so it can be told apart from an older file with the same
+// name sitting in dist-electron/ from a previous run — the four artifact names
+// are fixed, so nothing about the filename itself reveals when or from what
+// code it was built. Writes a human-readable sidecar next to the .exe (travels
+// with the file if it's copied elsewhere) and updates a shared manifest across
+// all four variants, tracked in an internal JSON store so later builds can
+// merge into it without clobbering the other three variants' entries.
+if (fs.existsSync(finalArtifact)) {
+  const appVersion = require(path.join(root, 'package.json')).version;
+  let gitCommit = 'unknown (not a git checkout)';
+  let gitDirty = false;
+  try {
+    gitCommit = execSync('git rev-parse --short HEAD', { cwd: root }).toString().trim();
+    gitDirty = execSync('git status --porcelain', { cwd: root }).toString().trim().length > 0;
+  } catch {
+    // Not fatal — a build should still succeed outside a git checkout.
+  }
+  const builtAt = new Date().toISOString();
+  const planLabel = plan === 'plus' ? 'Plus (bundles the Cloudflare tunnel)' : 'Base (WiFi sync only)';
+
+  const buildInfo = { artifactName, variant, plan, appVersion, gitCommit, gitDirty, builtAt };
+
+  fs.writeFileSync(
+    path.join(distElectron, `${artifactName}.buildinfo.txt`),
+    [
+      `Installer:    ${artifactName}`,
+      `Plan:         ${planLabel}`,
+      `App version:  ${appVersion}`,
+      `Git commit:   ${gitCommit}${gitDirty ? ' (built with uncommitted changes — do not ship)' : ''}`,
+      `Built:        ${builtAt}`,
+      '',
+    ].join('\n'),
+    'utf8'
+  );
+
+  const manifestJsonPath = path.join(distElectron, '.build-manifest.json');
+  let manifest = {};
+  if (fs.existsSync(manifestJsonPath)) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestJsonPath, 'utf8'));
+    } catch {
+      manifest = {};
+    }
+  }
+  manifest[artifactName] = buildInfo;
+  fs.writeFileSync(manifestJsonPath, JSON.stringify(manifest, null, 2), 'utf8');
+
+  const manifestLines = ['All four installers currently on record in dist-electron/:', ''];
+  for (const name of Object.values(ARTIFACT_NAMES)) {
+    const info = manifest[name];
+    if (!info) {
+      manifestLines.push(`  ${name} — NOT BUILT YET`);
+      continue;
+    }
+    const staleFlag = info.gitCommit !== gitCommit ? '  <-- different commit than the build just run; rebuild before shipping alongside it' : '';
+    const dirtyFlag = info.gitDirty ? '  (built with uncommitted changes)' : '';
+    manifestLines.push(`  ${name} — v${info.appVersion}, commit ${info.gitCommit}, built ${info.builtAt}${dirtyFlag}${staleFlag}`);
+  }
+  fs.writeFileSync(path.join(distElectron, 'BUILD-MANIFEST.txt'), manifestLines.join('\n') + '\n', 'utf8');
+  console.log(`\n${manifestLines.join('\n')}`);
+  console.log(`\nSee dist-electron/BUILD-MANIFEST.txt for this table, or ${artifactName}.buildinfo.txt for just this installer.`);
+}
+
 console.log('\nBuild complete.');
