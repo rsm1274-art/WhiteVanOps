@@ -71,3 +71,6 @@ next-env.d.ts
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+
+# Portable cloudflared for Plus installers — see MANUAL_Setup_Installation.md §1
+cloudflared/

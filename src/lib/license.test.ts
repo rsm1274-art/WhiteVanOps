@@ -28,6 +28,7 @@ import {
   LICENSE_SIGNING_SECRET,
   verifyPlusLicense,
 } from "./license";
+import { signTrialPlan } from "./licenseCrypto";
 
 const NOW = new Date("2026-07-09T12:00:00Z");
 
@@ -540,7 +541,7 @@ describe("getLicense with cryptographic validation", () => {
     );
   });
 
-  it("with no trial-unlock.json, an unconverted trial build still forces plus", async () => {
+  it("with no trial-unlock.json and no signed plan, an unconverted trial build defaults to base", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
 
     vi.spyOn(fs, "existsSync").mockReturnValue(false);
@@ -568,23 +569,29 @@ describe("getLicense with cryptographic validation", () => {
     });
 
     const license = await getLicense();
-    expect(license.tier).toBe("plus");
+    expect(license.tier).toBe("base");
     expect(license.licenseKey).toBe("TRIAL-ACTIVE");
     expect(license.notes).toBe("30-Day Evaluation Period");
   });
 
   // A forged unlock (signed for someone else's machine) must not buy a
   // permanent licence. The install falls back to being what it already was —
-  // an unconverted trial: Plus for the evaluation, still expiring, still lock
-  // governed. So forging gains the attacker nothing they didn't already have.
+  // an unconverted trial: still expiring, still lock governed. So forging
+  // gains the attacker nothing they didn't already have.
   //
   // This previously asserted a downgrade to base, which only held because the
   // test left WVO_DEFAULT_TIER unset — a state no real trial build was ever
   // in, since electron-build.js stamped WVO_IS_TRIAL and the tier together.
   // That env var is gone; a trial build is now identified by WVO_IS_TRIAL
-  // alone, and an unconverted trial is Plus by definition.
+  // alone, and its plan comes from the signed WVO_TRIAL_PLAN stamp,
+  // defaulting to base when absent — as it is in this test. The plan is
+  // stubbed here as a correctly-signed "plus" so the assertion below still
+  // isolates its intended subject, the machine-mismatched unlock file, rather
+  // than colliding with the (separately tested) plan-default behavior.
   it("ignores a trial-unlock.json signed for a different machine and stays an ordinary expiring trial", async () => {
     vi.stubEnv("WVO_IS_TRIAL", "true");
+    vi.stubEnv("WVO_TRIAL_PLAN", "plus");
+    vi.stubEnv("WVO_TRIAL_PLAN_SIG", signTrialPlan("plus"));
 
     const sig = crypto
       .createHmac("sha256", LICENSE_SIGNING_SECRET)
@@ -625,6 +632,70 @@ describe("getLicense with cryptographic validation", () => {
     expect(license.licenseKey).toBe("TRIAL-ACTIVE");
     expect(license.notes).toBe("30-Day Evaluation Period");
     expect(license.expiresAt).not.toBeNull();
+  });
+
+  // Regression, same family as WVO_DEFAULT_TIER: a Base trial's bundled
+  // .env.local is plain text on the prospect's disk. Flipping WVO_TRIAL_PLAN to
+  // "plus" without a matching signature must grant nothing.
+  it("ignores an unsigned WVO_TRIAL_PLAN=plus and falls back to base", async () => {
+    vi.stubEnv("WVO_IS_TRIAL", "true");
+    vi.stubEnv("WVO_TRIAL_PLAN", "plus");
+    vi.stubEnv("WVO_TRIAL_PLAN_SIG", "not-a-real-signature");
+
+    // No activation files at all — a genuine, unconverted trial install.
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
+      expiresAt: null,
+    } as never);
+
+    const license = await getLicense();
+    expect(license.tier).toBe("base");
+  });
+
+  it("grants plus for a correctly signed WVO_TRIAL_PLAN=plus trial build", async () => {
+    vi.stubEnv("WVO_IS_TRIAL", "true");
+    vi.stubEnv("WVO_TRIAL_PLAN", "plus");
+    vi.stubEnv("WVO_TRIAL_PLAN_SIG", signTrialPlan("plus"));
+
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
+      expiresAt: null,
+    } as never);
+
+    const license = await getLicense();
+    expect(license.tier).toBe("plus");
+  });
+
+  it("runs a base trial build on base features", async () => {
+    vi.stubEnv("WVO_IS_TRIAL", "true");
+    vi.stubEnv("WVO_TRIAL_PLAN", "base");
+    vi.stubEnv("WVO_TRIAL_PLAN_SIG", signTrialPlan("base"));
+
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    vi.mocked(prisma.license.upsert).mockResolvedValue({
+      id: LICENSE_ROW_ID,
+      tier: "base",
+      licenseKey: null,
+      notes: null,
+      activatedAt: null,
+      expiresAt: null,
+    } as never);
+
+    const license = await getLicense();
+    expect(license.tier).toBe("base");
   });
 });
 

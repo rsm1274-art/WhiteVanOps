@@ -1,4 +1,4 @@
-// Production build: Next.js standalone → electron-builder NSIS installer / C# Upgrade patches
+// Production build: Next.js standalone → electron-builder NSIS installer (Base / Plus / trial variants)
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -9,30 +9,58 @@ const standalone = path.join(root, '.next', 'standalone');
 const args = process.argv.slice(2);
 const isBase = args.includes('--base');
 const isPlus = args.includes('--plus');
-const isUpgrade = args.includes('--upgrade');
 const isTrial = args.includes('--trial');
 
-// --plus as an INSTALLER variant is gone: the tier now rides inside the signed
-// activation key, so Base and Plus are byte-identical builds and one installer
-// serves both. (`--upgrade --key ...` — the Plus-upgrade patch for an install
-// already in the field — is a different thing and still supported.) Fail loudly
-// rather than silently producing a "Plus installer" that no longer means
-// anything, which would send a customer a build whose name promises a tier it
-// cannot grant.
-if (isPlus && !isUpgrade) {
-  console.error('\n❌ --plus is no longer an installer variant.');
-  console.error('   The tier now travels inside the activation key, so one installer serves both plans:');
-  console.error('     1. Build it:  npm run electron:build          → WhiteVanOps-Setup.exe');
-  console.error('     2. Mint the key with the tier the customer paid for:');
-  console.error('          node scripts/license-manager.js --tier plus');
-  console.error('   To upgrade an existing Base install in the field, use:');
-  console.error('     node scripts/electron-build.js --upgrade --key <theirBaseKey>\n');
+if (args.includes('--upgrade')) {
+  console.error('\n❌ --upgrade was removed on 2026-07-24.');
+  console.error('   There is no in-place Base→Plus upgrade any more: Base and Plus are separate');
+  console.error('   products with different payloads (only Plus bundles cloudflared), so a licence');
+  console.error('   patch would unlock Plus features on an install that physically cannot tunnel.');
+  console.error('   A Base customer moving to Plus buys Plus and installs WhiteVanOps-Plus-Setup.exe.\n');
   process.exit(1);
 }
 
-let tier = 'base';
-if (isUpgrade) tier = 'upgrade';
-if (isTrial) tier = 'trial';
+if (isBase && isPlus) {
+  console.error('\n❌ Pass exactly one of --base or --plus.\n');
+  process.exit(1);
+}
+
+// The plan decides the payload (cloudflared present or absent) and, for trial
+// builds, the pre-activated tier. It is required for --trial: defaulting it
+// would let one mistyped flag ship a prospect the wrong plan.
+let plan;
+if (isTrial) {
+  const planIdx = args.indexOf('--plan');
+  plan = planIdx !== -1 ? args[planIdx + 1] : null;
+  if (plan !== 'base' && plan !== 'plus') {
+    console.error('\n❌ --trial requires --plan base or --plan plus.');
+    console.error('   Usage: node scripts/electron-build.js --trial --plan base\n');
+    process.exit(1);
+  }
+} else {
+  if (!isBase && !isPlus) {
+    console.error('\n❌ Pass --base, --plus, or --trial --plan base|plus.\n');
+    process.exit(1);
+  }
+  plan = isPlus ? 'plus' : 'base';
+}
+
+const variant = isTrial ? 'trial' : 'full';
+
+// Only Plus ships the tunnel binary. A Base install therefore cannot open a
+// tunnel for two independent reasons — no Plus entitlement in its signed key,
+// and no cloudflared on disk. Neither is a file a customer can edit.
+const bundlesCloudflared = plan === 'plus';
+
+const ARTIFACT_NAMES = {
+  'full:base': 'WhiteVanOps-Base-Setup.exe',
+  'full:plus': 'WhiteVanOps-Plus-Setup.exe',
+  'trial:base': 'WhiteVanOps-Base-Trial-Setup.exe',
+  'trial:plus': 'WhiteVanOps-Plus-Trial-Setup.exe',
+};
+const artifactName = ARTIFACT_NAMES[`${variant}:${plan}`];
+
+console.log(`\nBuilding ${artifactName}  (variant=${variant} plan=${plan} cloudflared=${bundlesCloudflared})`);
 
 function run(cmd, env = {}) {
   console.log(`\n> ${cmd}`);
@@ -51,111 +79,12 @@ function copyDir(src, dst) {
 const distElectron = path.join(root, 'dist-electron');
 
 // ==========================================
-// TARGET: Plus Upgrade Installer
-// ==========================================
-if (tier === 'upgrade') {
-  const keyIdx = args.indexOf('--key');
-  const key = keyIdx !== -1 ? args[keyIdx + 1] : null;
-  if (!key) {
-    console.error('\n❌ Error: --key is required to build the Plus Upgrade Installer.');
-    console.error('Usage: node scripts/electron-build.js --upgrade --key <licenseKey> [--expires YYYY-MM-DD] [--notes "Notes"]\n');
-    process.exit(1);
-  }
-
-  const expiresIdx = args.indexOf('--expires');
-  const expires = expiresIdx !== -1 ? args[expiresIdx + 1] : null;
-
-  const notesIdx = args.indexOf('--notes');
-  const notes = notesIdx !== -1 ? args[notesIdx + 1] : '';
-
-  // Generate signed payload using the licensing HMAC secret
-  const LICENSE_SIGNING_SECRET = process.env.LICENSE_SIGNING_SECRET || 'wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765';
-  const crypto = require('crypto');
-  const signatureData = `${key}:plus:${expires || ''}`;
-  const sig = crypto
-    .createHmac('sha256', LICENSE_SIGNING_SECRET)
-    .update(signatureData)
-    .digest('hex');
-
-  const payload = {
-    licenseKey: key,
-    tier: 'plus',
-    expiresAt: expires,
-    notes: notes,
-    sig: sig
-  };
-
-  // Compile upgrade.exe using the built-in Windows C# compiler (pre-installed on all Windows systems)
-  const cscPath64 = 'C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe';
-  const cscPath32 = 'C:\\Windows\\Microsoft.NET\\v4.0.30319\\csc.exe';
-  const csc = fs.existsSync(cscPath64) ? cscPath64 : (fs.existsSync(cscPath32) ? cscPath32 : null);
-
-  if (!csc) {
-    console.error('\n❌ Error: Windows C# Compiler (csc.exe) not found. Cannot build upgrade installer.');
-    process.exit(1);
-  }
-
-  const srcFile = path.join(root, 'upgrade_installer.cs');
-  const outFile = path.join(root, 'dist-electron', 'WhiteVanOps-Plus-Upgrade.exe');
-
-  const csharpCode = `
-using System;
-using System.IO;
-
-class Upgrade {
-    static void Main() {
-        try {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string targetDir = Path.Combine(appData, "whitevanops");
-            Directory.CreateDirectory(targetDir);
-            string targetFile = Path.Combine(targetDir, "plus_license.json");
-            
-            string json = @"${JSON.stringify(payload).replace(/"/g, '""')}";
-            
-            File.WriteAllText(targetFile, json);
-            Console.WriteLine("========================================");
-            Console.WriteLine(" WhiteVanOps Plus Upgrade Successful! ");
-            Console.WriteLine("========================================");
-            Console.WriteLine("Active Key: ${payload.licenseKey}");
-            Console.WriteLine("Notes: ${payload.notes}");
-            Console.WriteLine("\\nPress any key to exit...");
-            Console.ReadKey();
-        } catch (Exception e) {
-            Console.WriteLine("Error: " + e.Message);
-            Console.ReadKey();
-        }
-    }
-}
-  `;
-
-  fs.writeFileSync(srcFile, csharpCode, 'utf8');
-  fs.mkdirSync(path.dirname(outFile), { recursive: true });
-
-  try {
-    console.log(`\nCompiling Plus Upgrade Installer for key: ${key}...`);
-    execSync(`"${csc}" /out:"${outFile}" "${srcFile}"`, { stdio: 'inherit' });
-    console.log(`\n✅ Success! Plus Upgrade Installer built at: ${outFile}`);
-  } catch (err) {
-    console.error('\n❌ Error compiling upgrade installer:', err.message);
-    process.exit(1);
-  } finally {
-    if (fs.existsSync(srcFile)) {
-      fs.unlinkSync(srcFile);
-    }
-  }
-
-  process.exit(0);
-}
-
-// ==========================================
-// TARGET: Full App Installer (Base and Plus — same binary)
+// TARGET: Full App Installer (Base / Plus / trial variants)
 // ==========================================
 // Clean only the temporary build output to preserve previously generated
 // installers. Do NOT blanket-delete dist-electron/: the finished installers
-// live here, they are built one target at a time (the default full installer,
-// then --trial), and WhiteVanOps-Plus-Upgrade.exe comes from the separate
-// --upgrade path that exits before packaging — a wipe would destroy artifacts
-// this run cannot rebuild.
+// live here and they are built one variant at a time (four of them now), so a
+// wipe would destroy artifacts this run cannot rebuild.
 //
 const unpackedForTarget = path.join(distElectron, 'win-unpacked');
 if (fs.existsSync(unpackedForTarget)) {
@@ -222,21 +151,45 @@ let envContent = '';
 if (fs.existsSync(envSrc)) {
   envContent = fs.readFileSync(envSrc, 'utf8');
 }
-// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock
-// and src/lib/license.ts grants Plus for the evaluation period.
+// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock,
+// plus a SIGNED plan stamp so src/lib/license.ts knows which plan the trial
+// demonstrates. The signature is the whole point: this file ships as plain text
+// inside resources/nextjs/, and WVO_DEFAULT_TIER taught us that an unsigned plan
+// value there is a one-word Notepad edit away from granting the paid tier.
+// verifyTrialPlan() fails closed to "base", so tampering can only cost features.
 //
-// There is deliberately NO tier stamp here. WVO_DEFAULT_TIER used to be
-// written into this file to pre-activate Plus builds, which meant the paid
-// tier hung off a plain-text line in resources/nextjs/.env.local that a
-// customer could flip from "base" to "plus" in Notepad. The tier now travels
-// inside the signed, machine-bound activation key
-// (scripts/license-manager.js --tier plus), so Base and Plus ship the SAME
-// installer and the key decides. Do not reintroduce a tier env var.
-if (tier === 'trial') {
+// Non-trial builds still carry NO plan stamp at all — an activated install's
+// tier comes only from its signed, machine-bound activation key
+// (scripts/license-manager.js --tier base|plus).
+//
+// This must stay byte-identical to signTrialPlan() in src/lib/licenseCrypto.ts.
+function signTrialPlan(planName) {
+  // No env-var fallback: the verifier (src/lib/licenseCrypto.ts) uses ONLY the
+  // hardcoded literal below, so an env var set at build time would sign with a
+  // secret the verifier never checks against — Plus trials would silently
+  // verify as Base. Keep byte-identical to electron/main.js,
+  // scripts/activate-dev.js, and scripts/license-manager.js.
+  const LICENSE_SIGNING_SECRET =
+    'wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765';
+  return require('crypto')
+    .createHmac('sha256', LICENSE_SIGNING_SECRET)
+    .update(`trial-plan:${planName}`)
+    .digest('hex');
+}
+
+if (variant === 'trial') {
   envContent += `\nWVO_IS_TRIAL="true"\n`;
+  envContent += `WVO_TRIAL_PLAN="${plan}"\n`;
+  envContent += `WVO_TRIAL_PLAN_SIG="${signTrialPlan(plan)}"\n`;
 }
 fs.writeFileSync(envDest, envContent, 'utf8');
-console.log(`\nCopied .env.local into standalone bundle${tier === 'trial' ? ' with WVO_IS_TRIAL="true"' : ' (tier comes from the activation key)'}.`);
+console.log(
+  `\nCopied .env.local into standalone bundle${
+    variant === 'trial'
+      ? ` with WVO_IS_TRIAL and a signed WVO_TRIAL_PLAN="${plan}"`
+      : ' (tier comes from the activation key)'
+  }.`
+);
 
 // 5. Concatenate Prisma migrations into a single schema.sql — applied by
 // electron/postgres.js when the bundled PostgreSQL initializes on first run.
@@ -262,8 +215,29 @@ if (!fs.existsSync(path.join(root, 'pgsql', 'bin', 'pg_ctl.exe'))) {
   process.exit(1);
 }
 
-// 7. Package with electron-builder
-run('npx electron-builder --win');
+// 6b. Verify the tunnel binary for Plus variants. Same failure mode as the
+// pgsql check above: electron-builder silently skips a missing extraResources
+// source, so without this a "Plus" installer would ship with no way to open a
+// tunnel — the one capability that plan is sold on.
+if (bundlesCloudflared && !fs.existsSync(path.join(root, 'cloudflared', 'cloudflared.exe'))) {
+  console.error('\n❌ Error: cloudflared/cloudflared.exe not found — a Plus installer would ship WITHOUT the tunnel binary.');
+  console.error('Download the Windows amd64 build from Cloudflare and place it at cloudflared/cloudflared.exe.');
+  console.error('See MANUAL_Setup_Installation.md §1.\n');
+  process.exit(1);
+}
+
+// 7. Package with electron-builder using a per-variant config derived from
+// package.json's "build" key. package.json stays the single source of truth;
+// only the delta (artifact name, and cloudflared for Plus) is computed here, so
+// the two cannot drift.
+const builderConfig = JSON.parse(JSON.stringify(require(path.join(root, 'package.json')).build));
+builderConfig.win.artifactName = artifactName;
+if (bundlesCloudflared) {
+  builderConfig.win.extraResources.push({ from: 'cloudflared', to: 'cloudflared' });
+}
+const builderConfigPath = path.join(root, '.next', `electron-builder.${variant}-${plan}.json`);
+fs.writeFileSync(builderConfigPath, JSON.stringify(builderConfig, null, 2), 'utf8');
+run(`npx electron-builder --win --config "${builderConfigPath}"`);
 
 // 7b. Assert the packaged output actually contains the pieces electron-builder
 // is known to drop silently (missing extraResources sources, node_modules).
@@ -287,6 +261,20 @@ for (const rel of [
     console.error(`\n❌ Error: packaged output is missing ${rel.join('/')} — the installer in dist-electron/ is broken, do not ship it.`);
     process.exit(1);
   }
+}
+
+// 7b-ii. The tunnel binary must be present on Plus and ABSENT on Base. Both
+// directions matter: electron-builder can silently drop it from a Plus build,
+// and a Base build that accidentally ships it erases the boundary between the
+// two products — a Base install would then need only a licence flip to tunnel.
+const cloudflaredPacked = path.join(distElectron, unpackedDir, 'resources', 'cloudflared', 'cloudflared.exe');
+if (bundlesCloudflared && !fs.existsSync(cloudflaredPacked)) {
+  console.error('\n❌ Error: Plus packaged output is missing resources/cloudflared/cloudflared.exe — do not ship it.');
+  process.exit(1);
+}
+if (!bundlesCloudflared && fs.existsSync(cloudflaredPacked)) {
+  console.error('\n❌ Error: Base packaged output CONTAINS resources/cloudflared/cloudflared.exe — the Base plan must not ship the tunnel binary.');
+  process.exit(1);
 }
 
 // 7c. Assert app.asar still carries every module electron/*.js requires at
@@ -330,22 +318,13 @@ if (missingModules.length) {
 const asarMb = (fs.statSync(asarPath).size / (1024 * 1024)).toFixed(0);
 console.log(`\nVerified app.asar (${asarMb} MB, ${bundledModules.length} modules) carries all ${ELECTRON_RUNTIME_MODULES.length} Electron runtime deps.`);
 
-// 8. Rename resulting installer file for clarity
-try {
-  const files = fs.readdirSync(distElectron);
-  const setupFile = files.find(f => f.startsWith('WhiteVanOps Setup') && f.endsWith('.exe'));
-  if (setupFile) {
-    // One installer for both plans — the activation key decides the tier.
-    let newName = 'WhiteVanOps-Setup.exe';
-    if (tier === 'trial') newName = 'WhiteVanOps-Trial-Setup.exe';
-    fs.renameSync(
-      path.join(distElectron, setupFile),
-      path.join(distElectron, newName)
-    );
-    console.log(`\n✅ Success! Renamed installer: ${setupFile} → ${newName}`);
-  }
-} catch (err) {
-  console.warn('\nNote: Could not automatically rename the installer file:', err.message);
+// 8. electron-builder already wrote the final name via builderConfig.win.artifactName
+// (set above from ARTIFACT_NAMES) — no post-hoc rename needed.
+const finalArtifact = path.join(distElectron, artifactName);
+if (fs.existsSync(finalArtifact)) {
+  console.log(`\n✅ Success! Installer built at: ${finalArtifact}`);
+} else {
+  console.warn(`\nNote: expected ${artifactName} in dist-electron/ but did not find it — check electron-builder output above.`);
 }
 
 console.log('\nBuild complete.');

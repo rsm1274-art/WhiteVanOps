@@ -129,6 +129,7 @@ Implemented a secure, offline cryptographic licensing model for the Plus tier up
 - **Multi-Target Installer builds**: Upgraded the pipeline (`scripts/electron-build.js`) to clean build-only artifacts and compile:
   - `WhiteVanOps-Setup.exe` (customer installer — serves **both** Base and Plus; the activation key's tier decides which, so there is no separate Plus build)
   - `WhiteVanOps-Plus-Upgrade.exe` (lightweight, native upgrade patch executable compiled via `csc.exe` on the fly)
+  - **Superseded 2026-07-24:** Base and Plus are now separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; trials `WhiteVanOps-{Base,Plus}-Trial-Setup.exe`); the in-place Plus upgrade patch above is gone — see `MANUAL_Setup_Installation.md` §6.
 
 ### Phase 12 — Field Sync Stuck-Record Resolution (July 15, 2026)
 
@@ -137,7 +138,7 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 ### Phase 13 — License Tier Bound to Signed Key; Trial/Demo Installer (July 15–16, 2026)
 
 - **Tier now lives inside the signed activation key**, not a plaintext env var: `WVO_DEFAULT_TIER` (which let anyone edit `.env.local` in Notepad to unlock Plus) was removed entirely. `scripts/license-manager.js` mints `tier` into the key at vendor-side mint time; `electron/main.js` bakes it into the machine-bound, HMAC-signed `license.json` at activation. Legacy pre-tier license files still verify and read back as Base. See `CLAUDE.md` "License / Plus tier" for the full precedence chain.
-- **Trial/Demo installer** (`npm run electron:build:trial` → `WhiteVanOps-Trial-Setup.exe`): pre-activated on Plus for sales demos, locked 30 days from first launch via a separate signed `trial.json` anchor (`src/lib/trial.ts`), independent of the License/Plus gate above. Skips native activation entirely — boots straight to login. Conversion (`POST /api/license` `unlock-trial`) verifies against the machine's real ID and sets `License.tier` to whatever the purchased key grants (Base or Plus), not the trial's pre-activated Plus default.
+- **Trial/Demo installer** (`npm run electron:build:trial` → `WhiteVanOps-Trial-Setup.exe`): pre-activated on Plus for sales demos, locked 30 days from first launch via a separate signed `trial.json` anchor (`src/lib/trial.ts`), independent of the License/Plus gate above. Skips native activation entirely — boots straight to login. Conversion (`POST /api/license` `unlock-trial`) verifies against the machine's real ID and sets `License.tier` to whatever the purchased key grants (Base or Plus), not the trial's pre-activated Plus default. **Superseded 2026-07-24:** trial installers are now split by tier (`WhiteVanOps-Base-Trial-Setup.exe` / `WhiteVanOps-Plus-Trial-Setup.exe`) rather than one Plus-preactivated build — see `MANUAL_Setup_Installation.md` §6.
 - **In-app data import**: the existing CLI onboarding-import engine (`src/lib/import/`) is now also reachable from Settings → Onboarding Data Import (superuser-only), sharing validation/dry-run/commit logic with `scripts/import/analyze.ts` and `run.ts`.
 - **Server-identity health probe**: `GET /api/health` returns `{ app: "whitevanops" }` so `electron/main.js` can tell a real WhiteVanOps server apart from a foreign listener on port 3000 (e.g. a Docker container) before deciding to reuse it or self-boot on a free port.
 - **Admin recovery tooling**: `scripts/recovery/reset-admin-password.ps1`/`.js` reset or recreate the admin/superuser account on a customer machine with no Node/repo installed, by borrowing the Node runtime bundled inside the installed Electron binary (`ELECTRON_RUN_AS_NODE=1`).
@@ -157,8 +158,8 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
 | Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
-| License tier (Plus Upgrade) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is now encoded inside the signed activation key itself (no plaintext override). One customer installer serves both Base and Plus, plus a lightweight Upgrade Patch installer compiled on the fly |
-| Trial/Demo installer | Complete — `WhiteVanOps-Trial-Setup.exe`, pre-activated Plus, 30-day machine-locked timer, converts to the purchased tier on unlock; see Phase 13 |
+| License tier (Base/Plus) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is encoded inside the signed activation key itself (no plaintext override). Since 2026-07-24 Base and Plus are separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; only Plus bundles cloudflared) and the in-place Upgrade Patch installer is gone — Base→Plus is a discounted Plus purchase |
+| Trial/Demo installer | Complete — `WhiteVanOps-{Base,Plus}-Trial-Setup.exe` (superseded 2026-07-24 from a single Plus-preactivated build), 30-day machine-locked timer, converts to the purchased tier on unlock; see Phase 13 |
 | Field sync stuck-record resolution | Complete — offline sync queue quarantines permanently-failed ops instead of stalling, with a tech-facing resolution panel and an admin sync-review dashboard card; see Phase 12 |
 | Audit logging | Complete — every write action recorded |
 | Field tech module | Complete — mobile-optimized, auto-selects linked tech |
@@ -166,7 +167,7 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 | Fleet & equipment | Complete — vehicles, maintenance logs, repair records, equipment assets |
 | Personnel | Complete — qualifications, time-off, user account linking |
 | Inventory | Complete — multi-location stock levels, low-stock alerts, job deduction on completion |
-| Network & Access | Complete — Port Forwarding + Dynamic DNS for direct field device connection, no cloud relay. Documented as plain `http://` by deliberate choice (avoids subscription costs); see `MANUAL_Setup_Installation.md` §7 for the full per-customer setup and the accepted tradeoff |
+| Network & Access | Complete — per-plan transport since 2026-07-24: Base syncs field devices over the office LAN only (plain `http://` on a private address — traffic never leaves the building; DHCP reservation/static IP required), Plus adds a Cloudflare HTTPS tunnel for remote access. Port Forwarding + Dynamic DNS is retired; see `MANUAL_Setup_Installation.md` |
 | Backup & Recovery | Complete — Built-in Target Directory Mirror executing nightly automated `pg_dump` local backups; verified end-to-end producing a valid, restorable archive |
 | Security & Git | Complete — private git repo with pre-commit secret scanning; command injection, cookie-flag, and job-authorization bugs fixed; see Phase 9 |
 | Automated tests | Started — 36 Vitest tests on pure-logic modules; see Phase 10. Not comprehensive (no API route, component, or e2e tests yet) |

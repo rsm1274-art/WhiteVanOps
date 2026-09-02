@@ -235,11 +235,24 @@ async function main() {
       );
       console.log(`\nCreated a new superuser account '${username}'.`);
     } else {
+      // Clearing the lockout is not optional. Five failed attempts set
+      // failedLoginAttempts/lockedUntil for 15 minutes, and someone reaching
+      // for this script has almost always just tripped that. Resetting only
+      // the hash would report success and still bounce them at the login
+      // screen until the lock aged out.
       await client.query(
-        `UPDATE "User" SET "passwordHash" = $1, "mustChangePassword" = true, "updatedAt" = NOW() WHERE "username" = $2;`,
+        `UPDATE "User"
+            SET "passwordHash" = $1,
+                "mustChangePassword" = true,
+                "failedLoginAttempts" = 0,
+                "lockedUntil" = NULL,
+                "active" = true,
+                "updatedAt" = NOW()
+          WHERE "username" = $2;`,
         [hash, username]
       );
       console.log(`\nReset the password for '${username}' (role: ${rows[0].role}).`);
+      console.log("Cleared any failed-attempt lockout on the account.");
     }
 
     console.log("\n  ────────────────────────────────────────────");

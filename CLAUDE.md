@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Start every session by reading the most recent handoff
+
+Handoff notes live in the project root as `HANDOFF_YYYY-MM-DD-<topic>.md`. **Read the newest one
+before doing anything else** — `ls HANDOFF_*.md` and take the latest date. It carries what the
+last session shipped, what was deliberately left undone, which installers are stale, and the goal
+the owner wants picked up next. That intent is recorded nowhere else: not in the code, not in the
+git history, not in this file.
+
+Read the one before it as well when the newest says to — handoffs chain, and an older one's
+manual-verification checklist is often still open.
+
+When you finish a session's work, write the next handoff in the same format and commit it.
+
 ## Commands
 
 ```bash
@@ -14,7 +27,10 @@ npm run test:watch       # Vitest in watch mode
 
 # Electron desktop app
 npm run electron:dev     # Start Next.js dev + open Electron window (do this instead of npm run dev for UI work)
-npm run electron:build   # Build production NSIS installer → dist-electron/
+npm run electron:build            # Base installer      → dist-electron/WhiteVanOps-Base-Setup.exe
+npm run electron:build:plus       # Plus installer      → dist-electron/WhiteVanOps-Plus-Setup.exe (bundles cloudflared)
+npm run electron:build:trial      # Base 30-day trial   → dist-electron/WhiteVanOps-Base-Trial-Setup.exe
+npm run electron:build:trial:plus # Plus 30-day trial   → dist-electron/WhiteVanOps-Plus-Trial-Setup.exe
 
 # Database
 npx prisma migrate dev --name <name>   # Create and apply a migration (also runs prisma generate)
@@ -31,6 +47,13 @@ npx tsx prisma/bootstrap.ts            # Create/reset the initial admin superuse
 scripts/recovery/reset-admin-password.ps1 -List     # Show admin/superuser accounts, change nothing
 scripts/recovery/reset-admin-password.ps1           # Reset 'admin' to a random temp password
 scripts/recovery/reset-admin-password.ps1 -Create   # Recreate the account if it was deleted
+
+# Field-tech LAN access (Base): open the Windows Firewall on the office PC. Admin
+# PowerShell; Private profile only. Required post-install — the per-user NSIS
+# installer can't create firewall rules. See MANUAL_Setup_Installation.md §7 Step 3.
+scripts/recovery/allow-field-access.ps1             # Allow inbound TCP 3000
+scripts/recovery/allow-field-access.ps1 -Port 3001  # If the app scanned past a held 3000
+scripts/recovery/allow-field-access.ps1 -Remove     # Undo
 
 # Onboarding data import (migrating a customer's existing data — see MANUAL_Setup_Installation.md)
 npx tsx scripts/import/analyze.ts <data-dir>   # Propose <data-dir>/mapping.json from customer CSV/Excel files (--force to overwrite an existing one)
@@ -80,7 +103,16 @@ This is load-bearing: **one server answers both `http://localhost:3000` (the Ele
 
 **`clearSessionCookie` derives its attributes from `getSessionCookieOptions(req)`**, overriding only `maxAge: 0` — don't hand-roll the option object, so set and clear can't drift. Be accurate about why: a browser identifies a cookie by **(name, domain, path)** only. `secure`/`httpOnly`/`sameSite` are *not* part of that identity, so a clear that omits them still deletes the cookie — the pre-2026-07-20 `{ maxAge: 0, path: "/" }` clear worked. `path` is the attribute that actually has to match. (Verified empirically: `NextResponse.cookies.delete(name)` emits `Path=/; Expires=…1970`, so the `catch` branch in `src/middleware.ts` is fine as written.) The one genuinely scheme-dependent case is the reverse direction: a request over plain `http://` cannot overwrite a cookie that carries `Secure`.
 
-**Transport:** the plain-`http://` port-forward + Dynamic DNS field-access path is being replaced by an HTTPS tunnel (`docs/superpowers/specs/2026-07-20-cgnat-tunnel-connectivity-design.md`, Phases 1–4 not yet implemented) — port forwarding is impossible for a customer behind CGNAT. Until that lands, field access may still be plain HTTP, in which case credentials travel unencrypted over the public-internet leg; see `docs/launch-checklist.md` Phase 4 for the history. The cookie logic above is correct either way and needs no change when the tunnel ships.
+**Transport is per-plan** (2026-07-24, `docs/superpowers/specs/2026-07-24-wifi-sync-base-tier-design.md`).
+**Base** serves the field module over the office LAN only: techs load
+`http://<office-lan-ip>:3000/field`, the existing IndexedDB queue holds writes made away from the
+building, and they drain when the phone rejoins the office WiFi. Base requires a DHCP reservation or
+static IP for the office PC — the saved PWA URL is a bare address, so a router reboot that moves it
+breaks every tech at once. **Plus** adds the Cloudflare tunnel (still provisioned by runbook, not
+code) for access from anywhere. `src/lib/fieldAccessUrl.ts`'s `fieldUrlVerdict()` encodes which
+address shape is correct on which plan; a private-LAN plain-http URL is **correct** on both and must
+never raise the plaintext warning. The per-request cookie `secure` logic above is correct for both
+and needs no change.
 
 ### Login rate limiting is layered — no shared buckets
 
@@ -101,6 +133,8 @@ This is load-bearing: **one server answers both `http://localhost:3000` (the Ele
 The app is packaged as a Windows desktop application using Electron + electron-builder.
 
 - `electron/main.js` — Electron main process. In **dev** mode (`!app.isPackaged`), it does nothing with the server (Next.js dev is started by `electron-dev.js`) and reads the port from `ELECTRON_DEV_PORT`. In **production**, it first probes port 3000 with an identity check (`isWvoServer()` → `GET /api/health`, expecting `{ app: "whitevanops" }`): **only if a WhiteVanOps server is already answering there does it reuse it and NOT boot its own**, otherwise it `require()`s the Next.js standalone `server.js` inline (Electron's main process IS Node.js). If 3000 is held by a *foreign* app (2026-07-14: an Open WebUI Docker container published on 3000 got loaded into the app window by the old any-listener `isServerUp()` check), it scans for the next free port (`findFreePort`, up to 3099) and boots there instead. Then it waits for the server to respond on the chosen port and opens the window. `/api/health` (`src/app/api/health/route.ts`) is in the middleware `PUBLIC_PATHS` — it must answer 200 without a session or the probe can't distinguish our server from a foreign one; note an out-of-date PM2 deployment without that route will be treated as foreign (desktop app boots its own server on 3001) until the PM2 app is redeployed. The reuse check exists because the always-on PM2 field-tech service (`whitevanops`) already holds port 3000 on the office server — without it, the desktop app tried to bind a second server on the same port and stalled on startup. So on the office machine the desktop app is a thin window onto the PM2 server; on a machine with no PM2 server it self-boots as before. Packaged builds also call `app.setPath('userData', %APPDATA%\whitevanops\profile)` before ready so they never share the dev Chromium profile (`%APPDATA%\white-van-ops`) — shared-profile leakage (stale service workers/cookies from dev) caused the 2026-07-10 "not valid JSON" packaged-install bug.
+- **The self-booted server must bind `0.0.0.0`, never `localhost`** (fixed 2026-07-25). `main.js` sets `process.env.HOSTNAME` right before `require()`ing the standalone `server.js`, which passes it straight to `server.listen(port, hostname)`. It used to set `'localhost'`, and on Windows Node resolves that to `::1` first — so the packaged app bound **IPv6 loopback only** (`netstat` showed a lone `[::1]:3000`, no `0.0.0.0`, not even `127.0.0.1`). The dashboard worked perfectly because it dials itself, but every phone on the office WiFi got a dropped SYN and a white screen that never finished loading, whichever address the Field Access QR offered — i.e. it silently broke Base's entire transport (LAN field sync) while looking healthy on the office PC. The standalone server already defaults to `'0.0.0.0'` when `HOSTNAME` is unset, so the override was pure harm. Loopback callers are unaffected: Node's `autoSelectFamily` (default true since Node 20; Electron 42 ships Node 22) and Chromium both fall back to `127.0.0.1`, so `http://localhost:${PORT}` in `waitForServer`/`isWvoServer`/`loadURL` still connects — verified empirically. **Don't "tidy" this back to `localhost`.**
+- **Binding the LAN is necessary but not sufficient — Windows Firewall is the second gate.** It drops inbound TCP rather than refusing it, producing the identical never-finishes-loading symptom, and the NSIS installer is per-user so it cannot create the rule. `scripts/recovery/allow-field-access.ps1` (admin, Private profile only) is the documented post-install step; see `MANUAL_Setup_Installation.md` §7 Step 3. When diagnosing "techs can't reach the server", check the bind first (`netstat -ano | findstr :3000` — look for `0.0.0.0`, not `[::1]`), then the firewall, then AP/client isolation on the router.
 - `electron/postgres.js` — bundled-PostgreSQL lifecycle. The installer ships portable PostgreSQL 17.6 binaries from the project's `pgsql/` dir (gitignored, ~133 MB — see MANUAL_Setup_Installation.md §1 to recreate) plus `resources/db/schema.sql` (Prisma migrations concatenated by `electron-build.js`). On launch it: generates `resources/nextjs/.env.local` with unique random credentials if missing; skips entirely when the `DATABASE_URL` port already has a listener (office PM2 machine) or the host isn't localhost; **throws** (surfaced by `main.js` as a startup-error dialog) when the URL is localhost, the port is free, and the bundled binaries are missing — booting the web server anyway would just 500 every query ("Failed to load dashboard data", 2026-07-12); otherwise initdb's `%APPDATA%\whitevanops\pgdata` on first run, starts PG via `pg_ctl` (127.0.0.1 only), applies schema, and bootstraps admin/admin. A `bootstrap-complete` sentinel gates first-run; failures wipe pgdata and retry next launch. **Gotcha:** `pg_ctl start`/`stop` must run with `stdio: 'ignore'` — the postgres daemon inherits piped stdio and `execFileSync` hangs forever.
 - `electron/loading.html` — Frameless splash screen shown while the server starts (inline copy of the logo SVG).
 - `public/logo.svg` is the brand master; `node scripts/generate-icons.js` regenerates `public/logo.png`, PWA icons (`public/icons/`), `apple-touch-icon.png`, and `src/app/favicon.ico` (requires devDeps `sharp` + `png-to-ico`).
@@ -114,7 +148,7 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 - **`dependencies` in `package.json` is the Electron main process's dependency list — not the app's.** electron-builder copies production dependencies into `app.asar` regardless of the `files` globs, so anything left in `dependencies` is bundled a *second* time (the Next.js side already ships its own traced copy in `resources/nextjs/node_modules`). Only the five modules `electron/*.js` bare-requires stay in `dependencies`: **`bcryptjs`** (postgres.js), **`firebase`** (main.js), **`node-cron`** (backup.js), **`node-machine-id`** (main.js), **`pg`** (postgres.js). Everything else — `next`, `react`, `react-dom`, `@prisma/client`, `@prisma/adapter-pg`, `recharts`, `pdf-lib`, `lucide-react`, `jose`, `qrcode` — lives in `devDependencies` and still reaches the installer via Next.js file tracing, which reads the import graph and ignores the `dependencies`/`devDependencies` split. This cut `app.asar` from 477 MB (242 modules) to 123 MB (51) and the Base installer from 274 MB to 156 MB. **Adding a new `require()` to `electron/*.js` means moving that package into `dependencies`**, or the packaged app dies with `Cannot find module` on the customer's first launch — step 7c of `electron-build.js` parses the asar header and hard-fails the build if a keeper is missing. `firebase-admin` is a devDependency: it is used only by `scripts/license-manager.js` (vendor-side key minting), never at runtime. Consequence of the split: `npm ci --omit=dev` cannot run `next build`.
 - **Windows is the only build target.** Linux support (the `build.linux` tar.gz target, the `--linux` flag in `electron-build.js`, the `pgsql-linux/` binaries and the `Linux builds/` output dir) was removed on 2026-07-15 — it had never produced a shipped artifact and its `pgsql-linux/` binaries were already missing, so every `--linux` run hard-failed. Don't reintroduce a target without also extending the step 6/7b/7c assertions to cover it.
 - **Build output must stay out of the compile set.** `tsconfig.json` excludes `dist-electron` and `.next/standalone`. Its `include` is `**/*.ts`/`**/*.tsx`, so without those excludes the *copies* of `src/` that the file tracer leaves inside packaged output get type-checked alongside the real ones — a stale copy from an earlier build then fails `next build` with errors pointing at paths under `dist-electron/`, blocking every subsequent build until the directory is cleared. Exclude `.next/standalone`, not all of `.next`: `include` explicitly globs `.next/types/**/*.ts` and `.next/dev/types/**/*.ts`, and `exclude` overrides `include`, so excluding `.next` drops Next's generated route types from the program.
-- **Installer output:** `dist-electron/WhiteVanOps Setup x.x.x.exe` — NSIS, creates desktop shortcut + Start Menu entry automatically. Bundles portable PostgreSQL (see `electron/postgres.js` above) — fully self-contained on machines with no existing database.
+- **Installer output:** `dist-electron/WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe` (customer installers) and `WhiteVanOps-Base-Trial-Setup.exe` / `WhiteVanOps-Plus-Trial-Setup.exe` (30-day demo builds) — NSIS, creates desktop shortcut + Start Menu entry automatically. Bundles portable PostgreSQL (see `electron/postgres.js` above) — fully self-contained on machines with no existing database.
 - **Deploying to a new machine:** build the installer with the correct `.env.local` present so credentials are bundled, or have IT place `.env.local` at `<install dir>/resources/nextjs/.env.local` after installation.
 - **Distributing to multiple customers:** each customer needs their own unique `SESSION_SECRET` and database credentials — never reuse the same secret across customer installs. `electron-build.js` bundles `.env.local` into the `.exe`, so a shared secret would ship inside a file handed to more than one company, and there's no reason to share it since every customer runs an isolated server/database. Generate a fresh secret per customer (`node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`) and either rebuild the installer per customer or configure `.env.local` on-site after installing a generic build. See `MANUAL_Setup_Installation.md` §3.
 - **No Docker deploy path:** an earlier, half-finished Docker deployment scaffold (`docker-compose.yml`, `Dockerfile`, `deploy/`) predated real user auth and was removed — it assumed a hardcoded `APP_USERNAME`/`APP_PASSWORD` login the app hasn't used since auth became the `User` table + JWT session (see Auth helpers below). The Electron installer + native PostgreSQL path documented above is the only deploy path. Automated backups are handled by the built-in Settings → Database Backup & Recovery feature (`electron/backup.js`), not a standalone script.
@@ -125,7 +159,18 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 - `License` model in `prisma/schema.prisma` — singleton row with fixed id `"singleton"`, **upserted on read** by `src/lib/license.ts` (`getLicense()`), so every install path self-heals without a seed step. Fields: `tier` ("base"|"plus"), `licenseKey`, `notes`, `activatedAt`, `expiresAt` (null = perpetual).
 - `src/lib/license.ts` mirrors `auth.ts`'s shape: `hasPlusLicense()` (tier is plus **and** unexpired), `requirePlus(licensed)` returns a `403 NextResponse` or `null`. It is called explicitly alongside `requireRole` in every Plus route — deliberately not folded into `requireRole`, so `requirePlus` stays greppable as the complete list of Plus-gated routes.
-- **The tier travels inside the activation key — never in configuration.** `scripts/license-manager.js --tier base|plus` stamps `tier` onto the Firestore `licenses/<key>` record at mint time; `electron/main.js` reads it during activation and bakes it into the machine-bound, HMAC-signed `%APPDATA%\whitevanops\license.json`; `getBaseLicense()` returns it as the authoritative plan for an activated install. Because the tier is inside the signed payload, hand-editing it invalidates the signature and the file is rejected outright. **Consequence: Base and Plus are the SAME installer** (`WhiteVanOps-Setup.exe`) and the key decides — there is no `--plus` build target and `electron:build:plus` no longer exists.
+- **The tier travels inside the activation key — never in configuration.** `scripts/license-manager.js --tier base|plus` stamps `tier` onto the Firestore `licenses/<key>` record at mint time; `electron/main.js` reads it during activation and bakes it into the machine-bound, HMAC-signed `%APPDATA%\whitevanops\license.json`; `getBaseLicense()` returns it as the authoritative plan for an activated install. Because the tier is inside the signed payload, hand-editing it invalidates the signature and the file is rejected outright.
+- **Base and Plus are separate installers, but the key still decides entitlement** (changed
+  2026-07-24). The tier still travels only inside the signed activation key — no build flag grants
+  a feature. What differs between the artifacts is *payload*: `WhiteVanOps-Plus-Setup.exe` bundles
+  `cloudflared` via `extraResources`, `WhiteVanOps-Base-Setup.exe` does not. So a Base install
+  cannot open a tunnel for two independent reasons — no entitlement and no binary — and
+  `scripts/electron-build.js` asserts the binary's presence on Plus **and its absence on Base**.
+- **There is no in-place Plus upgrade.** `--upgrade`, `upgrade_installer.cs` and
+  `electron:build:upgrade` were removed 2026-07-24: a licence patch would unlock Plus features on
+  an install with no `cloudflared`. A Base customer moving to Plus buys Plus (25% off) and installs
+  the Plus artifact. `verifyPlusLicense` and the `plus_license.json` reader stay as **read-only
+  legacy** so an install already patched in the field keeps working.
 - **Do not reintroduce a tier env var.** `WVO_DEFAULT_TIER` was removed on 2026-07-15 because it granted Plus outright from a plain-text line in `resources/nextjs/.env.local`: changing `"base"` to `"plus"` in Notepad unlocked the paid tier, and the anti-tamper self-heal never fired because the env var satisfied the very check meant to catch tampering (it made `verifiedPlus` true). `src/lib/license.test.ts` carries a regression test — `"ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base"` — specifically to stop this coming back.
 - **Legacy `license.json` compatibility:** installs activated before the tiered format have no `tier` field and a signature over `key:machineId` only. `getBaseLicense()` accepts that shape via `signLegacyBaseLicense()` and reads it as tier "base" — all such installs ever were — so nobody is forced through re-activation. Remove once no legacy installs remain in the field.
 - **`electron/main.js` duplicates the signing functions in plain JS** (`signLicense`/`signLegacyLicense`) because it runs before the Next.js bundle loads and cannot import TypeScript. They must stay byte-identical to `signBaseLicense`/`signLegacyBaseLicense` in `src/lib/licenseCrypto.ts`, or activation writes a file the running app then rejects. `scripts/activate-dev.js` mirrors them a third time.
@@ -137,11 +182,19 @@ The app runs as one codebase in two plans, gated at runtime by a DB flag (not se
 
 ### Trial/Demo installer (separate mechanism from the License/Plus tier above)
 
-`npm run electron:build:trial` builds a fourth installer variant (`WhiteVanOps-Trial-Setup.exe`) for sales demos — pre-activated on Plus so a prospect can evaluate everything, but locked to 30 days from first launch regardless of `License.tier`. This is orthogonal to the Base/Plus gate: a normal customer install never has a trial lock at all.
+`npm run electron:build:trial` and `npm run electron:build:trial:plus` build the two trial installer variants (`WhiteVanOps-Base-Trial-Setup.exe`, `WhiteVanOps-Plus-Trial-Setup.exe`) for sales demos — locked to 30 days from first launch regardless of `License.tier`. This is orthogonal to the Base/Plus gate: a normal customer install never has a trial lock at all.
 
 - `src/lib/trial.ts` — `getTrialStatus()` reads/lazily-creates a signed, machine-bound anchor file (`%APPDATA%\whitevanops\trial.json`, HMAC'd with the same `LICENSE_SIGNING_SECRET`) and computes `isLocked`. No-op (zero file I/O) unless the build was stamped with `WVO_IS_TRIAL=true`. The shared HMAC signing/verification helpers (`LICENSE_SIGNING_SECRET`, `getAppDataWvoDir`, `signTrialUnlock`, `verifyTrialUnlock`, `timingSafeEqualStrings`) live in the leaf module `src/lib/licenseCrypto.ts` — imported by both `license.ts` and `trial.ts` to avoid a would-be import cycle.
 - Trial builds skip the native Electron base-activation window entirely (`electron/main.js`'s `isTrialBuild()` reads `WVO_IS_TRIAL="true"` from the bundled `.env.local` and bypasses `verifyLicenseSilent()`/`showActivationWindow()`) — a fresh trial install boots straight to password login, no `WVO-XXXX-XXXX-XXXX-XXXX` key or Firestore lookup required. Base/Plus customer builds are unaffected; they still require the native activation key.
-- After a day-30 unlock, the key's own tier — base or plus — determines which features run, not the trial's pre-activated-Plus default: `getLicense()` treats a signature- and machine-verified `trial-unlock.json` as the highest-precedence tier source (see `src/lib/license.ts`'s `getVerifiedTrialUnlock()`). A base-tier unlock key correctly drops Plus features; a plus-tier key keeps them.
+- After a day-30 unlock, the key's own tier — base or plus — determines which features run, not the trial build's stamped plan: `getLicense()` treats a signature- and machine-verified `trial-unlock.json` as the highest-precedence tier source (see `src/lib/license.ts`'s `getVerifiedTrialUnlock()`). A base-tier unlock key correctly drops Plus features; a plus-tier key keeps them.
+- **A trial build's plan comes from a signed stamp** (2026-07-24). `electron-build.js --trial --plan
+  base|plus` writes `WVO_TRIAL_PLAN` plus an HMAC `WVO_TRIAL_PLAN_SIG` into the bundled `.env.local`;
+  `verifyTrialPlan()` in `src/lib/licenseCrypto.ts` returns the tier and **fails closed to `base`**
+  for anything absent or edited. This is the one plan input that genuinely has to come from the build
+  (trial installs skip activation entirely), which is exactly why it is signed — an unsigned one
+  would be `WVO_DEFAULT_TIER` again. `src/lib/license.test.ts` carries the regression test
+  *"ignores an unsigned WVO_TRIAL_PLAN=plus and falls back to base"*. A Base trial demos WiFi sync
+  only and ships no `cloudflared`.
 - Enforcement mirrors the existing `mustChangePassword` forced-redirect pattern rather than adding filesystem/DB access to the edge-safe `src/middleware.ts`: `isLocked` is stamped into the session JWT at login (`src/app/api/auth/login/route.ts`) and the middleware redirects everywhere except `/trial-expired` + `/api/license` when the claim is set.
 - Conversion: `POST /api/license` with `{ action: "unlock-trial", licenseKey }` (superuser-only) verifies a signed payload against **this machine's real `machineIdSync()`** (never the payload's claimed value) and, if valid, writes `trial-unlock.json` (its presence permanently defeats the lock) and sets `License.tier` to whatever the key grants — `base` or `plus`, so a Base-only purchase correctly drops the Plus features being trialed. Keys are minted vendor-side via `node scripts/license-manager.js --unlock-trial --machine <id> --tier base|plus`.
 - Full design/build history: `docs/superpowers/specs/2026-07-13-trial-demo-installer-design.md` and `docs/superpowers/plans/2026-07-13-trial-demo-installer.md`. Customer-facing build/conversion steps: `MANUAL_Setup_Installation.md` §6.4.

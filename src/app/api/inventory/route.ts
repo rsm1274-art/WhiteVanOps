@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { normalizeAdjustments } from "@/lib/stockAdjust";
 
 // Thrown inside the transfer_stock transaction when the source location does
 // not hold enough units. Carries the available count so the caller can report
@@ -132,6 +133,52 @@ export async function POST(request: Request) {
       await audit(user!.userId, "UPDATE", "StockLevel", level.id, { inventoryItemId, stockLocationId, quantity: qty });
 
       return NextResponse.json(level);
+    }
+
+    // Bulk sibling of adjust_stock: one item, many locations, applied as a
+    // single transaction so a failure part-way cannot leave the item with a
+    // half-corrected count spread across the warehouse and the vans.
+    if (action === "adjust_stock_bulk") {
+      const { inventoryItemId, adjustments } = payload;
+
+      if (!inventoryItemId) {
+        return NextResponse.json({ error: "Missing inventoryItemId" }, { status: 400 });
+      }
+
+      const normalized = normalizeAdjustments(adjustments);
+      if (!normalized.ok) {
+        return NextResponse.json({ error: normalized.error }, { status: 400 });
+      }
+
+      const levels = await prisma.$transaction(
+        normalized.adjustments.map((adj) =>
+          prisma.stockLevel.upsert({
+            where: {
+              inventoryItemId_stockLocationId: {
+                inventoryItemId,
+                stockLocationId: adj.stockLocationId,
+              },
+            },
+            update: { quantity: adj.quantity, minThreshold: adj.minThreshold },
+            create: {
+              inventoryItemId,
+              stockLocationId: adj.stockLocationId,
+              quantity: adj.quantity,
+              minThreshold: adj.minThreshold,
+            },
+          })
+        )
+      );
+
+      for (const level of levels) {
+        await audit(user!.userId, "UPDATE", "StockLevel", level.id, {
+          inventoryItemId,
+          stockLocationId: level.stockLocationId,
+          quantity: level.quantity,
+        });
+      }
+
+      return NextResponse.json({ ok: true, updated: levels.length });
     }
 
     if (action === "transfer_stock") {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { signTrialUnlock, verifyTrialUnlock, timingSafeEqualStrings } from "./licenseCrypto";
+import { signTrialUnlock, verifyTrialUnlock, timingSafeEqualStrings, signTrialPlan, verifyTrialPlan } from "./licenseCrypto";
 
 describe("timingSafeEqualStrings", () => {
   it("returns true for identical strings", () => {
@@ -49,5 +49,38 @@ describe("signTrialUnlock / verifyTrialUnlock", () => {
   it("rejects a non-object payload", () => {
     expect(verifyTrialUnlock(null, "test-machine-id")).toBe(false);
     expect(verifyTrialUnlock("a string", "test-machine-id")).toBe(false);
+  });
+});
+
+describe("trial plan stamp", () => {
+  it("verifies a correctly signed base plan", () => {
+    expect(verifyTrialPlan("base", signTrialPlan("base"))).toBe("base");
+  });
+
+  it("verifies a correctly signed plus plan", () => {
+    expect(verifyTrialPlan("plus", signTrialPlan("plus"))).toBe("plus");
+  });
+
+  // The whole reason this is signed: a Base trial's bundled .env.local sits in
+  // plain text on the prospect's disk. Editing "base" to "plus" must buy them
+  // nothing, exactly as WVO_DEFAULT_TIER taught us.
+  it("falls back to base when the plan was edited but the signature was not", () => {
+    expect(verifyTrialPlan("plus", signTrialPlan("base"))).toBe("base");
+  });
+
+  it("falls back to base for a missing signature", () => {
+    expect(verifyTrialPlan("plus", undefined)).toBe("base");
+  });
+
+  it("falls back to base for a missing plan", () => {
+    expect(verifyTrialPlan(undefined, signTrialPlan("plus"))).toBe("base");
+  });
+
+  it("falls back to base for a garbage plan name", () => {
+    expect(verifyTrialPlan("enterprise", signTrialPlan("plus"))).toBe("base");
+  });
+
+  it("falls back to base for a signature of the wrong length", () => {
+    expect(verifyTrialPlan("plus", "deadbeef")).toBe("base");
   });
 });

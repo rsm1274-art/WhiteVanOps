@@ -51,7 +51,10 @@ The sidebar also shows:
 
 Click **Field Access QR** in the sidebar to open a modal showing a QR code for the field module URL. The URL field is editable and remembered per browser:
 
-- On the office server, replace the default with the Dynamic DNS address (e.g., `http://your-client.duckdns.org:3000/field`) — the modal warns if the URL is a localhost address that phones can't use.
+- **Use detected address** — click this button and the modal fills in the office server's actual LAN address for you (calls `GET /api/field-access/lan-address`), so nobody has to type or guess an IP.
+- A `192.168.x`, `10.x`, or `172.16–31.x` address (a private LAN address) is **correct on both Base and Plus** — the modal shows a green confirmation, not a warning, and generates the QR.
+- A **public** address (a real hostname or public IP, not a LAN address) on the **Base** plan gets a warning that remote access is a Plus feature — the QR still generates, in case the customer has their own working arrangement, but it's flagged so you don't assume it will work for a tech off the office WiFi. On **Plus**, the same shape is the expected tunnel address and shows no warning.
+- The QR is withheld only when the address is **localhost** — a phone cannot reach `localhost` on the office PC, so there is nothing useful to scan.
 - A tech scans the code with their phone camera, signs in with their tech account, then uses **Add to Home Screen** (iPhone: Share → Add to Home Screen; Android: menu → Install app) to install the field module as a full-screen app with its own icon.
 
 The top header shows the current module name, a yellow **Unsynced** badge when completed jobs or time entries are waiting to be exported to QuickBooks, and a **bell icon** for alerts.
@@ -292,9 +295,15 @@ For each item at each location:
 - **Qty** — current quantity on hand
 - **Min** — minimum threshold; items below this are flagged as low stock
 
-Click **Adjust Stock** on any item-location row to update the quantity or minimum threshold. Use this to record restocking, manual counts, or corrections.
+There are two ways to change these numbers.
 
-Click **Remove** (trash icon) to remove an item from a specific location without deleting it from the catalog.
+**Inventory Adjustment (recommended for stocktakes).** Click **Inventory Adjustment** at the top of the Inventory tab. Pick one item — use the *Find Item* box to narrow a long catalog — and the modal lists every location at once: the warehouse first, then each van. Type the counted quantity and, if you want, the minimum for each, then click **Save & Adjust Another**. The item is saved, a green confirmation names it and how many locations were updated, and the picker clears ready for the next item — so you can work straight down a stocktake sheet without leaving the modal. Click **Done** when you have finished; the inventory page refreshes at that point.
+
+Only the rows you actually change are written, so leaving a location untouched never overwrites its count. Every count must be a whole number of zero or more; if one is blank or invalid the modal flags that row in red and saves nothing at all, leaving your other entries in place to correct.
+
+**Adjust (single location).** Click **Adjust** on any item-location row in the *By Location* cards to change just that one quantity or minimum. Quicker when you are already looking at one van's stock list and only one number is wrong.
+
+Click **Remove** to remove an item from a specific location without deleting it from the catalog.
 
 ### Transferring Stock Between Locations
 

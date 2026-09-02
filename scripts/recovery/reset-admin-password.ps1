@@ -109,10 +109,19 @@ if ($Create) { $jsArgs += "--create" }
 # Electron's main process IS Node; ELECTRON_RUN_AS_NODE makes the packaged exe
 # behave as a bare Node interpreter. This is what lets a machine with no Node
 # installed run this at all.
+#
+# Start-Process -Wait, not the call operator. WhiteVanOps.exe is a Windows-
+# subsystem (GUI) binary, so `& $exe` does not block and never populates
+# $LASTEXITCODE: $code came back $null, `$null -ne 0` is true, and the script
+# printed "Password reset did not complete" on every run — including runs that
+# had in fact just reset the password. The child's output also raced the
+# parent's, so the account listing frequently never appeared at all.
+# -NoNewWindow keeps that output in this console; -PassThru gives a real exit code.
 $env:ELECTRON_RUN_AS_NODE = "1"
 try {
-    & $exe @jsArgs
-    $code = $LASTEXITCODE
+    $quoted = $jsArgs | ForEach-Object { '"' + $_ + '"' }
+    $proc = Start-Process -FilePath $exe -ArgumentList $quoted -NoNewWindow -Wait -PassThru
+    $code = $proc.ExitCode
 } finally {
     Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
 }

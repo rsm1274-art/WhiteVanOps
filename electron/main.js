@@ -130,7 +130,19 @@ async function startServer() {
   // Production: require the standalone server inline (Electron's main process IS Node.js).
   const serverPath = path.join(process.resourcesPath, 'nextjs', 'server.js');
   process.env.PORT = String(PORT);
-  process.env.HOSTNAME = 'localhost';
+  // Bind every interface, not `localhost`. The standalone server passes this
+  // straight to `server.listen(port, hostname)`, and on Windows Node resolves
+  // "localhost" to ::1 first — so the old value bound IPv6 loopback ONLY
+  // (`netstat` showed a lone `[::1]:3000`). The dashboard still worked because
+  // it dials itself; every phone on the office WiFi got a dropped SYN and a
+  // white screen that never finished loading, whichever address the Field
+  // Access QR offered. That breaks Base's entire transport — LAN field sync —
+  // so this must stay a wildcard bind. Loopback callers are unaffected: Node
+  // (autoSelectFamily, on by default since Node 20) and Chromium both fall back
+  // to 127.0.0.1, so `http://localhost:${PORT}` elsewhere in this file still
+  // connects. `0.0.0.0` is also what the standalone server defaults to when
+  // HOSTNAME is unset, so this restores Next's own intended behaviour.
+  process.env.HOSTNAME = '0.0.0.0';
   require(serverPath);
 
   startBackupScheduler(PORT, isDev, process.resourcesPath);

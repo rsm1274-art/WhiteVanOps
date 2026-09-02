@@ -9,8 +9,8 @@
 
 WhiteVanOps ships as two deployables:
 
-1. **Desktop installer** (`WhiteVanOps Setup x.x.x.exe`) — for office staff (admin, superuser). Bundles the full application server **and a portable PostgreSQL 17 server**; no browser, Node.js, or separate database install required. Creates a desktop shortcut and Start Menu entry.
-2. **Browser access** — for field technicians on phones/tablets, who connect to the same server via a URL (scan the **Field Access QR** code from the dashboard sidebar) and can install the field module as a home-screen app (PWA).
+1. **Desktop installer** (`WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe`, renamed 2026-07-24 from the earlier single `WhiteVanOps Setup x.x.x.exe`) — for office staff (admin, superuser). Bundles the full application server **and a portable PostgreSQL 17 server**; no browser, Node.js, or separate database install required. Creates a desktop shortcut and Start Menu entry.
+2. **Browser access** — for field technicians on phones/tablets, who connect to the same server via a URL (scan the **Field Access QR** code from the dashboard sidebar) and can install the field module as a home-screen app (PWA). **Base** reaches the office over the office WiFi only; **Plus** adds a secure tunnel for access from anywhere (§7).
 
 Both surfaces share one PostgreSQL database.
 
@@ -60,6 +60,15 @@ The build bundles portable PostgreSQL binaries from the project's `pgsql/` direc
 3. Delete the unneeded subfolders: `pgsql/pgAdmin 4`, `pgsql/StackBuilder`, `pgsql/doc`, `pgsql/include`, `pgsql/lib/pgxs`.
 
 `npm run electron:build` **fails** if `pgsql/bin/pg_ctl.exe` is missing, and after packaging it re-verifies that `dist-electron/win-unpacked/resources/pgsql/bin/pg_ctl.exe` and `resources/nextjs/node_modules/next` exist. This guard exists because electron-builder silently skips missing `extraResources` sources — a `pgsql`-less build machine used to produce an installer with no database engine at all, which fails on first launch with "Failed to load dashboard data" on any machine without its own PostgreSQL. If a packaged app is ever started without bundled binaries (and nothing already listening on the database port), it now shows a "Database engine missing" startup error instead of opening a broken window.
+
+### `cloudflared` binary for the build (`cloudflared/` directory)
+
+Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:build:trial:plus`) — Base builds don't need it and must not have it. Gitignored, not committed to git, exactly like `pgsql/`. To (re)create it:
+
+1. Download `cloudflared.exe` (Windows amd64) from the official releases: `https://github.com/cloudflare/cloudflared/releases/latest`.
+2. Place it at `cloudflared/cloudflared.exe` in the project root.
+
+A Plus build **fails** before packaging if `cloudflared/cloudflared.exe` is missing, mirroring the `pgsql/bin/pg_ctl.exe` check. After packaging, step 7b also asserts the reverse: `win-unpacked/resources/cloudflared/cloudflared.exe` must **not** exist in a Base artifact — a Base install that quietly shipped the tunnel binary would erase the product boundary being sold.
 
 ---
 
@@ -131,120 +140,101 @@ This creates a superuser with username **admin** and password **admin**, flagged
 
 ### License tier (Base vs Plus)
 
-Every install starts on the **Base** plan — the `License` table's singleton row is created automatically on first use, with `tier = "base"`. Plus tables exist but stay empty.
+Every install starts on its purchased plan — the `License` table's singleton row is created automatically on first use, with `tier` matching the activation key. Plus tables exist on both plans but stay empty until licensed.
 
-To upgrade an installation from Base to Plus:
-1. **Retrieve the active Base License Key:** Log in as a superuser, open **Settings → License & Plan**, and locate the active License Key (copied directly from the client's screen).
-2. **Generate the Plus Upgrade License:** On the vendor machine, run the license manager script to mint a cryptographically signed Plus upgrade payload for that specific key:
-   ```bash
-   node scripts/license-manager.js --plus --key <licenseKey> [--expires YYYY-MM-DD] [--notes "Upgrade Notes"]
-   ```
-   This generates a signed JSON license block bound to their active license key.
-3. **Apply the Upgrade:** 
-   * **In-App Upload:** Copy the generated JSON block from the console and paste it into the textarea in **Settings → License & Plan**, or save it as a `.json` file and drag and drop it into the upload zone. Click **Apply Plus Upgrade**.
-   * **Plus Upgrade Installer (Alternative):** Run a custom patch/installer containing the signed `plus_license.json` file. The file is placed at `%APPDATA%\whitevanops\plus_license.json`.
-   On the next refresh, the Plus features (CRM notes, Invoicing, Analytics) will unlock.
-4. **Validation & Anti-Tampering:** The app verifies the signature of `plus_license.json` offline at startup and compares it to the active `license.json` key. If the database is manually tampered with (e.g. manually set to `"plus"` without a valid file), the app automatically self-heals/downgrades back to `"base"`.
-5. **Downgrade:** To downgrade, click **Downgrade to Base Plan** under **Settings → License & Plan**. This resets the database tier and deletes the local `plus_license.json` file.
+**There is no in-place Plus upgrade** (changed 2026-07-24 — the `--upgrade` patch installer, `upgrade_installer.cs`, and the `electron:build:upgrade` script are gone). Base and Plus are separate installers with different bundled payloads (Plus ships `cloudflared`, Base does not), so a licence-only patch can no longer grant a feature the binary isn't there to support. **Moving a customer from Base to Plus means purchasing Plus (25% off for an existing Base customer) and installing `WhiteVanOps-Plus-Setup.exe`.** The database in `%APPDATA%\whitevanops\` is untouched by installing a different WhiteVanOps installer over an existing one — reinstalling only replaces the application, never the customer's data.
+
+**Legacy patched installs keep working.** `verifyPlusLicense()` and the `plus_license.json` reader in `src/lib/license.ts` are kept as read-only legacy — an install that was patched to Plus before 2026-07-24 continues to read as Plus. No new `plus_license.json` files are minted going forward.
+
+**Downgrade:** click **Downgrade to Base Plan** under **Settings → License & Plan**. This resets the database tier; it does not remove `cloudflared` from a Plus install, since the binary's presence is a build-time property, not a runtime one.
 
 ---
 
 ## 6. Build the Desktop Installers
 
-We support four installer build paths depending on the customer's package:
+Four installer variants, one per plan × trial-or-not (changed 2026-07-24 — Base and Plus are separate artifacts now, not one installer decided by the key alone):
 
-### 1. Setup Installer (serves BOTH Base and Plus)
-Builds the customer installer. There is only one — **the activation key decides the tier**, so the same `.exe` becomes a Base or a Plus install depending on which key you mint for that customer.
 ```bash
-npm run electron:build
+npm run electron:build            # Base installer      → dist-electron/WhiteVanOps-Base-Setup.exe
+npm run electron:build:plus       # Plus installer      → dist-electron/WhiteVanOps-Plus-Setup.exe (bundles cloudflared)
+npm run electron:build:trial      # Base 30-day trial   → dist-electron/WhiteVanOps-Base-Trial-Setup.exe
+npm run electron:build:trial:plus # Plus 30-day trial   → dist-electron/WhiteVanOps-Plus-Trial-Setup.exe
 ```
-* **Output:** `dist-electron/WhiteVanOps-Setup.exe`
-* **Set the tier when you mint the key, not when you build:**
-  ```bash
-  node scripts/license-manager.js --tier base     # Base customer
-  node scripts/license-manager.js --tier plus     # Plus customer
-  ```
-  The tier is stamped onto the key's Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC.
-* **Changed 2026-07-15 — `npm run electron:build:plus` and `WhiteVanOps-Plus-Setup.exe` no longer exist.** Plus used to be pre-activated by stamping `WVO_DEFAULT_TIER="plus"` into the bundled `.env.local`. That put the paid tier in a plain text file on the customer's disk, where changing one word in Notepad unlocked it. Running the build with `--plus` now fails with an explanatory error rather than producing an installer whose name promises a tier it cannot grant. Do not add a tier env var back.
 
-### 3. Plus Upgrade Installer (Patch Utility)
-Generates a lightweight, native Windows executable that installs the signed `plus_license.json` payload directly into the target machine's AppData directory (`%APPDATA%\whitevanops\`).
+**The activation key still decides entitlement — the build only decides payload.** No build flag grants a feature; `node scripts/license-manager.js --tier base|plus` is still how keys are minted, unchanged:
 ```bash
-npm run electron:build:upgrade -- --key <licenseKey> [--expires YYYY-MM-DD] [--notes "Upgrade Notes"]
+node scripts/license-manager.js --tier base     # Base customer
+node scripts/license-manager.js --tier plus     # Plus customer
 ```
-* **Output:** `dist-electron/WhiteVanOps-Plus-Upgrade.exe`
-* **Note:** The double hyphens (`--`) are required to forward the CLI arguments through npm to the underlying build script.
+The tier is stamped onto the key's Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC. What differs between `electron:build` and `electron:build:plus` is that the Plus artifact also bundles `cloudflared/cloudflared.exe` via `extraResources` (see §1) — a Base install cannot open a tunnel for two independent reasons, no entitlement and no binary. `scripts/electron-build.js` step 7b asserts the binary's presence in Plus artifacts **and its absence in Base artifacts**.
 
-### 4. Trial/Demo Installer (Sales Demos)
-Builds a time-limited demo installer for prospect evaluations. Runs on **Plus** tier so the prospect can try every feature, then fully locks the app 30 days after first launch until an activation key is entered.
-```bash
-npm run electron:build:trial
-```
-* **Output:** `dist-electron/WhiteVanOps-Trial-Setup.exe`
-* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs on Plus for 30 days from that first launch. (This differs from a standard Base/Plus customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
-* **What the prospect sees:** during the trial, **Settings → License & Plan** shows the Plus plan with license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
-* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen. A key generated for either `--tier base` or `--tier plus` (see below) unlocks the app running at that tier — a base key drops Plus features, a plus key keeps them.
+### Trial/Demo Installers (Sales Demos)
+
+`electron:build:trial` and `electron:build:trial:plus` build time-limited demo installers for prospect evaluations, locked to 30 days after first launch regardless of `License.tier`.
+
+* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs on its stamped plan for 30 days. (This differs from a standard Base/Plus customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
+* **Plan comes from a signed build-time stamp, not the installer name alone.** `electron-build.js --trial --plan base|plus` writes `WVO_TRIAL_PLAN` plus an HMAC `WVO_TRIAL_PLAN_SIG` into the bundled `.env.local`; the app fails closed to Base if that stamp is missing or edited. A Base trial demos WiFi sync only and ships no `cloudflared`; a Plus trial demos the tunnel too.
+* **What the prospect sees:** during the trial, **Settings → License & Plan** shows the stamped plan with license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
+* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen. A key generated for either `--tier base` or `--tier plus` unlocks the app running at that tier — a base key drops Plus features, a plus key keeps them.
 * **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
   ```bash
   node scripts/license-manager.js --unlock-trial --machine <theirMachineId> --tier base|plus [--notes "Order #1234"]
   ```
-  Use `--tier base` if they purchased Base only (this also correctly drops the Plus features they were trialing), or `--tier plus` if they purchased Base+Plus. Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control.
+  Use `--tier base` if they purchased Base only (this also correctly drops the Plus features they were trialing), or `--tier plus` if they purchased Base+Plus. Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control. If the trial was a Base trial and the customer instead wants Plus, they need the Plus artifact — the unlock key does not add the `cloudflared` binary to an already-installed Base trial.
 
 ---
 
-### What the build commands do (Full installers):
-1. Compile the Next.js production build
-2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only — **no tier is stamped**; the tier comes from the activation key)
-3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
-4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single NSIS installer
-5. Output and rename the resulting executable in `dist-electron/`
+### What the build commands do
 
-Distribute the generated setup `.exe` to office staff. The installers upgrade any existing installation in-place.
+1. Compile the Next.js production build
+2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"`, `WVO_TRIAL_PLAN`, and `WVO_TRIAL_PLAN_SIG` for trial builds only — the trial plan is signed; a normal customer build's tier still comes only from the activation key)
+3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
+4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), `cloudflared/` (Plus variants only), and Electron shell into a single NSIS installer
+5. Output the resulting executable, named per the table above, in `dist-electron/`
+
+Distribute the generated setup `.exe` matching the customer's plan to office staff. The installers upgrade any existing installation of the **same plan** in-place; moving plans means installing the other plan's artifact (see §5).
 
 ---
 
 ## 7. Field Tech Browser Access
 
-Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets. The Next.js server runs locally in the customer's office — there is no cloud relay or third-party tunneling service in the middle. To reach it from outside the office WiFi (cellular data, a job site, home), you configure the office router to forward traffic in from the internet, plus a free service that gives the router's changing public IP address a fixed hostname.
+Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets. Transport is per-plan (2026-07-24): **Base** reaches the office over the office WiFi only; **Plus** adds a Cloudflare tunnel for access from anywhere. A Base install has no way to open a tunnel — it ships without the `cloudflared` binary and the activation key doesn't license it.
 
-**Before you start, understand the tradeoff:** this path uses plain `http://`, not `https://`. That means login credentials and session cookies travel unencrypted once traffic leaves the office LAN. This is a deliberate choice — it avoids per-seat subscription costs (e.g. Tailscale) and keeps setup to "router + free DDNS service," no ongoing account to manage. If a customer specifically needs encrypted transport, that requires an additional reverse-proxy step not covered in this section — ask your agent to help set one up (e.g. Caddy with automatic Let's Encrypt certificates) before committing to this path for that customer.
+### Base: office WiFi only
 
-**Do this first: check for CGNAT.** Some ISPs (common on cable/mobile-carrier home internet, rare on business plans) put customers behind Carrier-Grade NAT, where you don't actually get your own public IP — port forwarding is then *impossible*, no router setting can fix it. Test before doing anything else:
-1. On a computer on the office network, visit a site like `whatismyip.com` and note the IP address it shows.
-2. Log into the router's admin page (see step 2 below) and find the "WAN IP," "Internet IP," or "Status" page — note the IP address shown there.
-3. **If these two IPs match**, you're not behind CGNAT — proceed. **If they don't match** (the router shows something like `100.64.x.x`–`100.127.x.x`, or any address different from what whatismyip.com reports), this ISP is using CGNAT. Call the ISP and ask for a "static IP" or "public IP" add-on (often available on business-tier plans for a small monthly fee) — port forwarding will not work until that's resolved. Do not proceed with the steps below until this is confirmed working.
+The Next.js server runs locally in the customer's office; nothing about field access on Base ever leaves the building. There is no port forwarding, no DDNS, and no public-internet exposure to configure or worry about — the traffic never reaches the internet at all.
 
-**Step 1 — Reserve a fixed local IP for the office PC.** If the office PC's local IP changes (routers hand these out dynamically by default), the port-forwarding rule silently stops working. Reserve one so it never changes:
+**Step 1 — Set a DHCP reservation or static IP for the office PC. This is required, not advisory.** The field module's URL is a bare LAN address (e.g. `http://192.168.1.20:3000/field`), and every tech's phone saves it as a home-screen app. If the router hands the office PC a different address after a reboot, every tech's saved URL breaks silently, at once — a symptom that reads to a customer as "the app just stopped working."
 1. Log into the router's admin page — usually `http://192.168.1.1` or `http://192.168.0.1` in a browser (check a label on the router itself, or run `ipconfig` on the office PC and use the "Default Gateway" address).
 2. Find the section usually called **DHCP Reservation**, **Address Reservation**, or **Static Lease List** (varies by brand — look under "LAN" or "DHCP" settings).
 3. Find the office PC in the list of connected devices (by its name or MAC address — get the MAC address by running `ipconfig /all` on the PC and reading "Physical Address" for the active network adapter) and reserve its current IP address for that MAC address.
 4. Reboot the office PC and confirm (`ipconfig`) it comes back with the same IP.
 
-**Step 2 — Forward port 3000 to the office PC.**
-1. In the same router admin page, find **Port Forwarding**, **Virtual Server**, or **NAT Forwarding** (all names for the same feature, varies by brand).
-2. Add a rule: external/public port `3000` → internal/private IP = the office PC's reserved IP from Step 1 → internal port `3000` → protocol **TCP**.
-3. Save and apply — some routers require a reboot for this to take effect.
+**Step 2 — Find the office PC's LAN address and generate the QR.**
+1. In the dashboard sidebar, click **Field Access QR**.
+2. Click **Use detected address** — this calls `GET /api/field-access/lan-address` and fills in the office PC's actual LAN IP, so nobody has to type it (and can't typo it). A private address (`192.168.x`, `10.x`, `172.16–31.x`) is the correct, expected shape on Base and shows a green confirmation, not a warning.
+3. The modal generates a QR code for that address's `/field` path.
 
-**Step 3 — Allow the app through Windows Firewall.**
-1. On the office PC, open **Windows Defender Firewall with Advanced Security**.
-2. Create a new **Inbound Rule** → Rule type: **Port** → **TCP**, specific local port `3000` → **Allow the connection** → apply to all profiles (Domain, Private, Public) → name it something like "WhiteVanOps".
-3. (If Windows already showed an "Allow this app through firewall" prompt on first launch and you clicked Allow, this may already be covered — the explicit rule above is a more reliable belt-and-suspenders step that doesn't depend on remembering to click the right button on a popup.)
+**Step 3 — Allow the app through Windows Firewall. This is required, not advisory.** Windows blocks inbound connections by default, and it blocks them by *dropping* the packet rather than refusing it — so a tech's phone shows a white screen that never finishes loading instead of an error message. Meanwhile the dashboard on the office PC keeps working perfectly (it only ever talks to itself), which makes a closed port look like a broken app. The installer runs per-user and cannot create firewall rules, so this step is manual.
 
-**Step 4 — Set up free Dynamic DNS (DDNS) so the router's changing public IP has a fixed hostname.**
-1. Create a free account at [duckdns.org](https://www.duckdns.org) and add a subdomain (e.g. `your-client-name.duckdns.org`) — it will show you the office's current public IP.
-2. Most consumer routers don't support DuckDNS natively (they support other providers like No-IP or DynDNS by name only). The reliable option: install DuckDNS's official Windows updater on the office PC as a **Scheduled Task** that runs every 5 minutes and pings DuckDNS's update URL with your token — this keeps the hostname pointed at the current IP even if the office's public IP changes. Follow the "Windows" install instructions on the DuckDNS install page for your subdomain (it generates a ready-to-use PowerShell script and gives exact Task Scheduler steps).
-3. Confirm it's working: wait a few minutes, then check that `your-client-name.duckdns.org` (via `nslookup your-client-name.duckdns.org` or any "DNS lookup" website) resolves to the same IP you found in the CGNAT check above.
+1. On the office PC, open PowerShell **as Administrator** (right-click → Run as administrator).
+2. Run the helper script:
+   ```powershell
+   .\scripts\recovery\allow-field-access.ps1
+   ```
+   Add `-Port 3001` (etc.) if the app is not on 3000 — it scans upward when 3000 is already held. To undo, run it with `-Remove`.
+3. **Confirm the office WiFi is classified "Private", not "Public".** The rule is deliberately scoped to Private profiles so the app is never exposed on, say, a hotel network. The script warns you if any active network is Public; if the office WiFi is one of them, fix it under Settings → Network & Internet → WiFi → *(your network)* → Network profile type → **Private**.
 
-**Step 5 — Verify end-to-end, from outside the office network.** This is the step people get wrong most often: testing from a phone still connected to the office WiFi does **not** prove port forwarding works, because that traffic never leaves the LAN. To test for real:
-1. On a phone, **turn off WiFi** and switch to cellular data (or use a different network entirely, like a coffee shop).
-2. Visit `http://your-client-name.duckdns.org:3000/field` in the phone's browser.
-3. You should see the White Van Ops login screen. If it times out, see the Troubleshooting table (§11) — the most common causes are: CGNAT (Step 0 above), the port-forward rule pointing at a stale IP because Step 1 wasn't done, or Windows Firewall blocking the inbound connection.
+To do it by hand instead: Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port → TCP → 3000 → Allow → Private only. Don't rely on the one-time "Allow this app through the firewall" popup — it's easy to dismiss, and dismissing it creates a *block* rule that then has to be found and deleted.
 
-**Step 6 — Hand out access to field techs.**
-1. In the dashboard sidebar, click **Field Access QR** and enter the DDNS address (e.g. `http://your-client-name.duckdns.org:3000/field`).
-2. Hand out the URL and let each tech scan the QR code with their phone camera.
-3. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
-4. **Offline support:** the PWA uses an offline-first architecture via IndexedDB. If a technician loses signal, they can continue logging time, viewing job details, and saving materials — their changes queue locally and automatically flush back to the office server once the connection is restored.
+**Step 4 — Hand out access to field techs.**
+1. Have each tech, **while connected to the office WiFi**, scan the QR code with their phone camera and sign in.
+2. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
+3. **Offline support:** the PWA uses an offline-first architecture via IndexedDB. If a technician leaves the building or loses signal, they can continue logging time, viewing job details, and saving materials — their changes queue locally, the status strip shows how many entries are waiting, and everything flushes back to the office server automatically once the phone rejoins the office WiFi. Closing the app does not lose queued work. See `MANUAL_Field_Tech.md` for what the status strip tells a tech, and `MANUAL_Troubleshooting.md` if work isn't reaching the office.
+
+### Plus: the secure tunnel
+
+Plus installs bundle `cloudflared` and can open a Cloudflare tunnel so techs reach the field module from anywhere — cellular data, a job site, home — over `https://`, not the office WiFi. This is still provisioned by a manual runbook, not an in-app wizard: see `docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md` for the setup steps. Once the tunnel is up, generate the Field Access QR the same way as Base (§ above) but pointed at the tunnel's `https://` hostname — the modal recognizes a public host as the correct shape when the install is licensed for Plus and generates the QR without a warning. Offline queueing and **Add to Home Screen** work identically to Base.
 
 ---
 
@@ -295,10 +285,9 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | "Invalid credentials" on login | bootstrap not run, or wrong credentials | Run `npx tsx prisma/bootstrap.ts` on the build machine against the target database |
 | "Account temporarily locked" on login | 5 consecutive failed attempts trip a 15-minute lockout on that account (brute-force protection) | Wait out the 15-minute window, or confirm the correct password/username. There is no manual unlock — it always clears on its own. |
 | "Too many login attempts" (HTTP 429) | More than 20 login attempts from the same IP within 5 minutes | This is a rate limit, not an account lockout — it resets automatically a few minutes after attempts stop. If several techs share one NAT/VPN egress IP, this can trigger from combined traffic; space out retries. |
-| Field techs can't reach the server | Firewall, wrong IP, or AP/client isolation on the WiFi network | Check Windows Firewall allows port 3000; confirm techs are using the server machine's IP, not `localhost`. If the phone times out despite a correct IP and open firewall, the WiFi network may isolate devices from each other (common on managed/corporate networks) — use Dynamic DNS and Port Forwarding instead of relying on LAN routing. |
-| Field tech field page loads but login doesn't work / bounces back to login screen | `Secure` session cookie requires HTTPS; plain `http://<lan-ip>:3000` can't set it | Use your Dynamic DNS address (e.g. `http://your-client.duckdns.org:3000/field`) — see §7. |
-| Port forwarding + DDNS set up correctly, but still times out from cellular data | ISP is using Carrier-Grade NAT (CGNAT) — the office doesn't actually have its own public IP, so no router setting can fix this | Run the CGNAT check in §7 (compare `whatismyip.com` to the router's WAN IP page). If they differ, call the ISP and ask for a static/public IP add-on — this is an ISP-side change, not something fixable from the router or the app. |
-| DDNS hostname resolves to the wrong IP, or stopped updating | The DDNS updater (Task Scheduler job on the office PC) isn't running, or the office's public IP changed and hasn't been pushed yet | Check Task Scheduler on the office PC for the DuckDNS update task's last run time/result. Manually re-run it, then re-check with `nslookup your-client.duckdns.org`. |
+| Field techs can't reach the server (Base) | Firewall, wrong LAN IP, phone not on office WiFi, or AP/client isolation on the WiFi network | Check Windows Firewall allows port 3000; confirm techs are using **Field Access QR → Use detected address**, not a typed/stale IP; confirm the phone is on the office WiFi. If the WiFi network isolates devices from each other (common on managed/corporate networks), Base field access cannot work around that — remote access requires Plus (§7). See also `MANUAL_Troubleshooting.md`, "A tech's work isn't reaching the office (Base)". |
+| A tech's saved home-screen URL stopped working, for every tech at once (Base) | The router rebooted and handed the office PC a different LAN IP | Set a DHCP reservation or static IP for the office PC (§7, Step 1) if this wasn't already done, then re-issue the QR from **Use detected address** and have techs re-scan. |
+| Field techs on Plus can't reach the tunnel hostname | Tunnel not running, or `cloudflared` misconfigured | See the tunnel runbook (`docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md`) — this is a manual-provisioning concern, not an in-app setting. |
 | Database connection refused | Port mismatch | Verify PostgreSQL is on port 5433 (or update DATABASE_URL to match your actual port) |
 | App unreachable from any device (laptop or phone) after a reboot | PM2's login-triggered startup means nothing restarts until someone logs into the server machine | Log into `MearHPLaptop`. PM2 should auto-resurrect both processes. If not, run `pm2 resurrect` manually, then `pm2 list` to confirm `whitevanops` and `whitevanops-db` both show `online`. |
 | Prisma errors with `code: 'ECONNREFUSED'` in PM2 logs (`pm2 logs whitevanops`) | The `whitevanops-db` PM2 process (the real Postgres instance) isn't running — do not assume it's the app itself that's broken | Run `pm2 list`. If `whitevanops-db` is missing or stopped, start it: `pm2 start "C:\Program Files\PostgreSQL\9.5\bin\postgres.exe" --name whitevanops-db -- -D "C:\Users\rober\Desktop\WhiteVanOps\pg_data" -p 5433` then `pm2 save`. Do **not** start either of the unrelated Windows PostgreSQL services (`postgresql-x64-9.5` on port 5432 is a separate legacy install) to "fix" this — they use different data directories and will not have the app's tables. |
@@ -343,7 +332,7 @@ Choose the option that fits your situation:
   2. Copy this file to your USB drive.
 
 ### Step 3: Install on the New Machine
-1. Run the `WhiteVanOps Setup x.x.x.exe` installer on the new machine.
+1. Run the `WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe` installer (whichever matches the customer's plan) on the new machine.
 2. **IMPORTANT:** Do NOT launch the application yet. If it launches automatically, completely quit the application before proceeding.
 
 ### Step 4: Restore Key and Data

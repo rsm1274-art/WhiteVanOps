@@ -96,7 +96,9 @@ Add `--expires 2027-07-15` if you ever sell Plus as an annual subscription. Leav
 
 ### Step 5 — Get them the installer
 
-`dist-electron/WhiteVanOps-Setup.exe`, roughly 156 MB. **There's only one installer** — the same file serves Base and Plus, because the key you minted in Step 3 determines the tier. (`WhiteVanOps-Trial-Setup.exe` is the separate 30-day demo.) Options, in order of preference:
+**Superseded 2026-07-24:** Base and Plus are now separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; trials `WhiteVanOps-{Base,Plus}-Trial-Setup.exe`); the in-place Plus upgrade is gone — see `MANUAL_Setup_Installation.md` §6. The paragraph below describes the earlier single-installer model and is kept for historical context only.
+
+`dist-electron/WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe`, roughly 156 MB. Bring the installer matching the tier the customer purchased — the key you minted in Step 3 must match. (`WhiteVanOps-{Base,Plus}-Trial-Setup.exe` are the separate 30-day demos.) Options, in order of preference:
 
 - **Bring it on a USB drive** to the white glove appointment. Simplest, fastest, no upload, no "it says the file is corrupted."
 - **A download link** (Dropbox / Google Drive / your own site) if you're doing this remotely.
@@ -124,7 +126,9 @@ Give them: their admin password, the manuals, the license key on paper (for thei
 
 ## Part 4: The Demo Path (Worth Knowing, Because It Changes the Sale)
 
-You have a fourth installer: `WhiteVanOps-Trial-Setup.exe`. It's a 30-day, fully-loaded-with-Plus demo. Its important property for sales purposes is that **it needs no key at all** — a prospect can install it themselves and it boots straight to the login screen. No activation window, no phone call to you.
+**Superseded 2026-07-24:** trial installers are now split by tier — `WhiteVanOps-Base-Trial-Setup.exe` and `WhiteVanOps-Plus-Trial-Setup.exe` — see `MANUAL_Setup_Installation.md` §6.
+
+You have trial installers too, e.g. `WhiteVanOps-Plus-Trial-Setup.exe` for a 30-day, fully-loaded-with-Plus demo. Its important property for sales purposes is that **it needs no key at all** — a prospect can install it themselves and it boots straight to the login screen. No activation window, no phone call to you.
 
 That makes it your ideal "let me leave this with you" artifact. When they're ready to buy, the conversion is:
 
@@ -219,7 +223,9 @@ It worked because `getLicense()` treated the env var as proof of tier, which mad
 
 The rule this establishes, and the one to hold onto: **configuration never grants Plus — only a signature does.** Every branch in `getLicense()` that can set `verifiedPlus` is now gated on a machine-bound HMAC over the payload it's claiming.
 
-**Consequence worth knowing: Base and Plus are now the same installer.** `WhiteVanOps-Setup.exe` serves both, and the key decides. `npm run electron:build:plus` and `WhiteVanOps-Plus-Setup.exe` no longer exist — which also restores what the architecture always claimed to be ("gated at runtime by a DB flag, not separate builds"). One less artifact to build, name, and accidentally hand to the wrong customer.
+**Superseded 2026-07-24:** Base and Plus are now separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; trials `WhiteVanOps-{Base,Plus}-Trial-Setup.exe`); the in-place Plus upgrade is gone — see `MANUAL_Setup_Installation.md` §6. The paragraph below describes the earlier single-installer model and is kept for historical context only.
+
+**Consequence worth knowing at the time: Base and Plus were the same installer.** `WhiteVanOps-Setup.exe` served both, and the key decided. `npm run electron:build:plus` and a separate `WhiteVanOps-Plus-Setup.exe` didn't exist — which also restored what the architecture always claimed to be ("gated at runtime by a DB flag, not separate builds"). One less artifact to build, name, and accidentally hand to the wrong customer.
 
 A regression test (`"ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base"`) exists specifically to stop this returning.
 
@@ -269,9 +275,9 @@ node scripts/license-manager.js --plus --key WVO-XXXX-XXXX-XXXX-XXXX --expires 2
 node scripts/license-manager.js --unlock-trial --machine <machineId> --tier base
 node scripts/license-manager.js --unlock-trial --machine <machineId> --tier plus
 
-# Build installers
-npm run electron:build          # WhiteVanOps-Setup.exe — serves Base AND Plus
-npm run electron:build:trial    # WhiteVanOps-Trial-Setup.exe — 30-day demo
+# Build installers (superseded 2026-07-24 — see MANUAL_Setup_Installation.md §6 for the current Base/Plus-split commands)
+npm run electron:build          # WhiteVanOps-Setup.exe — serves Base AND Plus (historical, pre-split)
+npm run electron:build:trial    # WhiteVanOps-Trial-Setup.exe — 30-day demo (historical, pre-split)
 
 # Emergency: reset a locked-out admin password on a customer's PC
 # (copy both files from scripts/recovery/; the app must be running)

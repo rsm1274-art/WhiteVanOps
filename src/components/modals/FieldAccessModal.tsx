@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Smartphone } from "lucide-react";
 import Modal, { ModalHeader, Field, inputCls } from "../shared/Modal";
-import { classifyFieldUrl } from "@/lib/fieldAccessUrl";
+import { fieldUrlVerdict } from "@/lib/fieldAccessUrl";
 
 interface Props {
   onClose: () => void;
+  /** Plus licences the HTTPS tunnel. Base serves the field module over the office LAN only. */
+  isPlusLicensed: boolean;
 }
 
 const SETTING_KEY = "field_access_url";
@@ -20,11 +22,14 @@ const SETTING_KEY = "field_access_url";
  * `window.location.origin`, which on the Electron desktop app is always
  * `http://localhost:3000` and produces a QR code that only "works" on the
  * machine running the dashboard, never on a phone (ERR_CONNECTION_FAILED).
- * Field access is served over an HTTPS tunnel, so the working shape is
- * `https://<customer-host>/field` with no port. QR generation is refused
- * while the URL is localhost so a broken code is never handed to a tech.
+ *
+ * The correct address depends on the plan. Base syncs over the office LAN, so
+ * `http://<office-lan-ip>:3000/field` is right and must NOT be warned about as
+ * insecure — it never leaves the building. Plus adds an HTTPS tunnel hostname.
+ * QR generation is refused only while the URL is localhost, so a broken code is
+ * never handed to a tech.
  */
-export default function FieldAccessModal({ onClose }: Props) {
+export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
   // The modal only mounts in the browser (opened by a click), so window and
   // localStorage are safe to read in the initializer. This is just the
   // first-paint guess — the server value (fetched below) is authoritative.
@@ -32,6 +37,7 @@ export default function FieldAccessModal({ onClose }: Props) {
     () => localStorage.getItem("wvo.fieldAccessUrl") ?? `${window.location.origin}/field`
   );
   const [qr, setQr] = useState<string | null>(null);
+  const [detected, setDetected] = useState<string[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -43,6 +49,17 @@ export default function FieldAccessModal({ onClose }: Props) {
           setUrl(setting.value);
           localStorage.setItem("wvo.fieldAccessUrl", setting.value);
         }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/field-access/lan-address")
+      .then((res) => res.json())
+      .then((data: { addresses?: string[] }) => {
+        if (!cancelled && Array.isArray(data?.addresses)) setDetected(data.addresses);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -63,7 +80,8 @@ export default function FieldAccessModal({ onClose }: Props) {
     }, 500);
   }
 
-  const { isLocalhost, isPlainHttp } = classifyFieldUrl(url);
+  const verdict = fieldUrlVerdict(url, isPlusLicensed);
+  const isLocalhost = verdict === "localhost";
 
   useEffect(() => {
     // Render guards on `!isLocalhost` too, so no need to clear `qr` here —
@@ -95,26 +113,58 @@ export default function FieldAccessModal({ onClose }: Props) {
           value={url}
           onChange={(e) => handleUrlChange(e.target.value)}
           className={inputCls}
-          placeholder="https://acme.whitevanops.com/field"
+          placeholder={isPlusLicensed ? "https://acme.whitevanops.com/field" : "http://192.168.1.20:3000/field"}
         />
       </Field>
 
-      {isLocalhost && (
+      {detected.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+          <span>Use detected address:</span>
+          {detected.map((addr) => (
+            <button
+              key={addr}
+              type="button"
+              onClick={() => {
+                const port = window.location.port || "3000";
+                handleUrlChange(`http://${addr}:${port}/field`);
+              }}
+              className="font-mono px-2 py-1 rounded border border-zinc-300 hover:bg-zinc-100"
+            >
+              {addr}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {verdict === "localhost" && (
         <p className="text-[11px] text-red-600 leading-relaxed font-medium">
           This is a localhost address — a phone scanning it will get
-          &quot;localhost is unreachable,&quot; not the field module. Enter
-          the tunnel address instead (e.g.{" "}
-          <span className="font-mono">https://acme.whitevanops.com/field</span>
-          ) — the QR code below is disabled until this is fixed.
+          &quot;localhost is unreachable,&quot; not the field module. Use this
+          machine&apos;s office-network address instead
+          {isPlusLicensed ? ", or your tunnel address" : ""} — the QR code below
+          is disabled until this is fixed.
         </p>
       )}
-      {isPlainHttp && (
+      {verdict === "ok-lan" && (
+        <p className="text-[11px] text-emerald-700 leading-relaxed">
+          Office-network address. Techs sync while on your WiFi; work done away
+          from the building is held on the phone and saved when they return.
+        </p>
+      )}
+      {verdict === "remote-needs-plus" && (
         <p className="text-[11px] text-amber-600 leading-relaxed">
-          This is a plain <span className="font-mono">http://</span> address —
-          credentials would travel unencrypted over the public internet. Field
-          access is served over an HTTPS tunnel; use the{" "}
-          <span className="font-mono">https://</span> address so logins are
-          encrypted and the session cookie is accepted.
+          This is not an office-network address. Remote field access is a Plus
+          feature — on this plan a phone can only reach the field module on your
+          office WiFi, so this address will not connect. Use the detected
+          address above.
+        </p>
+      )}
+      {verdict === "public-plain-http" && (
+        <p className="text-[11px] text-amber-600 leading-relaxed">
+          This is a public <span className="font-mono">http://</span> address —
+          credentials would travel unencrypted over the internet. Use the{" "}
+          <span className="font-mono">https://</span> tunnel address so logins
+          are encrypted and the session cookie is accepted.
         </p>
       )}
 

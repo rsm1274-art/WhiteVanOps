@@ -4,8 +4,17 @@ import { ENTITY_META, type EntityName, type Mapping, type FileMapping } from "@/
 
 export function DataImportSection({
   onShowToast,
+  onImported,
 }: {
   onShowToast: (text: string, isError?: boolean) => void;
+  /**
+   * Called after a committed import. The dashboard fetches /api/dashboard once
+   * on mount and tab switches are pure client state, so without this the newly
+   * imported rows sit in the database while Clients/Fleet/Inventory keep
+   * rendering the snapshot taken when the app started — the import looks like
+   * it silently did nothing.
+   */
+  onImported?: () => void;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
@@ -19,6 +28,11 @@ export function DataImportSection({
   const [clearDatabase, setClearDatabase] = useState(false);
   const [skipRejected, setSkipRejected] = useState(false);
   const [importResult, setImportResult] = useState<any | null>(null);
+  const [confirmingExecute, setConfirmingExecute] = useState(false);
+  // Shown in the panel below rather than only through onShowToast: that toast
+  // renders at the top of the page, off-screen from the import controls at the
+  // bottom of a long Settings tab, so a failure here reads as "nothing happened".
+  const [executeError, setExecuteError] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -177,7 +191,8 @@ export function DataImportSection({
 
   const handleExecute = async () => {
     if (!proposedMapping) return;
-    if (!confirm("Are you sure you want to commit these imported records to the database?")) return;
+    setConfirmingExecute(false);
+    setExecuteError(null);
 
     setLoading(true);
     try {
@@ -196,10 +211,16 @@ export function DataImportSection({
 
       setImportResult(data);
       onShowToast("Data successfully imported!");
-      // Reset config
+      // Reset the mapping form. The result panel deliberately lives outside the
+      // `proposedMapping &&` block below, or clearing this would unmount the
+      // confirmation the user needs to see.
       setProposedMapping(null);
+      setValidationResult(null);
       setFiles([]);
+      // Refresh the dashboard so the imported rows actually appear in the tabs.
+      onImported?.();
     } catch (err: any) {
+      setExecuteError(err.message || "Failed to execute import");
       onShowToast(err.message, true);
     } finally {
       setLoading(false);
@@ -451,7 +472,7 @@ export function DataImportSection({
                   Dry Run (Validate)
                 </button>
                 <button
-                  onClick={handleExecute}
+                  onClick={() => setConfirmingExecute(true)}
                   disabled={loading || (validationResult && !validationResult.ok)}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
                 >
@@ -460,6 +481,32 @@ export function DataImportSection({
                 </button>
               </div>
             </div>
+
+            {/* Commit confirmation — an in-app banner, not window.confirm(): a native
+                dialog that returns false (a stray click, a webview quirk, focus loss)
+                leaves the user with zero feedback and looks like the button did nothing. */}
+            {confirmingExecute && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded flex items-center justify-between gap-4">
+                <span className="text-sm text-amber-800 font-semibold">
+                  Commit these imported records to the database? This cannot be undone.
+                </span>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => setConfirmingExecute(false)}
+                    className="px-3 py-1.5 border border-zinc-300 hover:bg-zinc-100 text-zinc-700 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleExecute}
+                    disabled={loading}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
+                  >
+                    Yes, Commit
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Validation Dry-Run Result summary */}
             {validationResult && (
@@ -508,26 +555,43 @@ export function DataImportSection({
               </div>
             )}
 
-            {/* Execute Import Result */}
-            {importResult && importResult.ok && (
-              <div className="p-5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded space-y-4">
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                  Import Execution Succeeded!
-                </div>
-                <div className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-wider">Successfully Created Records:</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {Object.entries(importResult.created).map(([entity, count]: any) => (
-                      <div key={entity} className="bg-white p-2.5 rounded border border-emerald-200 text-xs flex flex-col text-emerald-900">
-                        <span className="font-bold">{entity}</span>
-                        <span className="font-bold text-lg mt-1">{count}</span>
-                      </div>
-                    ))}
+          </div>
+        )}
+
+        {/* Execute outcome — deliberately outside the `proposedMapping` block
+            above. A successful commit clears the mapping, so anything rendered
+            inside that block unmounts at the exact moment it has something to
+            say, which made a working import look like a no-op. */}
+        {executeError && (
+          <div role="alert" className="p-5 bg-red-50 border border-red-200 text-red-800 rounded space-y-1">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Import Failed — Nothing Was Written
+            </div>
+            <p className="text-xs">{executeError}</p>
+          </div>
+        )}
+
+        {importResult && importResult.ok && (
+          <div role="status" className="p-5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded space-y-4">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Import Execution Succeeded!
+            </div>
+            <div className="space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider">Successfully Created Records:</span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {Object.entries(importResult.created).map(([entity, count]: any) => (
+                  <div key={entity} className="bg-white p-2.5 rounded border border-emerald-200 text-xs flex flex-col text-emerald-900">
+                    <span className="font-bold">{entity}</span>
+                    <span className="font-bold text-lg mt-1">{count}</span>
                   </div>
-                </div>
+                ))}
               </div>
-            )}
+            </div>
+            <p className="text-xs text-emerald-700">
+              The imported records are now live — the other tabs have been refreshed.
+            </p>
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, ArrowLeftRight } from "lucide-react";
+import { Plus, ArrowLeftRight, ClipboardList } from "lucide-react";
 import { DashboardData, StockLevel } from "@/types";
 import { AdjustStockContext } from "@/types";
 
@@ -16,13 +16,14 @@ interface Props {
   onAddItem: () => void;
   onAddWarehouse: () => void;
   onTransferStock: () => void;
+  onBulkAdjust: () => void;
   onAdjustStock: (context: AdjustStockContext) => void;
   onRemoveStock: (context: RemoveStockContext) => void;
   onDeleteItem: (itemId: string, itemName: string) => void;
   onDeleteLocation: (locationId: string, locationName: string) => void;
 }
 
-export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransferStock, onAdjustStock, onRemoveStock, onDeleteItem, onDeleteLocation }: Props) {
+export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransferStock, onBulkAdjust, onAdjustStock, onRemoveStock, onDeleteItem, onDeleteLocation }: Props) {
   const { inventoryItems, stockLocations } = data;
 
   // Build lookup: itemId -> locationId -> StockLevel
@@ -47,6 +48,13 @@ export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransf
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={onBulkAdjust}
+            className="inline-flex items-center gap-1.5 px-4 py-2 border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-xs font-bold uppercase tracking-wider rounded transition-colors"
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Inventory Adjustment
+          </button>
           <button
             onClick={onTransferStock}
             className="inline-flex items-center gap-1.5 px-4 py-2 border border-zinc-300 text-zinc-700 hover:bg-zinc-100 text-xs font-bold uppercase tracking-wider rounded transition-colors"
@@ -120,8 +128,23 @@ export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransf
                         const level = locMap?.get(loc.id);
                         if (!level) {
                           return (
-                            <td key={loc.id} className="px-3 py-2.5 text-center text-zinc-300 font-mono">
-                              —
+                            <td key={loc.id} className="px-3 py-2.5 text-center">
+                              <button
+                                onClick={() =>
+                                  onAdjustStock({
+                                    itemId: item.id,
+                                    locationId: loc.id,
+                                    itemName: item.name,
+                                    locationName: loc.name,
+                                    currentQty: 0,
+                                    currentMin: 0,
+                                  })
+                                }
+                                title={`Stock ${item.name} at ${loc.name}`}
+                                className="text-zinc-300 hover:text-blue-700 font-mono transition-colors"
+                              >
+                                —
+                              </button>
                             </td>
                           );
                         }

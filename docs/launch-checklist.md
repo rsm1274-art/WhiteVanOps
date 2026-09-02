@@ -85,6 +85,15 @@ This app has two faces — pick one path for each.
 
   **You'll know it worked when:** the app opens to the login screen and a desktop shortcut exists.
 
+> **Update, 2026-07-24 — this splits by plan now.** The port-forward + DDNS entries below (and
+> Phase 5's "remote field access") described the one-size transport this project shipped with,
+> framed at the time as temporary pending a tunnel. That framing was wrong for **Base**: LAN HTTP
+> is the permanent design there, not a stopgap, and it carries **no public-internet exposure** —
+> the traffic never leaves the building, so there's nothing to forward or resolve. The tunnel
+> item (and everything in this history about DDNS/CGNAT) now applies to **Plus** only. See
+> `docs/superpowers/specs/2026-07-24-wifi-sync-base-tier-design.md` and
+> `MANUAL_Setup_Installation.md` §7.
+
 **Field tech access (recommended path — dedicated server process):**
 
 - [x] ✅ **Standalone server running via pm2.** `pm2 list` shows `whitevanops` as `online`, 0 restarts. Registered to survive reboot via `pm2-windows-startup` (Windows doesn't support `pm2 startup` directly — that's Linux-only).

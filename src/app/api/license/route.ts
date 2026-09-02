@@ -118,6 +118,8 @@ export async function POST(request: Request) {
     }
 
     const appDataDir = getAppDataWvoDir();
+    // Legacy read-only path (2026-07-24): the Plus Upgrade Installer is gone.
+    // Kept so an install already patched in the field keeps working.
     const plusPath = path.join(appDataDir, "plus_license.json");
 
     if (tier === "plus") {
@@ -193,6 +195,8 @@ export async function POST(request: Request) {
         try {
           fs.unlinkSync(plusPath);
         } catch (e) {
+          // Legacy read-only path (2026-07-24): the Plus Upgrade Installer is gone.
+          // Kept so an install already patched in the field keeps working.
           console.error("Failed to delete local plus_license.json:", e);
         }
       }
