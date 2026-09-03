@@ -27,6 +27,10 @@
   | WhiteVanOps-Plus-Trial-Setup.exe | 2026-09-02 00:50 UTC |
 
 - Manuals are current — no follow-up edits needed.
+- Staged a full testing kit at `C:\Users\rober\OneDrive\Desktop\WhiteVanOps\Testing`
+  (2026-09-02) for use on other machines: all four installers, their `.buildinfo.txt`
+  files, `BUILD-MANIFEST.txt`, the three manuals, and the Cloudflare tunnel runbook
+  (`docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md`).
 
 ## Not yet done / open items
 
