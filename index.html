@@ -108,7 +108,35 @@
   .hero h1 .accent { color:var(--blue); }
   .hero p.lead { font-size:1.05rem; color:var(--zinc-600); max-width:34rem; margin-bottom:2rem; }
   .hero p.lead b { color:var(--ink); }
-  .hero-ctas { display:flex; gap:.9rem; flex-wrap:wrap; margin-bottom:2.2rem; }
+  .hero-ctas { display:flex; gap:.9rem; flex-wrap:wrap; margin-bottom:1rem; }
+
+  /* trial badge above the headline — the loudest promise on the page */
+  .trial-badge {
+    display:inline-flex; align-items:center; gap:.55rem;
+    background:#ecfdf5; border:1px solid #6ee7b7; border-radius:2px;
+    padding:.5rem .9rem; margin-bottom:1.4rem;
+    font-size:.74rem; font-weight:700; letter-spacing:.06em; color:#065f46;
+  }
+  .trial-badge .td {
+    width:8px; height:8px; border-radius:50%; background:var(--emerald); flex-shrink:0;
+    box-shadow:0 0 0 0 rgba(5,150,105,.55); animation:tpulse 2.2s infinite;
+  }
+  @keyframes tpulse {
+    0%   { box-shadow:0 0 0 0 rgba(5,150,105,.55); }
+    70%  { box-shadow:0 0 0 9px rgba(5,150,105,0); }
+    100% { box-shadow:0 0 0 0 rgba(5,150,105,0); }
+  }
+  @media (prefers-reduced-motion:reduce){ .trial-badge .td { animation:none; } }
+
+  .btn-trial { background:var(--emerald); color:#fff; }
+  .btn-trial:hover { background:#047857; }
+
+  .trial-line {
+    font-size:.82rem; color:var(--zinc-600); line-height:1.55;
+    border-left:3px solid var(--emerald); padding-left:.85rem;
+    max-width:32rem; margin-bottom:2.2rem;
+  }
+  .trial-line b { color:var(--ink); }
   .hero-stats { display:flex; gap:2.4rem; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:1.4rem; }
   .stat .v { font-family:var(--mono); font-size:1.5rem; font-weight:500; color:var(--ink); }
   .stat .l { font-size:.62rem; letter-spacing:.2em; text-transform:uppercase; color:var(--zinc-500); font-weight:700; }
@@ -315,6 +343,15 @@
     color:var(--ink); font-family:inherit; font-size:.9rem; width:100%;
   }
   .cform input:focus, .cform textarea:focus, .cform select:focus { outline:none; border-color:var(--blue); box-shadow:0 0 0 1px var(--blue); }
+  .cbox { border:1px solid var(--line); border-radius:2px; background:#fff; }
+  .crow { display:flex; justify-content:space-between; gap:1rem; padding:.75rem 1rem; border-bottom:1px solid var(--line); }
+  .crow:last-child { border-bottom:none; }
+  .cl { font-family:var(--mono); font-size:.64rem; letter-spacing:.16em; text-transform:uppercase; color:var(--zinc-500); }
+  .cv { font-size:.85rem; font-weight:600; color:var(--ink); text-decoration:none; text-align:right; }
+  a.cv { color:var(--blue); }
+  a.cv:hover { text-decoration:underline; }
+  .form-fine { font-size:.72rem; color:var(--zinc-500); margin-top:.7rem; line-height:1.5; }
+  .form-ok a { color:var(--emerald); }
   .form-ok { display:none; background:#ecfdf5; border:1px solid #a7f3d0; color:var(--emerald); border-radius:2px; padding:1rem; font-size:.8rem; }
 
   footer { padding:44px 0; background:var(--zinc-900); color:var(--zinc-400); }
@@ -339,6 +376,46 @@
     font-family:var(--mono); font-size:.42rem; color:var(--blue-400);
     border:1px solid var(--blue-400); border-radius:2px; padding:0 3px; margin-left:4px;
   }
+  /* ---------- Who built it ---------- */
+  .bb-grid { display:grid; grid-template-columns:1.05fr .95fr; gap:3.5rem; align-items:start; }
+  @media (max-width:880px){ .bb-grid { grid-template-columns:1fr; gap:2.2rem; } }
+  .bb-story p { color:var(--zinc-600); margin-bottom:1rem; max-width:34rem; }
+  .bb-story p b { color:var(--ink); }
+  .bb-rule { display:flex; gap:1rem; padding:1.1rem 0; border-top:1px solid var(--line); }
+  .bb-rule:last-child { border-bottom:1px solid var(--line); }
+  .bb-n { font-family:var(--mono); font-size:.7rem; color:var(--blue); font-weight:500; padding-top:.15rem; }
+  .bb-rule b { display:block; font-size:.92rem; margin-bottom:.25rem; }
+  .bb-rule span:not(.bb-n) { display:block; font-size:.83rem; color:var(--zinc-600); line-height:1.55; }
+  .bb-sign {
+    margin-top:2.6rem; padding-left:1rem; border-left:3px solid var(--blue);
+    font-size:.95rem; font-weight:600; color:var(--ink); max-width:40rem;
+  }
+  .bb-sign span {
+    display:block; margin-top:.4rem; font-family:var(--mono); font-size:.68rem;
+    letter-spacing:.1em; font-weight:400; color:var(--zinc-500);
+  }
+
+  /* ---------- FAQ ---------- */
+  .faq-grid { max-width:52rem; }
+  .faq { border-top:1px solid var(--line); }
+  .faq:last-child { border-bottom:1px solid var(--line); }
+  .faq summary {
+    cursor:pointer; list-style:none; padding:1.1rem 1.6rem 1.1rem 0; position:relative;
+    font-weight:600; font-size:.92rem; color:var(--ink);
+  }
+  .faq summary::-webkit-details-marker { display:none; }
+  .faq summary::after {
+    content:''; position:absolute; right:2px; top:50%; width:11px; height:11px;
+    transform:translateY(-50%);
+    background:
+      linear-gradient(var(--blue),var(--blue)) center/11px 1px no-repeat,
+      linear-gradient(var(--blue),var(--blue)) center/1px 11px no-repeat;
+    transition:transform .18s;
+  }
+  .faq[open] summary::after { transform:translateY(-50%) rotate(45deg); }
+  .faq summary:hover { color:var(--blue); }
+  .faq p { padding:0 1.6rem 1.3rem 0; font-size:.86rem; color:var(--zinc-600); }
+
   .tier-note {
     margin-top:1.6rem; padding:1rem 1.2rem; background:var(--zinc-100); border:1px solid var(--line);
     border-left:3px solid var(--blue); border-radius:2px; font-size:.85rem; color:var(--zinc-700);
@@ -373,7 +450,8 @@
       <a href="#features">Features</a>
       <a href="#demo">Live Demo</a>
       <a href="#pricing">Pricing</a>
-      <a href="#contact" class="btn btn-blue">Book a Demo</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact" class="btn btn-trial">Free 30-Day Trial</a>
     </div>
   </div>
 </nav>
@@ -383,6 +461,7 @@
   <div class="container hero-grid">
     <div>
       <span class="kicker"><span class="no">Field Operations Management</span></span>
+      <div class="trial-badge"><span class="td"></span>Free 30-day trial — the complete app, on your own PC</div>
       <h1>Run your fleet.<br/>Own your data.<br/><span class="accent">No cloud required.</span></h1>
       <p class="lead">
         Scheduling, fleet &amp; service, inventory, time tracking and QuickBooks-compatible exports —
@@ -390,9 +469,10 @@
         Your operations data lives on <b>your</b> machine, not someone else's server.
       </p>
       <div class="hero-ctas">
-        <a href="#demo" class="btn btn-primary">Try the Demo</a>
-        <a href="#ownership" class="btn btn-ghost">Why Self-Hosted?</a>
+        <a href="#contact" class="btn btn-trial">Start the Free 30-Day Trial</a>
+        <a href="#demo" class="btn btn-ghost">Try the Demo</a>
       </div>
+      <p class="trial-line"><b>No card. No account. No sales call required.</b> Install it, run your real jobs through it for a month, and buy only if it earns its place.</p>
       <div class="hero-stats">
         <div class="stat"><div class="v" data-count="1">0</div><div class="l">Installer, DB included</div></div>
         <div class="stat"><div class="v" data-count="0">0</div><div class="l">Monthly cloud fees</div></div>
@@ -556,7 +636,7 @@
           <li>WiFi sync — techs' phones offload work on your office network</li>
           <li>Scheduling, fleet, inventory &amp; time</li>
           <li>QuickBooks CSV export</li>
-          <li>1 year of updates</li>
+          <li>Yours to keep forever — updates included for the first year</li>
         </ul>
         <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
       </div>
@@ -601,6 +681,85 @@
     </div>
     <div class="tier-note reveal">
       <b>Two plans, bought once:</b> Base runs entirely on your own network — techs' phones sync over your office WiFi and nothing leaves the building. Plus adds CRM notes &amp; follow-ups, business analytics, invoicing, and a secure encrypted tunnel so techs can work from anywhere. Both are one-time purchases, licensed to you for life with no subscription and nothing to renew. Already on Base? Move to Plus for 25% off — contact us. However you buy, your data always belongs to you.
+      <br/><br/>
+      <b>Try before you buy.</b> Ask for the free 30-day trial and run the complete application on your own PC — no card and no account required. If you'd rather buy outright without trialling first and it isn't right for you, tell us within 14 days and we'll refund you.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<!-- ===================== WHO BUILT IT ===================== -->
+<section id="builders">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 06</span> Who built this</span>
+    <h2>Built by the crew, not by a software company</h2>
+    <div class="bb-grid">
+      <div class="bb-story reveal">
+        <p>We are a working service team. Our people have run <b>HVAC</b> calls, <b>plumbing</b> jobs and <b>CCTV pipeline inspection</b> work — scheduling the vans, chasing the parts, and doing the paperwork at the end of a long day.</p>
+        <p>We built White Van Ops because the tools we were sold kept failing us in the same three ways. Prices climbed every renewal. Our own job history sat on somebody else's server. And a product we depended on could change, or disappear, without asking us.</p>
+        <p>So we wrote the system we wanted to use ourselves, and we held it to three rules.</p>
+      </div>
+      <div class="bb-rules reveal">
+        <div class="bb-rule">
+          <span class="bb-n">01</span>
+          <div><b>Stable</b><span>It runs on your own machine, on a database trusted by banks and hospitals. No outage anywhere else can stop your day.</span></div>
+        </div>
+        <div class="bb-rule">
+          <span class="bb-n">02</span>
+          <div><b>Secure</b><span>Your job history, client list and pricing stay in your building. Every install gets its own credentials, generated on your machine.</span></div>
+        </div>
+        <div class="bb-rule">
+          <span class="bb-n">03</span>
+          <div><b>Affordable over time</b><span>One price, once. No per-seat fees, no annual increase, and no bill that grows just because you did.</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="bb-sign">We still use it. That is the only reason to trust any of the above.<br/><span>— Quality Pipeline Inspectors LLC · Millington, Tennessee</span></p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="container">
+    <span class="kicker"><span class="no">Sec. 07</span> Straight answers</span>
+    <h2>The questions people actually ask</h2>
+    <p class="muted" style="max-width:44rem;margin-bottom:2.4rem">Buying software you host yourself raises fair questions. Here are the honest answers, including the ones that aren't flattering.</p>
+    <div class="faq-grid">
+      <details class="faq reveal">
+        <summary>What happens if my office PC dies?</summary>
+        <p>The app runs an automatic full backup every night to a mirror directory you choose — an external drive, a NAS, or a mapped network folder. You reinstall on a new PC and restore that backup. Keep the mirror on a different physical device than the app, and set it up on day one.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>What if you go out of business?</summary>
+        <p>Nothing stops working. The software is already installed on your machine and does not phone home to run — the licence is checked once at activation, offline afterwards. Your data sits in a standard PostgreSQL 17 database that any database professional can read, and every screen has a CSV export. There is no server of ours to switch off.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>Is there a Mac or Linux version?</summary>
+        <p>No. Windows only, today. The installer is built and tested for Windows 10 and 11. Your technicians' phones can be iPhone or Android — the field module runs in the phone's browser and installs to the home screen, so the office PC is the only Windows requirement.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>Plus mentions a "secure tunnel" — isn't that the cloud you said you avoid?</summary>
+        <p>Fair challenge, so here is the exact truth. Base uses no outside service at all: technicians' phones reach the office PC over your own WiFi and nothing leaves the building. Plus adds an encrypted tunnel so crews can work from anywhere. That tunnel carries traffic through a third party in encrypted form; it is a pipe, not a database. Your jobs, clients and pricing are still stored only on your PC. If you want zero outside involvement, choose Base.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>Do my technicians need a signal to work?</summary>
+        <p>No. The field module stores jobs on the phone and queues time entries and status changes while offline. When the phone is back in range — on Base, that means back on the office WiFi — the queue uploads by itself. Nobody has to remember to press sync.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>Do I need an IT person to install it?</summary>
+        <p>No, for the base install: it is one .exe, and the database installs and configures itself. Two things do need a few minutes of network work, and we document both — reserving a fixed address for the office PC on your router, and opening one Windows Firewall port so the phones can reach it. If you would rather not touch either, the $500 White Glove Installation covers it remotely while you watch.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>What do I actually pay, and when?</summary>
+        <p>Once. $1,000 for Base or $1,750 for Plus, and the licence is yours for life — there is no subscription and nothing renews. Base includes updates for the first year; the software keeps running whether or not you take updates after that. Installation and priority support are optional one-time add-ons, never required.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>How many users and vehicles can I add?</summary>
+        <p>As many as you want. There is no per-seat and no per-vehicle charge on either plan, so hiring a technician or buying a van never changes your bill. The practical ceiling is a single office location; multiple offices need a conversation.</p>
+      </details>
+      <details class="faq reveal">
+        <summary>Can I get my data out later?</summary>
+        <p>Yes, and at no cost. CSV export is built into the product for invoices, time and records, and the underlying PostgreSQL database can be dumped whole with standard tools. There is no export fee and no proprietary file format.</p>
+      </details>
     </div>
   </div>
 </section>
@@ -608,11 +767,18 @@
 <!-- ===================== CONTACT ===================== -->
 <section class="contact" id="contact">
   <div class="container">
-    <span class="kicker"><span class="no">Sec. 06</span> Talk to a human</span>
+    <span class="kicker"><span class="no">Sec. 08</span> Talk to a human</span>
     <h2>See it running on your own machine</h2>
     <div class="contact-grid">
       <div class="cinfo reveal">
-        <p class="muted" style="margin-bottom:1.8rem">We'll do a 20-minute screen share, install it on a spare PC while you watch, and leave the demo data with you. Because it's your computer.</p>
+        <p class="muted" style="margin-bottom:1.6rem">Ask for the free 30-day trial and we'll send you the installer. Prefer a walkthrough first? We'll do a 20-minute screen share, install it on a spare PC while you watch, and leave the demo data with you. Because it's your computer.</p>
+        <div class="cbox">
+          <div class="crow"><span class="cl">Email</span><a class="cv" href="mailto:info@qpi-inspect.com">info@qpi-inspect.com</a></div>
+          <div class="crow"><span class="cl">Company</span><span class="cv">Quality Pipeline Inspectors LLC</span></div>
+          <div class="crow"><span class="cl">Based in</span><span class="cv">Millington, Tennessee</span></div>
+          <div class="crow"><span class="cl">Reply time</span><span class="cv">Within 1 business day</span></div>
+        </div>
+        <p class="muted" style="font-size:.8rem;margin-top:1.1rem">Email is the fastest way to reach us — a real person reads every message. No call centre, no chatbot, no ticket number.</p>
       </div>
       <form class="cform reveal" id="contact-form">
         <div><label for="cf-name">Name</label><input id="cf-name" type="text" placeholder="Jane Contractor" required /></div>
@@ -621,8 +787,9 @@
           <select id="cf-fleet"><option>1–3 vans</option><option>4–10 vans</option><option>11–25 vans</option><option>25+ vans</option></select>
         </div>
         <div><label for="cf-msg">What are you running on today?</label><textarea id="cf-msg" rows="3" placeholder="Spreadsheets, whiteboards, a cloud tool we're tired of…"></textarea></div>
-        <button type="submit" class="btn btn-primary">Request a Demo</button>
-        <div class="form-ok" id="form-ok">Thanks! This demo form isn't wired to a backend yet — <b>[connect to your CRM or email service here]</b>.</div>
+        <button type="submit" class="btn btn-trial">Request the Free Trial</button>
+        <p class="form-fine">Sends an email to info@qpi-inspect.com from your own mail app. We never store anything on this website.</p>
+        <div class="form-ok" id="form-ok">Your email app should now be open with the message ready — press send and we'll reply within one business day. If nothing opened, email us directly at <a href="mailto:info@qpi-inspect.com"><b>info@qpi-inspect.com</b></a>.</div>
       </form>
     </div>
   </div>
@@ -633,7 +800,11 @@
     <a href="#" class="brand" style="opacity:.85">
       <span class="brand-text"><span class="k">Fleet Operations</span><span class="n">White Van Ops</span></span>
     </a>
-    <div class="fine">© 2026 [Your Company Name]. Your data stays yours. &nbsp;·&nbsp; [Privacy Policy] &nbsp;·&nbsp; [Terms]</div>
+    <div class="fine">
+      © 2026 Quality Pipeline Inspectors LLC · Millington, Tennessee<br/>
+      <a href="mailto:info@qpi-inspect.com" style="color:inherit">info@qpi-inspect.com</a>
+      &nbsp;·&nbsp; Your data stays yours. This site sets no cookies and runs no analytics.
+    </div>
   </div>
 </footer>
 
@@ -783,8 +954,22 @@ syncPhone();
 
 // ------------------------------------------------------------------
 // ------------------------------------------------------------------
+// Composes the enquiry into the visitor's own mail client and sends it to us.
+// No backend, no third party, no data stored on this site — same promise as the product.
 document.getElementById('contact-form').addEventListener('submit', (e) => {
   e.preventDefault();
+  const val = id => document.getElementById(id).value.trim();
+  const name = val('cf-name'), email = val('cf-email');
+  const fleet = document.getElementById('cf-fleet').value, msg = val('cf-msg');
+  const subject = `White Van Ops — trial request (${name})`;
+  const body =
+    `Name: ${name}\n` +
+    `Work email: ${email}\n` +
+    `Fleet size: ${fleet}\n\n` +
+    `Currently running on:\n${msg || '(not specified)'}\n\n` +
+    `Please send me the free 30-day trial installer.\n`;
+  window.location.href =
+    `mailto:info@qpi-inspect.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   document.getElementById('form-ok').style.display = 'block';
 });
 
