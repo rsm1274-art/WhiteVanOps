@@ -1,8 +1,9 @@
 # Handoff — 2026-09-06 — Marketing site trust & conversion pass
 
-Repo: `marketing/` (own git repo, remote `rsm1274-art/WhiteVanOps`, branch `main`).
+Repo: `marketing/` — its own clone of `rsm1274-art/WhiteVanOps`, publishing to the **`marketing`**
+branch (see the branch warning in "Repo notes" — read it before any push).
 Single deliverable: `index.html` — one self-contained file, no build step, served by GitHub Pages
-at https://rsm1274-art.github.io/WhiteVanOps/.
+from the `marketing` branch at https://rsm1274-art.github.io/WhiteVanOps/.
 
 ## Goal of this session
 
@@ -83,46 +84,68 @@ Sections renumbered: Who built this = 06, FAQ = 07, Contact = 08.
 
 ## Still open — pick up here
 
-### Blocking / highest value
+### Closed at the end of this session — do not reopen
 
-1. **Owner must fact-check two FAQ answers before wider promotion.** *"What if you go out of
-   business?"* and *"Do I need an IT person?"* make promises about the **business**, not just the
-   software. They were written by Claude from product docs and have not been confirmed.
-2. **Owner must fact-check the Sec. 06 founder story.** The three-paragraph narrative is in the
-   owner's voice, but the specific details were invented — "chasing the parts", "paperwork at the
-   end of a long day", "prices climbed every renewal". False notes in a founder story cost more
-   trust than no story. The owner approved the look; the wording still deserves a careful read.
-3. **Nobody has seen this page render.** The Claude-in-Chrome extension would not connect for the
-   whole session (`Browser extension is not connected`, on repeated attempts). Verification was
-   structural only: tag balance (334 `<div>`, 8 `<section>`, 1 `<form>`, 9 `<details>` — all
-   matched) plus a `curl` check that the served page contains the new strings. **A human should
-   view it at desktop and phone widths.** To serve locally:
-   `npx --yes http-server -p 8899 -c-1`, then open `http://localhost:8899/index.html`.
-   Note: the Python at `~/AppData/Local/hermes/hermes-agent/venv` is broken (`PYTHONHOME` polluted
-   → `No module named 'encodings'`), so `python -m http.server` fails. Use the node server.
+- **Sec. 06 founder story and Sec. 07 FAQ wording: reviewed and approved by the owner** on the
+  live site. The narrative details ("chasing the parts", "prices climbed every renewal") and the
+  business promises in *"What if you go out of business?"* and *"Do I need an IT person?"* are
+  confirmed accurate. No further fact-check needed.
+- **The page renders correctly.** The owner viewed the deployed site and approved. Note for the
+  next session: the Claude-in-Chrome extension would not connect at any point during this session
+  (`Browser extension is not connected`, repeated attempts), so Claude never saw the page itself.
+  Claude-side verification was structural only — tag balance (334 `<div>`, 8 `<section>`,
+  1 `<form>`, 9 `<details>`, all matched) plus a `curl` string check. If visual checking is needed
+  again, either fix the extension or ask the owner to look.
+  To serve locally: `npx --yes http-server -p 8899 -c-1`, then `http://localhost:8899/index.html`.
+  The Python at `~/AppData/Local/hermes/hermes-agent/venv` is broken (`PYTHONHOME` polluted →
+  `No module named 'encodings'`), so `python -m http.server` fails. Use the node server.
 
 ### Known trade-offs to revisit
 
-4. **The form loses roughly 1 in 5 leads.** The `mailto:` approach opens the visitor's mail app and
+1. **The form loses roughly 1 in 5 leads.** The `mailto:` approach opens the visitor's mail app and
    some people never press send. If lead volume matters more than the no-backend purity: sign up at
    formspree.io (free tier), point the form at `https://formspree.io/f/<ID>`, and drop the JS
    submit handler. The owner has not decided.
-5. **No `og:image`.** Link previews in texts, LinkedIn and Slack show a blank grey box. Needs a
+2. **No `og:image`.** Link previews in texts, LinkedIn and Slack show a blank grey box. Needs a
    1200×630 image (dashboard screenshot + logo) in this folder plus one `<meta>` tag. Explained to
    the owner and deprioritised — not rejected.
 
 ### From the original audit, not yet done
 
-6. **No purchase path.** Buttons say "Contact Sales" / "Go Plus" but there is no way to actually
+1. **No purchase path.** Buttons say "Contact Sales" / "Go Plus" but there is no way to actually
    buy. Either add one, or state plainly "email us and we invoice you".
-7. **No customer proof.** No testimonial, no case study, no logo, no real product screenshot.
+2. **No customer proof.** No testimonial, no case study, no logo, no real product screenshot.
    Sec. 06 partially covers this ("we use it ourselves"), but a real customer quote is stronger.
    Blocked on having a reference customer.
-8. **Hero stat counters all animate to 0** — "0 monthly cloud fees" and so on. Cute, but weak as
+3. **Hero stat counters all animate to 0** — "0 monthly cloud fees" and so on. Cute, but weak as
    the first number a visitor sees. Consider replacing with something concrete.
-9. **A nav link to Sec. 06 was deliberately declined by the owner. Do not add one.**
+4. **A nav link to Sec. 06 was deliberately declined by the owner. Do not add one.**
 
 ## Repo notes
+
+### ⚠ Branch trap — read before pushing
+
+This clone's local branch is **named `main`, but it is not the app's `main`.** The repo holds two
+branches with **no common ancestor**:
+
+| Branch | Contents | Root files |
+|---|---|---|
+| `main` | the Electron/Next.js **application** | `src/`, `package.json`, `electron/` |
+| `marketing` | this **website** | `index.html` |
+
+GitHub Pages serves `marketing` (`source.branch = "marketing"`, path `/`), confirmed via
+`gh api repos/rsm1274-art/WhiteVanOps/pages`.
+
+This session's first `git push` was rejected as "behind 126 commits". **That rejection was
+protective.** The local branch was tracking `origin/main`, so a forced push would have replaced the
+entire application repo with this one HTML file. `git merge-base HEAD origin/main` returns empty —
+the histories are unrelated, so **never merge or rebase these two branches.**
+
+Fixed this session: the local branch now tracks `origin/marketing`, so a plain `git push` goes to
+the right place. If that tracking is ever lost, push explicitly with
+`git push origin HEAD:marketing` — and never resolve a rejected push here with `--force`.
+
+### Other
 
 - `.Rhistory` (empty, stray) is untracked and was intentionally left uncommitted. Consider
   `.gitignore` if it keeps reappearing.
