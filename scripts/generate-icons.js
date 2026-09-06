@@ -1,4 +1,4 @@
-// Renders public/logo.svg into all raster brand assets:
+// Renders scripts/assets/logo-icon.png into all raster brand assets:
 //   public/logo.png            512px app logo (replaces old logo.png)
 //   public/icons/icon-192.png  PWA manifest icon
 //   public/icons/icon-512.png  PWA manifest icon
@@ -11,10 +11,10 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const svg = fs.readFileSync(path.join(root, 'public', 'logo.svg'));
+const source = path.join(root, 'scripts', 'assets', 'logo-icon.png');
 
 async function render(size, dest) {
-  await sharp(svg, { density: 300 }).resize(size, size).png().toFile(dest);
+  await sharp(source).resize(size, size).png().toFile(dest);
   console.log(`${dest} (${size}px)`);
 }
 

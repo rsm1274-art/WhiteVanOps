@@ -10,7 +10,6 @@ const PUBLIC_PATHS = [
   "/api/health",
   // Brand assets + PWA install files must load without a session
   "/logo.png",
-  "/logo.svg",
   "/icons",
   "/apple-touch-icon.png",
   "/manifest.webmanifest",
