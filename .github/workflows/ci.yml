@@ -1,0 +1,88 @@
+# Catches the class of breakage that shipped on 2026-09-07: a branch added a
+# second Next.js app (storefront/) whose source was swallowed by the root
+# tsconfig's "**/*.ts" include, which failed `next build` for the whole desktop
+# app. Nothing ran automatically, so it was only found by hand days later.
+#
+# Runs on every branch, not just pull requests, because that breakage lived on a
+# feature branch that was pushed directly and never opened as a PR.
+
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    env:
+      # prisma generate validates the datasource block and fails if the variable
+      # is merely absent, and src/lib/db.ts opens a pg.Pool at import time. Both
+      # only need the variables to EXIST — nothing here connects to a database.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      SESSION_SECRET: ci-dummy
+      # Git hooks are a local developer aid; there is no commit to hook here.
+      HUSKY: 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Electron 42 bundles Node 22, so this is the runtime customers
+          # actually run. Bump it here if the Electron major changes.
+          node-version: 22
+          cache: npm
+
+      # Full install, not --omit=dev. next, react and @prisma/client live in
+      # devDependencies on purpose (see CLAUDE.md — dependencies is the Electron
+      # main process's list), so an --omit=dev install cannot build this app.
+      - name: Install dependencies
+        run: npm ci
+
+      # Must run before tsc: the generated Prisma client supplies types that
+      # src/lib/db.ts and every route depend on.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # Reported, not enforced. The repo currently has 42 pre-existing lint
+      # errors across 10 files (36 of them no-explicit-any, mostly in tests),
+      # none related to this workflow. Making lint blocking today would paint CI
+      # red on its first run, and a permanently red CI is one nobody reads.
+      # Clear the backlog, then delete this line to make lint a real gate.
+      - name: Lint (non-blocking)
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      # The real signal. tsc alone would have caught the storefront regression,
+      # but only a build catches bundler-level faults — the 2026-07-19 Turbopack
+      # / Prisma externalisation bug, for instance, was invisible to tsc.
+      - name: Build
+        run: npm run build
+
+      # storefront/ is deliberately excluded from the root TypeScript program,
+      # which would otherwise leave it entirely unchecked. It exists only on
+      # branches that have merged the purchase/download flow, so this step
+      # no-ops elsewhere rather than failing.
+      - name: Check storefront (when present)
+        run: |
+          if [ -d storefront ]; then
+            echo "storefront/ present — type checking it against its own tsconfig"
+            cd storefront
+            npm ci
+            npx tsc --noEmit
+          else
+            echo "No storefront/ on this branch — skipping"
+          fi

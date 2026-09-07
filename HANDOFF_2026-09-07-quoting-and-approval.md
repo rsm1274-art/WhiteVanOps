@@ -106,11 +106,35 @@ etc. against **this** project's `src/`, where those modules don't exist. Added
 `"storefront"` to the root `exclude`, the same pattern already documented for
 `dist-electron`. Build is green.
 
-**`feat/purchase-download-flow` still has this bug.** That branch introduced
-`storefront/` but did not touch the root `tsconfig.json`, so `npm run build` fails there
-today. The fix lives only here. **Whoever merges these two branches must keep the
-`"storefront"` exclude** — if it is dropped in a conflict resolution, the whole app stops
-building.
+`feat/purchase-download-flow` had the same bug — it introduced `storefront/` but never
+touched the root `tsconfig.json`, so its build was broken too. Rather than leave a note
+asking whoever merges to be careful, the identical fix was committed there as `ea01428`.
+Both branches now hold **byte-identical** `tsconfig.json` content, so Git sees the same
+change on both sides and `git merge-tree` reports no conflict on that file at all. There
+is nothing left for a merge to resolve wrongly.
+
+### CI now exists (`.github/workflows/ci.yml`)
+
+This repo had **no automated checks** — no workflows at all — which is why a branch that
+could not build was pushed and only found by hand. Added a job that runs on **every
+branch push** (not just PRs; the broken branch was never opened as a PR): `npm ci` →
+`prisma generate` → `tsc --noEmit` → lint → `npm test` → `npm run build`, plus a step
+that type-checks `storefront/` against its own tsconfig when that directory is present,
+so excluding it from the root program doesn't leave it unchecked.
+
+Two deliberate choices:
+
+- **Lint is `continue-on-error`.** The repo has 42 pre-existing lint errors across 10
+  files (36 are `no-explicit-any`, mostly in tests), none related to this work. A
+  blocking lint step would have painted CI red on its first run, and a permanently red
+  CI is one nobody reads. Clear the backlog, then drop that line to make it a real gate.
+- **Dummy `DATABASE_URL`/`SESSION_SECRET`.** `prisma generate` fails if the variable is
+  merely absent and `src/lib/db.ts` opens a pool at import, but neither needs a reachable
+  server. Verified: `npm run build` succeeds with the dummy URL pointing at nothing.
+
+**The workflow only exists on this branch.** GitHub Actions runs a workflow from the
+branch being pushed, so `feat/purchase-download-flow` gets no CI until these merge.
+Cherry-pick it there if that branch will live much longer.
 
 ## NOT DONE — read this before assuming the feature works
 
