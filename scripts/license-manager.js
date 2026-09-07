@@ -110,7 +110,7 @@ if (isPlusMode) {
 
 require("dotenv").config({ path: path.join(__dirname, "..", ".env.local") });
 const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore } = require('firebase-admin/firestore');
 
 // The Firebase service-account key is a highly sensitive credential and must
 // NOT live inside the repository tree (a stray `git add .` would publish it).
@@ -137,10 +137,7 @@ initializeApp({
 
 const db = getFirestore();
 
-function generateKey() {
-  const segment = () => crypto.randomBytes(2).toString('hex').toUpperCase();
-  return `WVO-${segment()}-${segment()}-${segment()}-${segment()}`;
-}
+const { mintLicense } = require("../shared/license-mint");
 
 // The tier is stamped onto the Firestore record at mint time and travels with
 // the key: electron/main.js reads it during activation and bakes it into the
@@ -164,17 +161,7 @@ async function createLicense() {
   const notesIdx = args.indexOf("--notes");
   const notes = notesIdx !== -1 && notesIdx + 1 < args.length ? args[notesIdx + 1].trim() : null;
 
-  const key = generateKey();
-  const licenseRef = db.collection('licenses').doc(key);
-
-  await licenseRef.set({
-    key: key,
-    machineId: null,
-    tier: tier,
-    active: true,
-    notes: notes,
-    createdAt: FieldValue.serverTimestamp()
-  });
+  const { key } = await mintLicense(db, { tier, notes });
 
   console.log(`\n✅ Success! New ${tier.toUpperCase()} License Key Generated:`);
   console.log(`\n   ${key}\n`);

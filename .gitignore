@@ -74,3 +74,8 @@ next-env.d.ts
 
 # Portable cloudflared for Plus installers — see MANUAL_Setup_Installation.md §1
 cloudflared/
+
+# storefront/ — separate deployable service (own dependency tree); the
+# root-anchored /node_modules and /.next rules above don't reach this nested folder
+/storefront/node_modules
+/storefront/.next
