@@ -78,6 +78,9 @@
   .btn-blue:hover { background:var(--blue-600); }
   .btn-ghost { background:transparent; color:var(--ink); border:1px solid var(--zinc-400); }
   .btn-ghost:hover { border-color:var(--ink); }
+  .btn-buy-now { background:#15803d; color:#fff; }
+  .btn-buy-now:hover { background:#166534; }
+  .btn-buy-now[disabled] { opacity:.6; cursor:default; }
 
   /* ---------- Nav ---------- */
   nav {
@@ -626,6 +629,7 @@
           <li>Yours to keep forever — updates included for the first year</li>
         </ul>
         <a href="#contact" class="btn btn-ghost" style="width:100%;text-align:center">Contact Sales</a>
+        <a href="#" class="btn btn-buy-now" data-tier="base" style="width:100%;text-align:center;display:block;margin-top:.6rem">Buy Now — Instant Download</a>
       </div>
       <div class="pcard featured reveal">
         <div class="pn" style="color:var(--blue)">Single Office Plus</div>
@@ -640,6 +644,7 @@
           <li>Lifetime license — no subscription</li>
         </ul>
         <a href="#contact" class="btn btn-blue" style="width:100%;text-align:center">Go Plus</a>
+        <a href="#" class="btn btn-buy-now" data-tier="plus" style="width:100%;text-align:center;display:block;margin-top:.6rem">Buy Now — Instant Download</a>
       </div>
       <div class="pcard reveal">
         <div class="pn">White Glove Installation</div>
@@ -959,6 +964,38 @@ document.getElementById('contact-form').addEventListener('submit', (e) => {
   window.location.href =
     `mailto:info@ahresemsystems.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   document.getElementById('form-ok').style.display = 'block';
+});
+
+// ------------------------------------------------------------------
+// Buy Now — Instant Download. Scoped to just these two buttons: unlike the
+// contact form above, this DOES call a backend (the storefront service) to
+// start a Stripe Checkout session.
+// Placeholder — replace with the storefront's real Vercel URL (or a custom
+// domain pointed at it) once that service is deployed.
+const STOREFRONT_ORIGIN = 'https://store.ahresemsystems.com';
+document.querySelectorAll('.btn-buy-now').forEach((btn) => {
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const tier = btn.dataset.tier;
+    const originalText = btn.textContent;
+    btn.setAttribute('disabled', 'true');
+    btn.textContent = 'Redirecting…';
+    try {
+      const res = await fetch(`${STOREFRONT_ORIGIN}/api/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tier }),
+      });
+      if (!res.ok) throw new Error('Checkout request failed');
+      const { url } = await res.json();
+      if (!url) throw new Error('No checkout URL returned');
+      window.location.href = url;
+    } catch (err) {
+      btn.removeAttribute('disabled');
+      btn.textContent = originalText;
+      alert("Sorry, that didn't work. Please try again, or use Contact Sales below.");
+    }
+  });
 });
 
 // ------------------------------------------------------------------
