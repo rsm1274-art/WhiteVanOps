@@ -247,10 +247,45 @@ marketing and pricing discussion first — `marketing/index.html` is a separate 
 the `marketing` branch (see the 2026-09-06 handoff for how to push it).
 
 Quoting itself is finished, verified by the owner, shipped in all four installers and
-live on the marketing site. `feat/quoting-and-approval` is pushed but **not merged to
-`main`** — merging it, and `feat/purchase-download-flow` alongside it, is a decision left
-to the owner. Both branches carry byte-identical `tsconfig.json` content, so that merge
-has no conflict to resolve.
+live on the marketing site.
+
+## Everything is on `main` now
+
+Both feature branches were merged and pushed; **`main` is `6ae853b` and CI passed on it**
+(1m49s, the workflow's first real run). Work in this repo no longer requires switching
+branches — check out `main` and you have quoting, the storefront purchase flow, CI, and
+the tsconfig fix together.
+
+Cleaned up in the same pass:
+
+- **Deleted** (all fully merged into `main`, nothing lost): local branches
+  `feat/quoting-and-approval`, `feat/purchase-download-flow`, `feat/wifi-sync-base-tier`,
+  `claude/handoff-corrections-61e69c`, `worktree-agent-a2b2d23f3221cd3bd`, and the two
+  matching remote branches.
+- **Deleted**: the orphaned-worktree archive (439 files).
+- **Kept**: `marketing` remains a separate branch and a separate checkout under
+  `marketing/` — that is required, GitHub Pages serves from it.
+
+### Six branches were deliberately NOT deleted
+
+They hold commits that are **not** in `main`, so deleting them would lose work. Someone
+who knows what they were for should decide:
+
+| Branch | Ahead of main | Last commit |
+|---|---|---|
+| `feat/office-role-field-lockdown` | **12 commits** | 2026-09-01 |
+| `claude/invoice-template-customization-664a2c` | **10 commits** | 2026-07-11 |
+| `chore/dead-code-cleanup` | 1 | 2026-07-27 |
+| `refactor/consolidate-duplicated-logic` | 1 | 2026-07-27 |
+| `claude/gifted-mayer-36a3c5` | 1 | 2026-07-25 |
+| `claude/graphify-docs-review-280e3e` | 1 | 2026-07-11 |
+
+The top two are substantial and worth a look — `feat/office-role-field-lockdown` is only
+days old. Merge what is wanted, delete the rest.
+
+Two stashes also survive from earlier sessions
+(`chore/dead-code-cleanup`, `feat/wifi-sync-base-tier`, both labelled
+*"epitaxy: pre-switch"*). They were left alone for the same reason.
 
 Before that, though, someone needs to run the migration and actually click through the
 quote flow once. Items 1 and 2 above are the blocking ones.
