@@ -76,14 +76,41 @@ the invoice PDF was left byte-identical.
   customer email. If no Field Access address is saved, links point at the office PC and
   work for nobody else.
 
-## Incidental fix: the build was already broken on this branch
+## A second Claude session was running in this working tree at the same time
 
-`npm run build` could not pass on `feat/purchase-download-flow` before any of this work.
-The root `tsconfig.json` globs `**/*.ts`, which swallowed `storefront/` — a **separate
-deployable Next.js app** with its own `tsconfig.json` and its own `@/*` alias — and
-resolved its `@/lib/stripe` etc. against the root `src/`, where they don't exist. Added
+Worth knowing, because it explains a build failure that looked like stale breakage and
+was not. Timeline from the reflog:
+
+| Time | What |
+|---|---|
+| 15:41:42 | This session forks `feat/quoting-and-approval` from `202a57d` (= `main`) |
+| ~15:41–15:51 | The other session creates `storefront/` on disk — a whole second Next.js app |
+| 16:03:25 | The other session commits `630a55a` **onto this branch's HEAD**, then at 16:04:30 resets it away and lands it on `feat/purchase-download-flow` |
+| 16:08:10 | This session commits the quoting work |
+
+**Nothing crossed over.** `630a55a` contains only `.gitignore`,
+`scripts/license-manager.js`, `shared/license-mint.js` and `storefront/**` — none of the
+quoting files, and none of the shared files this branch edits (`tsconfig.json`,
+`src/types.ts`, `src/middleware.ts`, `src/app/page.tsx`, `src/app/api/dashboard/route.ts`,
+`prisma/schema.prisma`, `CLAUDE.md`). This branch forked from `main` and does **not**
+contain `630a55a`, so the two lines of work are independent. Verified after the other
+session finished: `tsc` clean, 312 tests pass, working tree shows no changes to any file
+this branch owns.
+
+### The one real consequence: the tsconfig fix
+
+`storefront/` appearing on disk mid-session broke `npm run build` here. The root
+`tsconfig.json` globs `**/*.ts`, which swallowed that separate app — it has its own
+`tsconfig.json` and its own `@/*` → `./src/*` alias — and resolved its `@/lib/stripe`
+etc. against **this** project's `src/`, where those modules don't exist. Added
 `"storefront"` to the root `exclude`, the same pattern already documented for
-`dist-electron`. Build is green now.
+`dist-electron`. Build is green.
+
+**`feat/purchase-download-flow` still has this bug.** That branch introduced
+`storefront/` but did not touch the root `tsconfig.json`, so `npm run build` fails there
+today. The fix lives only here. **Whoever merges these two branches must keep the
+`"storefront"` exclude** — if it is dropped in a conflict resolution, the whole app stops
+building.
 
 ## NOT DONE — read this before assuming the feature works
 
@@ -109,12 +136,16 @@ resolved its `@/lib/stripe` etc. against the root `src/`, where they don't exist
    offered), but if the owner wants revisions, "supersede with a new quote" is the
    pattern to build, not in-place editing.
 
-## Uncommitted work left alone
+## Why `git status` looks dirty on this branch
 
-`storefront/`, `shared/`, `scripts/license-manager.js` and the `.gitignore` addition are
-the previous session's purchase/download-flow work and are **still uncommitted**. This
-session's commit deliberately excludes all of them. Don't sweep them into an unrelated
-commit.
+`git status` here shows `M .gitignore`, `M scripts/license-manager.js`, `?? shared/` and
+`?? storefront/`. **That is not uncommitted work.** All four are committed in `630a55a`
+on `feat/purchase-download-flow` (and pushed to `origin`). They only read as dirty from
+this branch because this branch forked from `main`, before that commit existed, while
+the files themselves sit in the shared working tree.
+
+Leave them alone. This session's commit deliberately excludes all of them, and nothing
+here needs them.
 
 ## Next session should
 
