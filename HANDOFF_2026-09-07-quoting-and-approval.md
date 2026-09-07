@@ -168,19 +168,19 @@ status` reports *"Database schema is up to date!"* with no drift, and `Quote` an
 `QuoteLineItem` are confirmed present in `information_schema`. The schema half of this
 feature is now verified against a real database rather than assumed.
 
-## NOT DONE — read this before assuming the feature works
+## Verified end to end by the owner
 
-1. **Nobody has clicked through the flow.** Verified: `tsc` clean, lint clean on the new
-   files, 312 unit tests pass, `npm run build` succeeds, migrations apply with no drift,
-   tables exist. Not verified: creating a quote, sending one, opening the public page as
-   a customer, accepting it, or converting it to an invoice. The database is now running,
-   so this is finally possible — it needs `npx prisma db seed` (or a hand-made client)
-   and a Plus licence on the install.
-2. **Neither PDF has been looked at.** The quote PDF has never been rendered, and the
-   invoice PDF was refactored onto the shared `pdfDoc.ts` helper without a visual check.
-   Layout coordinates were kept byte-identical, but it is a customer-facing financial
-   document and deserves a glance.
-3. **No route-level tests.** Only the pure modules are covered. The public route's
+With the dev database up, the owner ran the whole flow — create a quote, send it, open
+the customer approval page, accept it, convert it to an invoice — and reported it
+*"worked perfectly."* Both PDFs were checked and were *"exactly right"*, which also
+clears the one thing this session could not self-check: the invoice PDF refactor onto
+`pdfDoc.ts` did not alter that document.
+
+So the feature is confirmed working, not merely compiling.
+
+## Still not done
+
+1. **No route-level tests.** Only the pure modules are covered. The public route's
    whitelist and rate limiting are the highest-value untested code in this change.
 4. **No email.** "Send" mints the link and copies it to the clipboard; a human still
    pastes it into their own email or text. Actually sending mail is a separate feature.
@@ -196,15 +196,15 @@ feature is now verified against a real database rather than assumed.
   `MANUAL_Setup_Installation.md` §7 explains that customer quote links reuse the Field
   Access address. `MANUAL_Field_Tech.md` was deliberately left alone — technicians do not
   touch quotes.
-- **Marketing — done, committed, NOT pushed.** `marketing/` commit `d8d7c0d` adds a
-  *Quotes & Online Approval* Plus feature card, a bullet on the Plus pricing card, and a
-  mention in the two-plans note. It is still local: pushing publishes to GitHub Pages
-  (`git push origin main:marketing` from inside `marketing/`), which advertises the
-  feature publicly — hold until the flow has actually been exercised.
+- **Marketing — done and published.** `marketing/` commit `d8d7c0d` adds a *Quotes &
+  Online Approval* Plus feature card, a bullet on the Plus pricing card, and a mention in
+  the two-plans note. Pushed to `origin/marketing` (GitHub Pages) only after the owner
+  confirmed the flow worked, so the public site never advertised an unexercised feature.
 - **Installers — all four rebuilt** (Base, Plus, Base Trial, Plus Trial), exit code 0.
-  They pick up the new migration automatically via `resources/db/schema.sql`. Note the
-  owner asked for these now, over a recommendation to test the flow first: **the shipped
-  installers contain a feature that has never been run end to end.**
+  They pick up the new migration automatically via `resources/db/schema.sql`; the bundled
+  `resources/db/schema.sql` was checked and does contain the Quote tables. They were
+  built *before* the owner's manual test rather than after — the test then passed, so
+  they are good, but the safer order is test first.
 
 ## Lint noise: 268 errors were mostly phantom
 
@@ -245,6 +245,12 @@ Have the **option B** conversation the owner deferred: repositioning away from c
 with Jobber on features and toward "mid-market ops depth, bought once." That is a
 marketing and pricing discussion first — `marketing/index.html` is a separate checkout on
 the `marketing` branch (see the 2026-09-06 handoff for how to push it).
+
+Quoting itself is finished, verified by the owner, shipped in all four installers and
+live on the marketing site. `feat/quoting-and-approval` is pushed but **not merged to
+`main`** — merging it, and `feat/purchase-download-flow` alongside it, is a decision left
+to the owner. Both branches carry byte-identical `tsconfig.json` content, so that merge
+has no conflict to resolve.
 
 Before that, though, someone needs to run the migration and actually click through the
 quote flow once. Items 1 and 2 above are the blocking ones.
