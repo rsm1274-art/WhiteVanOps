@@ -136,21 +136,50 @@ Two deliberate choices:
 branch being pushed, so `feat/purchase-download-flow` gets no CI until these merge.
 Cherry-pick it there if that branch will live much longer.
 
+## There was no dev database on this machine — one now exists
+
+`prisma migrate dev` failed with P1001 because **nothing was listening on 5433 and no
+PostgreSQL data directory existed anywhere.** `%APPDATA%\whitevanops` held only
+`profile/`, `trial.json` and `trial-unlock.json` — no `pgdata`. Whatever dev database
+produced the earlier migrations is gone from this box.
+
+A dev cluster was created from the repo's own bundled PostgreSQL 17.6 (`pgsql/bin`),
+using the exact role, database and port already in `.env`:
+
+```
+data dir : %LOCALAPPDATA%\whitevanops-devdb     (outside the repo on purpose)
+server   : 127.0.0.1:5433
+role/db  : wvo_user / white_van_ops             (credentials taken from .env)
+```
+
+It sits outside the repo so it can never be committed, and clear of the Electron app's
+own `%APPDATA%\whitevanops\pgdata`, which `electron/postgres.js` manages separately —
+the two must not be confused.
+
+**Start it (it does not survive a reboot):**
+
+```powershell
+pgsql\bin\pg_ctl.exe -D "$env:LOCALAPPDATA\whitevanops-devdb" -o "-p 5433 -h 127.0.0.1" -l "$env:LOCALAPPDATA\whitevanops-devdb\server.log" start
+pgsql\bin\pg_ctl.exe -D "$env:LOCALAPPDATA\whitevanops-devdb" stop      # to stop
+```
+
+**All six migrations then applied cleanly, including the new one.** `prisma migrate
+status` reports *"Database schema is up to date!"* with no drift, and `Quote` and
+`QuoteLineItem` are confirmed present in `information_schema`. The schema half of this
+feature is now verified against a real database rather than assumed.
+
 ## NOT DONE — read this before assuming the feature works
 
-1. **The migration has never been applied.** PostgreSQL on 5433 was not running this
-   session, so `prisma migrate dev` failed with P1001. The migration SQL was generated
-   offline (`prisma migrate diff`) and committed at
-   `prisma/migrations/20260907204516_add_quoting/migration.sql`, and `prisma generate`
-   ran so the types are correct — but **no database has this table yet.** Start the DB
-   and run `npx prisma migrate dev` (it should apply cleanly and report no drift; if it
-   reports drift, that is the thing to investigate, not to `--force`).
-2. **Nothing has been exercised against a real database or in a browser.** Verified:
-   `npx tsc --noEmit` clean, `npx eslint` clean, 312 unit tests pass, `npm run build`
-   succeeds and registers every new route. Not verified: creating a quote, sending one,
-   opening the public page, accepting it, converting to an invoice, or that either PDF
-   still renders correctly. **The invoice PDF refactor in particular has had no visual
-   check** — it is a customer-facing financial document and deserves one.
+1. **Nobody has clicked through the flow.** Verified: `tsc` clean, lint clean on the new
+   files, 312 unit tests pass, `npm run build` succeeds, migrations apply with no drift,
+   tables exist. Not verified: creating a quote, sending one, opening the public page as
+   a customer, accepting it, or converting it to an invoice. The database is now running,
+   so this is finally possible — it needs `npx prisma db seed` (or a hand-made client)
+   and a Plus licence on the install.
+2. **Neither PDF has been looked at.** The quote PDF has never been rendered, and the
+   invoice PDF was refactored onto the shared `pdfDoc.ts` helper without a visual check.
+   Layout coordinates were kept byte-identical, but it is a customer-facing financial
+   document and deserves a glance.
 3. **No route-level tests.** Only the pure modules are covered. The public route's
    whitelist and rate limiting are the highest-value untested code in this change.
 4. **No email.** "Send" mints the link and copies it to the clipboard; a human still
@@ -159,6 +188,45 @@ Cherry-pick it there if that branch will live much longer.
    only Drafts can be deleted. That was deliberate (a sent quote is a record of what was
    offered), but if the owner wants revisions, "supersede with a new quote" is the
    pattern to build, not in-place editing.
+
+## Marketing, manuals, installers
+
+- **Manuals — done.** `MANUAL_Administrator.md` gained *Module 9: Quotes & Estimates*
+  (invoicing renumbered to Module 10) plus the plan comparison and sidebar list;
+  `MANUAL_Setup_Installation.md` §7 explains that customer quote links reuse the Field
+  Access address. `MANUAL_Field_Tech.md` was deliberately left alone — technicians do not
+  touch quotes.
+- **Marketing — done, committed, NOT pushed.** `marketing/` commit `d8d7c0d` adds a
+  *Quotes & Online Approval* Plus feature card, a bullet on the Plus pricing card, and a
+  mention in the two-plans note. It is still local: pushing publishes to GitHub Pages
+  (`git push origin main:marketing` from inside `marketing/`), which advertises the
+  feature publicly — hold until the flow has actually been exercised.
+- **Installers — all four rebuilt** (Base, Plus, Base Trial, Plus Trial), exit code 0.
+  They pick up the new migration automatically via `resources/db/schema.sql`. Note the
+  owner asked for these now, over a recommendation to test the flow first: **the shipped
+  installers contain a feature that has never been run end to end.**
+
+## Lint noise: 268 errors were mostly phantom
+
+`npm run lint` reported 268 errors. Only **42** are real. The other 226 came from
+`.claude/worktrees/` — six abandoned agent checkouts *inside* the repo, holding 441 files
+that ESLint was linting as source. Four were empty; the two with content pointed at
+parent repos (`WhiteVanOps - Copy`, `Desktop\wvo2`) that no longer exist, so git could
+not even read them.
+
+This is the third instance of one bug this session: **a nested copy of a project swept
+into a tool's file set** (the root tsconfig ate `storefront/`; ESLint ate the worktrees).
+
+They were **moved, not deleted**, to
+`Desktop\Apps\Development\_wvo-orphaned-worktrees-2026-09-07\`. Their commits remain on
+branches `claude/gifted-mayer-36a3c5` and `claude/handoff-corrections-61e69c` in this
+repo. Delete the archive folder once you are satisfied nothing is wanted from it.
+
+`npm run lint` now reports 42 errors — all pre-existing, none from this work. Adding
+`.claude/**` to `eslint.config.mjs` would have been the more durable fix, but a
+`config-protection` hook blocks edits to that file (it assumes any config edit is an
+attempt to weaken a rule). Worth adding by hand, or the next stray worktree brings the
+noise straight back.
 
 ## Why `git status` looks dirty on this branch
 
