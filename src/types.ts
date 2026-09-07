@@ -85,6 +85,42 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export type QuoteStatus = "Draft" | "Sent" | "Approved" | "Declined" | "Expired" | "Converted";
+
+export interface QuoteLineItem {
+  id: string;
+  quoteId: string;
+  description: string;
+  quantity: number;
+  rate: number;
+}
+
+export interface Quote {
+  id: string;
+  quoteNumber: string;
+  clientId: string;
+  client: Client;
+  jobId: string | null;
+  status: QuoteStatus;
+  issueDate: string;
+  expiryDate: string;
+  notes: string | null;
+  /**
+   * The secret in the customer's approval link, null until the quote is issued.
+   * Reaches the dashboard so the operator can re-copy the link after a reload —
+   * never render it as text.
+   */
+  publicToken: string | null;
+  sentAt: string | null;
+  respondedAt: string | null;
+  respondedName: string | null;
+  declineReason: string | null;
+  convertedInvoiceId: string | null;
+  lineItems: QuoteLineItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PersonnelQualification {
   id: string;
   personnelId: string;
@@ -296,6 +332,8 @@ export interface DashboardData {
   license: LicenseInfo;
   /** Empty for Base-tier installs. */
   invoices: Invoice[];
+  /** Empty for Base-tier installs. */
+  quotes: Quote[];
   clients: Client[];
   personnel: Personnel[];
   vehicles: Vehicle[];
@@ -441,6 +479,7 @@ export type ModalType =
   | "addClientNote"
   | "addFollowUp"
   | "editFollowUp"
+  | "addQuote"
   | "addInvoice"
   | "recordPayment"
   | "syncReview"

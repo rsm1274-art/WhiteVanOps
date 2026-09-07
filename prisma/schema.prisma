@@ -11,12 +11,13 @@ model Client {
   name            String
   contactName     String
   locationAddress String
-  paymentTerms    String                 // E.g., "Net 30", "Net 15", "Due on Receipt"
+  paymentTerms    String // E.g., "Net 30", "Net 15", "Due on Receipt"
   jobs            Job[]
   recurringJobs   RecurringJobTemplate[]
   notes           ClientNote[]
   followUps       ClientFollowUp[]
   invoices        Invoice[]
+  quotes          Quote[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 }
@@ -73,7 +74,7 @@ model Invoice {
   invoiceNumber String            @unique // "INV-0001", counter in SystemSetting
   clientId      String
   client        Client            @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  jobId         String?           // Optional link to the job that was invoiced
+  jobId         String? // Optional link to the job that was invoiced
   job           Job?              @relation(fields: [jobId], references: [id], onDelete: SetNull)
   status        String            @default("Draft") // "Draft" | "Sent" | "PartiallyPaid" | "Paid" | "Void"
   issueDate     DateTime
@@ -81,6 +82,7 @@ model Invoice {
   notes         String?
   lineItems     InvoiceLineItem[]
   payments      Payment[]
+  fromQuote     Quote?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 }
@@ -100,8 +102,8 @@ model Payment {
   invoiceId    String
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amount       Float
-  method       String   // "Check" | "Cash" | "Card" | "ACH" | "Other"
-  reference    String?  // Check number / transaction id
+  method       String // "Check" | "Cash" | "Card" | "ACH" | "Other"
+  reference    String? // Check number / transaction id
   receivedDate DateTime
   recordedById String?
   recordedBy   User?    @relation(fields: [recordedById], references: [id], onDelete: SetNull)
@@ -109,29 +111,29 @@ model Payment {
 }
 
 model Personnel {
-  id                  String                   @id @default(cuid())
-  firstName           String
-  lastName            String
-  role                String                   // "Technician", "Dispatcher"
-  certifications      String?                  // Legacy free-text field
-  assignments         JobAssignment[]
-  timeEntries         TimeEntry[]
-  qualifications      PersonnelQualification[]
-  timeOff             PersonnelTimeOff[]
+  id                   String                   @id @default(cuid())
+  firstName            String
+  lastName             String
+  role                 String // "Technician", "Dispatcher"
+  certifications       String? // Legacy free-text field
+  assignments          JobAssignment[]
+  timeEntries          TimeEntry[]
+  qualifications       PersonnelQualification[]
+  timeOff              PersonnelTimeOff[]
   recurringAssignments RecurringJobPersonnel[]
-  followUps           ClientFollowUp[]
-  user                User?
-  syncReviewItems     SyncReviewItem[]
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  followUps            ClientFollowUp[]
+  user                 User?
+  syncReviewItems      SyncReviewItem[]
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 }
 
 model PersonnelQualification {
   id          String    @id @default(cuid())
   personnelId String
   personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
-  tag         String    // e.g. "AWS D1.1 Welding", "CDL Class A"
-  category    String    // "Certification" | "License" | "Skill" | "Other"
+  tag         String // e.g. "AWS D1.1 Welding", "CDL Class A"
+  category    String // "Certification" | "License" | "Skill" | "Other"
   issuedBy    String?
   expiresAt   DateTime?
   notes       String?
@@ -142,7 +144,7 @@ model PersonnelTimeOff {
   id          String    @id @default(cuid())
   personnelId String
   personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
-  type        String    // "Sick" | "Vacation" | "Personal" | "Other"
+  type        String // "Sick" | "Vacation" | "Personal" | "Other"
   startDate   DateTime
   endDate     DateTime
   notes       String?
@@ -154,7 +156,7 @@ model Vehicle {
   vin             String                 @unique
   make            String
   model           String
-  status          String                 // "Active", "In Maintenance", "Retired"
+  status          String // "Active", "In Maintenance", "Retired"
   maintenanceLogs MaintenanceLog[]
   jobs            Job[]
   recurringJobs   RecurringJobTemplate[]
@@ -171,13 +173,13 @@ model RepairRecord {
   equipmentId     String?
   equipment       Equipment? @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   description     String
-  repairType      String     // "On-Site" | "Off-Site"
-  location        String?    // Shop name / address (off-site only)
-  serviceProvider String?    // Company or contact name
+  repairType      String // "On-Site" | "Off-Site"
+  location        String? // Shop name / address (off-site only)
+  serviceProvider String? // Company or contact name
   servicePhone    String?
-  ticketNumber    String?    // Service / PO / ticket number
+  ticketNumber    String? // Service / PO / ticket number
   startDate       DateTime
-  resolvedDate    DateTime?  // null = repair still open
+  resolvedDate    DateTime? // null = repair still open
   notes           String?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -209,8 +211,8 @@ model InventoryItem {
 
 model StockLocation {
   id          String       @id @default(cuid())
-  name        String       // E.g., "Main Warehouse", "Van 12"
-  type        String       // "Warehouse", "Vehicle"
+  name        String // E.g., "Main Warehouse", "Van 12"
+  type        String // "Warehouse", "Vehicle"
   vehicleId   String?      @unique
   vehicle     Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   stockLevels StockLevel[]
@@ -236,7 +238,7 @@ model Equipment {
   id                   String                  @id @default(cuid())
   name                 String
   serialNumber         String                  @unique
-  status               String                  // "Active", "In Use", "Maintenance"
+  status               String // "Active", "In Use", "Maintenance"
   jobAssignments       JobEquipment[]
   repairRecords        RepairRecord[]
   recurringAssignments RecurringJobEquipment[]
@@ -248,12 +250,12 @@ model Job {
   id                  String                @id @default(cuid())
   clientId            String
   assignedVehicleId   String?
-  status              String                // "Scheduled", "In Progress", "Completed", "Cancelled"
+  status              String // "Scheduled", "In Progress", "Completed", "Cancelled"
   scheduledDate       DateTime
   completionDate      DateTime?
-  notes               String?               // Scope of work / technician instructions
+  notes               String? // Scope of work / technician instructions
   qbInvoiceSyncStatus String                @default("Pending") // "Pending", "Exported"
-  recurringTemplateId String?               // Set when this job was auto-generated from a RecurringJobTemplate
+  recurringTemplateId String? // Set when this job was auto-generated from a RecurringJobTemplate
   client              Client                @relation(fields: [clientId], references: [id], onDelete: Restrict)
   vehicle             Vehicle?              @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
   recurringTemplate   RecurringJobTemplate? @relation(fields: [recurringTemplateId], references: [id], onDelete: SetNull)
@@ -262,6 +264,7 @@ model Job {
   timeEntries         TimeEntry[]
   equipment           JobEquipment[]
   invoices            Invoice[]
+  quotes              Quote[]
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 }
@@ -274,22 +277,22 @@ model Job {
 // conflicts (reported back to the user rather than silently dropped).
 // ---------------------------------------------------------------------------
 model RecurringJobTemplate {
-  id                 String                  @id @default(cuid())
-  clientId           String
-  assignedVehicleId  String?
-  notes              String?
-  frequency          String                  // "Weekly" | "Biweekly" | "Monthly"
-  startDate          DateTime                // first occurrence date
-  endDate            DateTime?               // null = no end date
-  active             Boolean                 @default(true)
-  lastGeneratedDate  DateTime?               // scheduledDate of the most recently generated job
-  client             Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  vehicle            Vehicle?                @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
-  personnel          RecurringJobPersonnel[]
-  equipment          RecurringJobEquipment[]
-  generatedJobs      Job[]
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  id                String                  @id @default(cuid())
+  clientId          String
+  assignedVehicleId String?
+  notes             String?
+  frequency         String // "Weekly" | "Biweekly" | "Monthly"
+  startDate         DateTime // first occurrence date
+  endDate           DateTime? // null = no end date
+  active            Boolean                 @default(true)
+  lastGeneratedDate DateTime? // scheduledDate of the most recently generated job
+  client            Client                  @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  vehicle           Vehicle?                @relation(fields: [assignedVehicleId], references: [id], onDelete: SetNull)
+  personnel         RecurringJobPersonnel[]
+  equipment         RecurringJobEquipment[]
+  generatedJobs     Job[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 }
 
 model RecurringJobPersonnel {
@@ -352,32 +355,32 @@ model JobLineItem {
 }
 
 model User {
-  id                 String     @id @default(cuid())
-  username           String     @unique
-  passwordHash       String
-  displayName        String
-  role               String     // "superuser" | "admin" | "tech"
-  personnelId        String?    @unique
-  personnel          Personnel? @relation(fields: [personnelId], references: [id], onDelete: SetNull)
-  active             Boolean    @default(true)
-  mustChangePassword Boolean    @default(false)
-  failedLoginAttempts Int       @default(0)
-  lockedUntil        DateTime?
-  auditLogs          AuditLog[]
-  clientNotes        ClientNote[]
-  paymentsRecorded   Payment[]
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                  String       @id @default(cuid())
+  username            String       @unique
+  passwordHash        String
+  displayName         String
+  role                String // "superuser" | "admin" | "tech"
+  personnelId         String?      @unique
+  personnel           Personnel?   @relation(fields: [personnelId], references: [id], onDelete: SetNull)
+  active              Boolean      @default(true)
+  mustChangePassword  Boolean      @default(false)
+  failedLoginAttempts Int          @default(0)
+  lockedUntil         DateTime?
+  auditLogs           AuditLog[]
+  clientNotes         ClientNote[]
+  paymentsRecorded    Payment[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  action    String   // "CREATE" | "UPDATE" | "DELETE"
-  entity    String   // "Job" | "TimeEntry" | "Client" | etc.
+  action    String // "CREATE" | "UPDATE" | "DELETE"
+  entity    String // "Job" | "TimeEntry" | "Client" | etc.
   entityId  String
-  details   String?  // JSON
+  details   String? // JSON
   createdAt DateTime @default(now())
 }
 
@@ -406,9 +409,9 @@ model TimeEntry {
   jobId            String
   personnelId      String
   date             DateTime
-  duration         String    // HH:MM text format (e.g. "08:30")
-  serviceItem      String    // E.g. "Field Labor"
-  payrollItem      String    // E.g. "Regular Pay", "Overtime"
+  duration         String // HH:MM text format (e.g. "08:30")
+  serviceItem      String // E.g. "Field Labor"
+  payrollItem      String // E.g. "Regular Pay", "Overtime"
   qbTimeSyncStatus String    @default("Pending") // "Pending", "Exported"
   job              Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
   personnel        Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
@@ -420,4 +423,54 @@ model SystemSetting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+// ---------------------------------------------------------------------------
+// Quoting (Plus tier). A Quote is the pre-sale half of the money loop:
+// Draft -> Sent -> Approved -> Converted (into an Invoice). Declined and
+// Expired are the dead ends. Line items mirror InvoiceLineItem exactly so the
+// conversion is a straight copy.
+// ---------------------------------------------------------------------------
+
+model Quote {
+  id          String   @id @default(cuid())
+  quoteNumber String   @unique // "QTE-0001", counter in SystemSetting
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  jobId       String? // Optional link to the job this quote is for
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status      String   @default("Draft") // "Draft" | "Sent" | "Approved" | "Declined" | "Expired" | "Converted"
+  issueDate   DateTime
+  expiryDate  DateTime
+  notes       String?
+
+  // Customer-facing approval link. Null until the quote is marked Sent, when a
+  // 32-byte random token is minted. GET/POST /api/public/quotes/[token] is the
+  // ONLY unauthenticated data surface in the app — see that route for what it
+  // is allowed to expose.
+  publicToken String?   @unique
+  sentAt      DateTime?
+
+  // The customer's decision, whether taken through the public link or recorded
+  // by hand in the dashboard.
+  respondedAt   DateTime?
+  respondedName String? // Name the customer typed when approving
+  declineReason String?
+
+  convertedInvoiceId String?  @unique
+  convertedInvoice   Invoice? @relation(fields: [convertedInvoiceId], references: [id], onDelete: SetNull)
+
+  lineItems QuoteLineItem[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model QuoteLineItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  rate        Float
+  createdAt   DateTime @default(now())
 }

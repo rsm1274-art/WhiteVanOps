@@ -13,6 +13,14 @@ const PUBLIC_PATHS = [
   "/icons",
   "/apple-touch-icon.png",
   "/manifest.webmanifest",
+  // Customer quote approval. The recipient has no account, so the page and its
+  // API must answer without a session; the 256-bit token in the path is the
+  // whole credential. Both entries keep their trailing separator so
+  // startsWith() can't widen them onto a neighbouring route — "/quote/" must
+  // never match a future "/quotes" dashboard page. See
+  // src/app/api/public/quotes/[token]/route.ts for what that route may expose.
+  "/quote/",
+  "/api/public/quotes/",
 ];
 const CHANGE_PASSWORD_PATHS = ["/change-password", "/api/auth/change-password"];
 // A trial-locked session may reach only the lockout page and the unlock API.

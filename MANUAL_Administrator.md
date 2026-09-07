@@ -14,12 +14,13 @@ WhiteVanOps is an internal field operations management dashboard. It tracks jobs
 WhiteVanOps ships in two plans running on the same installation:
 
 - **Base** — everything described in Modules 1–7 below: jobs, scheduling, personnel, fleet, inventory, and QuickBooks CSV export.
-- **Plus** — adds three feature areas on top of Base:
+- **Plus** — adds four feature areas on top of Base:
   - **Client notes & follow-up reminders** in the Clients & Jobs module (Module 2)
   - **Business Analytics** tab — revenue, technician hours, and fleet cost charts (Module 8)
-  - **Invoicing & Payments** tab — internal invoices with PDF generation and payment tracking (Module 9)
+  - **Quotes & Estimates** tab — priced quotes with a customer approval link (Module 9)
+  - **Invoicing & Payments** tab — internal invoices with PDF generation and payment tracking (Module 10)
 
-The plan is controlled by a license setting in **Settings → License & Plan** (superuser only — see that section below). Upgrading requires no reinstall: flip the plan and the new tabs appear on the next dashboard refresh. Downgrading hides the Plus tabs and blocks the Plus features, but **never deletes** notes, follow-ups, invoices, or payment records — everything reappears if the plan is re-activated.
+The plan is controlled by a license setting in **Settings → License & Plan** (superuser only — see that section below). Upgrading requires no reinstall: flip the plan and the new tabs appear on the next dashboard refresh. Downgrading hides the Plus tabs and blocks the Plus features, but **never deletes** notes, follow-ups, quotes, invoices, or payment records — everything reappears if the plan is re-activated.
 
 Open the **WhiteVanOps** application from your desktop shortcut or Start Menu. The app starts its internal server automatically — a loading screen appears for a few seconds, then the login page opens.
 
@@ -37,7 +38,7 @@ The initial superuser account is **admin / admin**. On first login you will be i
 
 After logging in, you see a two-panel layout:
 
-- **Left sidebar** — navigation between the modules (seven on Base; **Analytics** and **Invoicing** also appear on Plus)
+- **Left sidebar** — navigation between the modules (seven on Base; **Analytics**, **Quotes** and **Invoicing** also appear on Plus)
 - **Main area** — the active module's content
 
 The sidebar also shows:
@@ -364,7 +365,63 @@ A read-only reporting tab covering the **trailing 12 months**. Numbers are compu
 
 ---
 
-## Module 9: Invoicing & Payments (Plus only)
+## Module 9: Quotes & Estimates (Plus only)
+
+Price a job before you do it, send the customer a link to accept it, then turn the accepted quote into an invoice without retyping anything.
+
+### Creating a quote
+
+**Quotes → Create Quote.** Choose the client, optionally link it to an existing job, set the issue date and a **Valid Until** date (defaults to 30 days out), then add line items — description, quantity, and rate. The running total is shown as you type. Notes you add here are printed on the quote and shown to the customer.
+
+A new quote is saved as a **Draft**. Nothing has reached the customer yet, and a Draft is the only status you can edit or delete.
+
+### Sending a quote
+
+Press **Send** on a Draft. Two things happen:
+
+1. The quote moves to **Sent** and a private approval link is created for it.
+2. The link is copied to your clipboard so you can paste it into an email or text.
+
+The same link is printed at the bottom of the quote PDF under **Accept Online**, so a customer who received the PDF can always find it. Press **Link** on any sent quote to copy it again later.
+
+**The link only works from outside your office if the customer can reach your server.** It is built from the address in **Field Access QR** — so on **Plus**, where that is your secure tunnel address, the customer can open it from anywhere. On a plain office-LAN address, only someone on your WiFi can open it. If you have not set a Field Access address yet, do that first or the link will point at the office PC's own name and will not work for anyone else.
+
+### What the customer sees
+
+A single page showing your company details, the quote number, dates, the line items and total, your notes, and the payment terms. They press **Accept this quote** and type their full name to confirm, or **Decline** with an optional reason. Their name and the date are recorded against the quote as the record of approval.
+
+The page shows **nothing else** from your system — no other quotes, no job details, no other customers. The link is a long random code; it cannot be guessed or altered to reach a different quote.
+
+### Recording a decision yourself
+
+Most customers answer by phone. On a Sent quote press **Accepted** or **Declined** to record the decision by hand. The result is identical to them using the link, and the same rules apply — an expired quote cannot be accepted either way.
+
+### Quote statuses
+
+| Status | Meaning |
+|---|---|
+| **Draft** | Not sent. The only status you can edit or delete. |
+| **Sent** | Issued and waiting on the customer. |
+| **Approved** | The customer accepted. Ready to convert to an invoice. |
+| **Declined** | The customer said no. |
+| **Expired** | The Valid Until date passed with no answer. Set automatically — no action needed. |
+| **Converted** | An invoice has been raised from it. |
+
+An expired quote can no longer be accepted, by you or by the customer, so your old pricing can never be locked in months later. To revive one, create a new quote at current prices.
+
+### Turning an accepted quote into an invoice
+
+Press **To Invoice** on an Approved quote and confirm. A **Draft** invoice is created with the line items copied across exactly as the customer accepted them, and the quote moves to **Converted**. The invoice then follows the normal lifecycle in Module 10 — review it, mark it Sent, and record payments.
+
+A quote can only be converted once. From then on it is a permanent record of what was agreed.
+
+### Pipeline summary
+
+Three tiles at the top of the tab: how many quotes are **Awaiting Response**, the total **Value Out For Approval**, and your **Win Rate**. The win rate counts only quotes the customer actually answered — quotes still open or left to expire are excluded, so it does not sag just because a few went quiet.
+
+---
+
+## Module 10: Invoicing & Payments (Plus only)
 
 An internal accounts-receivable ledger with printable PDF invoices and payment tracking. It is **completely independent of the QuickBooks Export Sync tab** (Module 7) — creating an invoice here does not affect a job's QB sync status, and vice versa. Use whichever billing flow (or both) fits your business.
 

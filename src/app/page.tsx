@@ -18,10 +18,11 @@ import {
   Settings,
   BarChart3,
   Receipt,
+  FileCheck,
 } from "lucide-react";
 
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { AdjustStockContext, AppUser, Client, ClientFollowUp, Invoice, Job, ModalType, Personnel, RecurringJobTemplate, RepairContext, Vehicle } from "@/types";
+import { AdjustStockContext, AppUser, Client, ClientFollowUp, Invoice, Job, ModalType, Personnel, Quote, RecurringJobTemplate, RepairContext, Vehicle } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 
 // Tabs
@@ -34,6 +35,7 @@ import InventoryTab from "@/components/tabs/InventoryTab";
 import AccountingTab from "@/components/tabs/AccountingTab";
 import SettingsTab from "@/components/tabs/SettingsTab";
 import AnalyticsTab from "@/components/tabs/AnalyticsTab";
+import QuotesTab from "@/components/tabs/QuotesTab";
 import InvoicingTab from "@/components/tabs/InvoicingTab";
 
 // Modals
@@ -59,6 +61,7 @@ import ManageUsersModal from "@/components/modals/ManageUsersModal";
 import FieldAccessModal from "@/components/modals/FieldAccessModal";
 import AddClientNoteModal from "@/components/modals/AddClientNoteModal";
 import FollowUpModal from "@/components/modals/FollowUpModal";
+import AddQuoteModal from "@/components/modals/AddQuoteModal";
 import AddInvoiceModal from "@/components/modals/AddInvoiceModal";
 import RecordPaymentModal from "@/components/modals/RecordPaymentModal";
 import SyncReviewModal from "@/components/modals/SyncReviewModal";
@@ -68,7 +71,7 @@ import NotificationBell from "@/components/shared/NotificationBell";
 // ---------------------------------------------------------------------------
 // Types for modal context payloads
 // ---------------------------------------------------------------------------
-type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "analytics" | "invoicing" | "accounting" | "settings";
+type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "analytics" | "quotes" | "invoicing" | "accounting" | "settings";
 
 const TAB_LABELS: Record<TabId, string> = {
   overview: "Operations Overview",
@@ -78,6 +81,7 @@ const TAB_LABELS: Record<TabId, string> = {
   fleet: "Fleet Logistics",
   inventory: "Inventory & Van Levels",
   analytics: "Business Analytics",
+  quotes: "Quotes & Estimates",
   invoicing: "Invoicing & Payments",
   accounting: "QuickBooks Export Sync",
   settings: "System Settings",
@@ -93,6 +97,7 @@ const NAV: { id: TabId; label: string; icon: React.ReactNode; plusOnly?: boolean
   { id: "fleet", label: "Fleet & Service", icon: <Truck className="h-4 w-4" /> },
   { id: "inventory", label: "Inventory Control", icon: <Package className="h-4 w-4" /> },
   { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" />, plusOnly: true },
+  { id: "quotes", label: "Quotes", icon: <FileCheck className="h-4 w-4" />, plusOnly: true },
   { id: "invoicing", label: "Invoicing", icon: <Receipt className="h-4 w-4" />, plusOnly: true },
   { id: "accounting", label: "QuickBooks Sync", icon: <FileSpreadsheet className="h-4 w-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
@@ -157,7 +162,9 @@ export default function Dashboard() {
   // now-hidden Plus tab (derived during render — no effect needed).
   const plus = data?.license.plus ?? false;
   const effectiveTab: TabId =
-    !plus && (activeTab === "analytics" || activeTab === "invoicing") ? "overview" : activeTab;
+    !plus && (activeTab === "analytics" || activeTab === "invoicing" || activeTab === "quotes")
+      ? "overview"
+      : activeTab;
 
   // Confirmation dialog state
   const [confirm, setConfirm] = useState<{
@@ -194,6 +201,102 @@ export default function Dashboard() {
     setSelectedClient(null);
     setSelectedFollowUp(null);
     setSelectedInvoice(null);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Plus tier — quote actions
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Puts a URL on the clipboard. The Clipboard API needs a secure context, and
+   * the dashboard is normally plain http on the LAN, so failure is expected
+   * rather than exceptional — say where else to find the link instead of
+   * reporting a dead end.
+   */
+  const copyQuoteLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Approval link copied to the clipboard.");
+    } catch {
+      handleError(`Could not copy automatically. The link is also printed on the quote PDF: ${url}`);
+    }
+  };
+
+  const sendQuote = async (quote: Quote) => {
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}/send`, { method: "POST" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to send quote");
+      handleSuccess(`${quote.quoteNumber} issued. Send the customer their approval link.`);
+      await copyQuoteLink(result.approvalUrl);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to send quote");
+    }
+  };
+
+  const recordQuoteDecision = async (quote: Quote, decision: "Approved" | "Declined") => {
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: decision }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to record the decision");
+      handleSuccess(
+        decision === "Approved"
+          ? `${quote.quoteNumber} accepted — you can now convert it to an invoice.`
+          : `${quote.quoteNumber} marked as declined.`
+      );
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to record the decision");
+    }
+  };
+
+  const requestConvertQuote = (quote: Quote) => {
+    setConfirm({
+      title: "Convert Quote to Invoice",
+      message: `Create a draft invoice from ${quote.quoteNumber}? The line items are copied across exactly as the customer accepted them. A quote can only be converted once.`,
+      destructive: false,
+      onConfirm: () => {
+        setConfirm(null);
+        convertQuote(quote);
+      },
+    });
+  };
+
+  const convertQuote = async (quote: Quote) => {
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}/convert`, { method: "POST" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to convert quote");
+      handleSuccess(`${quote.quoteNumber} converted to draft invoice ${result.invoice.invoiceNumber}.`);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to convert quote");
+    }
+  };
+
+  const requestDeleteQuote = (quote: Quote) => {
+    setConfirm({
+      title: "Delete Draft Quote",
+      message: `Permanently delete draft ${quote.quoteNumber}? Only quotes that have never been sent can be deleted.`,
+      destructive: true,
+      onConfirm: () => {
+        setConfirm(null);
+        deleteQuote(quote);
+      },
+    });
+  };
+
+  const deleteQuote = async (quote: Quote) => {
+    try {
+      const res = await fetch(`/api/quotes/${quote.id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Failed to delete quote");
+      handleSuccess(`Draft ${quote.quoteNumber} deleted.`);
+    } catch (err: unknown) {
+      handleError(err instanceof Error ? err.message : "Failed to delete quote");
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -926,6 +1029,18 @@ export default function Dashboard() {
 
           {effectiveTab === "analytics" && plus && <AnalyticsTab />}
 
+          {effectiveTab === "quotes" && plus && (
+            <QuotesTab
+              data={data}
+              onAddQuote={() => setActiveModal("addQuote")}
+              onSendQuote={sendQuote}
+              onRecordDecision={recordQuoteDecision}
+              onConvertQuote={requestConvertQuote}
+              onDeleteQuote={requestDeleteQuote}
+              onCopyLink={copyQuoteLink}
+            />
+          )}
+
           {effectiveTab === "invoicing" && plus && (
             <InvoicingTab
               data={data}
@@ -1134,6 +1249,9 @@ export default function Dashboard() {
           onSuccess={handleSuccess}
           onError={handleError}
         />
+      )}
+      {activeModal === "addQuote" && (
+        <AddQuoteModal data={data} onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
       )}
       {activeModal === "addInvoice" && (
         <AddInvoiceModal

@@ -246,6 +246,17 @@ To do it by hand instead: Windows Defender Firewall with Advanced Security → I
 
 Plus installs bundle `cloudflared` and can open a Cloudflare tunnel so techs reach the field module from anywhere — cellular data, a job site, home — over `https://`, not the office WiFi. This is still provisioned by a manual runbook, not an in-app wizard: see `docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md` for the setup steps. Once the tunnel is up, generate the Field Access QR the same way as Base (§ above) but pointed at the tunnel's `https://` hostname — the modal recognizes a public host as the correct shape when the install is licensed for Plus and generates the QR without a warning. Offline queueing and **Add to Home Screen** work identically to Base.
 
+### The Field Access address also drives customer quote links (Plus)
+
+The **Quotes** tab (Plus) sends customers a link to accept a quote online. That link is built from the **same address you saved in Field Access QR**, because it is the one address you have already told the app is reachable from outside. There is no separate setting and no extra port — the quote page is served by the same server on the same port as the field module, so anything that already lets a tech's phone in also lets the customer's browser in.
+
+The practical consequence is the plan difference:
+
+- **Plus with the tunnel up** — the address is a public `https://` hostname, so a customer can open the quote from anywhere. This is the intended setup.
+- **A bare office-LAN address** — only someone on the office WiFi can open the link. Customers will see nothing. Quotes still work; the operator just records the acceptance by hand from the Quotes tab instead.
+
+**Set the Field Access address before issuing the first quote.** With none saved, the app falls back to whatever address the dashboard itself was opened on — normally `localhost` — and the generated link works only on the office PC. Fixing it later means re-sending the link to any customer who already had one.
+
 ---
 
 ## 8. Ironclad Data Backup

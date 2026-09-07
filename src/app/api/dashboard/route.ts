@@ -4,7 +4,7 @@ import { getLicense, isPlusActive } from "@/lib/license";
 
 export async function GET() {
   try {
-    // Plus-only data (client notes/follow-ups, invoices) is only fetched and
+    // Plus-only data (client notes/follow-ups, quotes, invoices) is only fetched and
     // returned when licensed, so a Base/expired install never leaks Plus data
     // through the full-reload pattern.
     const license = await getLicense();
@@ -22,6 +22,7 @@ export async function GET() {
       maintenanceLogs,
       recurringJobTemplates,
       invoices,
+      quotes,
       syncReviewItems,
     ] = await Promise.all([
       prisma.client.findMany({
@@ -118,6 +119,15 @@ export async function GET() {
             orderBy: { createdAt: "desc" },
           })
         : Promise.resolve([]),
+      plus
+        ? prisma.quote.findMany({
+            include: {
+              client: true,
+              lineItems: { orderBy: { createdAt: "asc" } },
+            },
+            orderBy: { createdAt: "desc" },
+          })
+        : Promise.resolve([]),
       prisma.syncReviewItem.findMany({
         where: { status: "Open" },
         include: { personnel: { select: { firstName: true, lastName: true } } },
@@ -143,6 +153,7 @@ export async function GET() {
       recurringJobTemplates,
       syncReviewItems,
       invoices,
+      quotes,
     });
   } catch (error) {
     console.error("Dashboard API Error:", error);
