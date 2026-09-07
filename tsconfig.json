@@ -33,6 +33,12 @@
   "exclude": [
     "node_modules",
     "dist-electron",
-    ".next/standalone"
+    ".next/standalone",
+    // storefront/ is a separate deployable Next.js app with its own tsconfig
+    // and its own "@/*" -> "./src/*" alias. Without this exclude the root
+    // include glob ("**/*.ts") sweeps its source into this program and resolves
+    // its imports against the root src/, so every "@/lib/..." there fails to
+    // resolve and blocks `next build` for the whole app.
+    "storefront"
   ]
 }
