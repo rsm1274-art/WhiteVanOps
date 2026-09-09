@@ -379,7 +379,7 @@ model AuditLog {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  action    String // "CREATE" | "UPDATE" | "DELETE"
+  action    String // "CREATE" | "UPDATE" | "DELETE" | "EXPORT"
   entity    String // "Job" | "TimeEntry" | "Client" | etc.
   entityId  String
   details   String? // JSON

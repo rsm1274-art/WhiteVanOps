@@ -23,6 +23,7 @@ import ConditionBuilder from "@/components/reports/ConditionBuilder";
 import PreviewTable, { type ReportPreviewResult } from "@/components/reports/PreviewTable";
 import SavedReportsPanel from "@/components/reports/SavedReportsPanel";
 import SaveReportModal from "@/components/modals/SaveReportModal";
+import ExportMenu from "@/components/reports/ExportMenu";
 
 // Container: owns the ReportDefinition being built and debounces a live preview
 // fetch against it. Deliberately does NOT use useDashboardData — that hook's
@@ -162,6 +163,11 @@ export default function ReportsTab({ onShowToast }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <ExportMenu
+            definition={definition}
+            disabled={definition.columns.length === 0}
+            onError={(msg) => onShowToast(msg, true)}
+          />
           {editingReport && (
             <button
               type="button"
