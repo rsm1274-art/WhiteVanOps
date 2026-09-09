@@ -24,6 +24,20 @@ The plan is controlled by a license setting in **Settings → License & Plan** (
 
 Open the **WhiteVanOps** application from your desktop shortcut or Start Menu. The app starts its internal server automatically — a loading screen appears for a few seconds, then the login page opens.
 
+### Using WhiteVanOps on more than one office computer
+
+If your office runs WhiteVanOps on more than one machine (say, a Windows PC and a Mac), only
+**one** of them actually holds the data — call it the **host**. Every other machine connects
+to that host over your office network instead of keeping its own separate copy, so everyone
+always sees the same jobs, clients, and inventory no matter which computer they're sitting
+at. A "connecting" machine's Base/Plus features follow the host's license — nothing to set
+up separately.
+
+The one thing to know: the host machine has to be turned on and connected to the network for
+the others to work — a "connecting" machine shows a clear message if it can't reach the host,
+rather than quietly falling out of sync. See `MANUAL_Setup_Installation.md` §7A for how to
+set this up.
+
 ---
 
 ## First Login

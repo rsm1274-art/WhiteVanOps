@@ -153,6 +153,47 @@ The app is packaged as a Windows desktop application using Electron + electron-b
 - **Distributing to multiple customers:** each customer needs their own unique `SESSION_SECRET` and database credentials — never reuse the same secret across customer installs. `electron-build.js` bundles `.env.local` into the `.exe`, so a shared secret would ship inside a file handed to more than one company, and there's no reason to share it since every customer runs an isolated server/database. Generate a fresh secret per customer (`node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`) and either rebuild the installer per customer or configure `.env.local` on-site after installing a generic build. See `MANUAL_Setup_Installation.md` §3.
 - **No Docker deploy path:** an earlier, half-finished Docker deployment scaffold (`docker-compose.yml`, `Dockerfile`, `deploy/`) predated real user auth and was removed — it assumed a hardcoded `APP_USERNAME`/`APP_PASSWORD` login the app hasn't used since auth became the `User` table + JWT session (see Auth helpers below). The Electron installer + native PostgreSQL path documented above is the only deploy path. Automated backups are handled by the built-in Settings → Database Backup & Recovery feature (`electron/backup.js`), not a standalone script.
 
+#### Shared-database mode ("client mode")
+
+An office with more than one machine (e.g. a Mac and a Windows PC) does **not** get two
+databases — WhiteVanOps has no merge path (no `version`/`deletedAt`/origin columns, hard
+cascading deletes, `@unique` invoice/quote numbering, absolute `StockLevel.quantity` —
+two machines minting `INV-0001` or racing a stock edit would silently corrupt data). One
+machine is the **host** and runs the database and server exactly as a single-machine
+install always has. Every other machine is a **client**: it starts no database, boots no
+server, and simply opens the host's address in its window — the same relationship a field
+tech's phone already has with the office PC, just in a desktop window instead of a browser
+tab.
+
+- **Config file:** `<appData>/whitevanops/host.json` (`getHostConfigPath()` in
+  `electron/main.js`, mirroring `getLicensePath()`'s directory). Shape is
+  `{ "mode": "host" }` or `{ "mode": "client", "host": "...", "port": 3000 }`.
+  **Absence of the file means host mode.** This is deliberate: it is what makes client
+  mode invisible to the entire pre-existing single-machine install base — a machine that
+  has never heard of `host.json` behaves byte-for-byte as it always has.
+- **Where the choice happens:** the existing first-run activation window
+  (`showActivationWindow()`), shown only when `verifyLicenseSilent()` fails — i.e. never on
+  an already-activated machine. It gained one link, "Connecting to an existing office
+  server instead?", that hands off to a new `showClientSetupWindow()` (same
+  `ipcMain.on`/`event.reply` IPC pattern as everywhere else in this file — no
+  `ipcMain.handle` anywhere in the codebase). That window verifies the address via
+  `isWvoServer(host, port)` — generalized from its original localhost-only signature —
+  before writing `host.json`, so a client machine can never save an address that isn't
+  actually running WhiteVanOps.
+- **`startServer()` early-returns** for `mode: "client"`, before `ensurePostgres`,
+  `require(server.js)`, or `startBackupScheduler` — a client never boots a local database,
+  never runs a server, and never backs itself up (the host does).
+- **Never falls back to self-booting.** If a saved host doesn't answer at startup,
+  `handleUnreachableHost()` shows Retry / Reconfigure / Quit — it does not silently start a
+  local database instead. That fallback is exactly the divergent-copy failure mode
+  shared-database mode exists to prevent.
+- **Licensing:** a client-mode install skips activation entirely. Entitlement comes from
+  the host's own server-side `requirePlus` checks — the same as a plain browser hitting
+  that host directly, which already works today.
+- **Honest limitation:** if the host machine is off or asleep, clients cannot work. That is
+  the trade for never losing or duplicating a record. Document this in
+  `MANUAL_Setup_Installation.md` wherever client mode is described.
+
 ### License / Plus tier
 
 The app runs as one codebase in two plans, gated at runtime by a DB flag (not separate builds): **Base** and **Plus** (CRM notes/follow-ups, Analytics tab, Invoicing tab). Key pieces:

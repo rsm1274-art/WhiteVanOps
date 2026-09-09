@@ -276,6 +276,49 @@ The practical consequence is the plan difference:
 
 ---
 
+## 7A. Connecting a Second Machine (Client Mode)
+
+If your office has more than one computer running WhiteVanOps (for example a Windows PC and
+a Mac), they do **not** each get their own database. One machine is the **host** — it runs
+the database and the server, exactly as a single-machine install always has, and it is the
+machine that gets backed up (§8). Every other machine runs in **client mode**: it opens no
+database, runs no server, and simply displays the host's dashboard in its own window — the
+same relationship a field tech's phone already has with the office PC (§7), just in a
+desktop app instead of a browser tab.
+
+**Why not two databases?** WhiteVanOps has no way to merge two independently-edited copies
+of the data back together without risking silent data loss or corruption (duplicate invoice
+numbers, resurrected deleted records, conflicting stock counts). One shared database, always
+reachable over the office network, avoids that entirely.
+
+**Setting up the host.** Install and activate WhiteVanOps on the host machine exactly as
+described in §1-6 above. Nothing about that process changes.
+
+**Setting up a client.** On the second machine, install WhiteVanOps as usual but do **not**
+enter a license key when the activation window appears. Instead, click **"Connecting to an
+existing office server instead?"** and enter the host machine's LAN address (the same
+address shown in the host's Field Access QR modal, §7) and its port (`3000` unless the host
+had to fall back to a different one). The app verifies a real WhiteVanOps server answers at
+that address before accepting it — a typo or an unrelated server will be rejected with an
+error rather than silently saved.
+
+**What a client cannot do:**
+- **The host machine must be on.** If it's off, asleep, or disconnected from the network,
+  every client shows "Cannot reach the office server" and will not fall back to running its
+  own local copy — that is deliberate, so two machines never silently diverge. Retry once
+  the host is back, or use **Reconfigure** to point at a different address.
+- A client install never asks for its own license key — its Base/Plus features follow
+  whatever the host is licensed for, the same as anyone opening the dashboard in a plain
+  browser.
+- A client is not backed up separately (§8) — only the host holds the data, so only the host
+  needs a backup destination configured.
+
+**Reconfiguring or switching a machine back to host mode.** There is currently no in-app
+toggle for this after initial setup; contact support if a client machine needs to be
+repointed at a different host or converted back to standalone.
+
+---
+
 ## 8. Ironclad Data Backup
 
 WhiteVanOps doesn't rely on third-party cloud backups. 

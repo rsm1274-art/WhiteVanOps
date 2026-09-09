@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('wvoActivation', {
   verify: (key) => ipcRenderer.send('verify-license', key),
   onResult: (callback) =>
     ipcRenderer.on('license-result', (_event, result) => callback(result)),
+  switchToClientSetup: () => ipcRenderer.send('switch-to-client-setup'),
 });
