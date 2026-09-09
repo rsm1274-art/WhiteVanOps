@@ -200,14 +200,53 @@ on any machine needs to (re)create it per the new `MANUAL_Setup_Installation.md`
 same as `pgsql/` on Windows) and the built `.dmg`/`.dmg.blockmap`/`.buildinfo.txt` files
 under `dist-electron/` (also gitignored, disposable build output).
 
-## Next session should (updated)
+## Update — same session: pushed, Plus/Plus-Trial built, Mac tooling made persistent
 
-1. Phase 2 (Windows + Mac packaging) is now fully done and verified on real hardware —
-   Base builds clean on both platforms, both mac arches individually confirmed working
-   end-to-end including a real database bootstrap. Phase 2d (signing) stays deferred until
-   there's an Apple Developer account.
-2. A Plus mac build (`electron:build:mac:plus`) still needs a `cloudflared-mac/cloudflared`
-   binary sourced (darwin build from Cloudflare's releases) — nobody has done this yet, only
-   Base has been built/tested on mac.
-3. Move on to Phase 3 (shared-database/"client mode") — all the design is already in the
-   plan, no code written yet.
+**Pushed.** `ab7c5de` (the arch-naming fix + docs) is now on `origin/feat/macos-support`.
+This Mac had no GitHub auth at all going in — no `gh`, no SSH key, no stored credentials —
+so getting the push out required setting that up first (see "Mac tooling" below).
+
+**`cloudflared-mac/` sourced, Plus and Plus-Trial built and verified.** Cloudflare doesn't
+publish a universal darwin binary — separate `cloudflared-darwin-arm64.tgz` and
+`-amd64.tgz` — so combined them with `lipo -create` into one universal `cloudflared-mac/cloudflared`
+(80 MB), matching the same "one payload serves both dmg arches" shape `pgsql-mac/` already
+has. Confirmed the merged binary runs (`--version`) and is correctly `arm64`+`x86_64` fat.
+Ran `npm run electron:build:mac:plus` and `npm run electron:build:mac:trial:plus` — all
+four resulting dmgs (`WhiteVanOps-Plus-Setup-{arm64,x64}.dmg`,
+`WhiteVanOps-Plus-Trial-Setup-{arm64,x64}.dmg`) passed step 7b's cloudflared-present
+assertion, and separately confirmed the bundled `cloudflared` binary actually executes from
+inside both the `mac-arm64` and `mac` (x64) packaged `.app` bundles, not just that the file
+exists. `cloudflared-mac/` is gitignored, same as `pgsql-mac/` — not sourced anywhere in
+`MANUAL_Setup_Installation.md` yet (that's the one gap in this session's docs update: the
+`cloudflared/` section there is still Windows-only and doesn't mention the mac lipo step).
+
+**Mac tooling made persistent — this machine had nothing on it beyond Xcode CLT.** Both
+Node.js and `gh` were run all session from this session's temporary scratchpad
+(`/private/tmp/claude-501/.../scratchpad/`), which disappears when the session ends. Fixed
+before finishing:
+- `gh` CLI (v2.100.0) copied to `~/.local/bin/gh` (already on `$PATH`). Owner ran
+  `gh auth login` interactively (GitHub.com, HTTPS, browser device flow) — token is stored
+  in the macOS keychain via `gh`'s keyring integration, not in any session-local file.
+  `gh auth setup-git` wires git's `credential.helper` for `github.com` to
+  `!/Users/robertmear/.local/bin/gh auth git-credential` — confirmed working from a
+  from-scratch minimal shell (`env -i PATH=... git fetch`), so any future terminal session
+  on this Mac can `git push`/`pull` without re-authenticating.
+- Node.js 22.21.1 (darwin-arm64 tarball build, the same one already validated against this
+  project's `>=22.12`/`>=22` engine requirements — Node 20 threw `EBADENGINE` on
+  `@electron/rebuild`, `electron`, `firebase-admin`, `node-abi`) copied to
+  `~/.local/share/node-v22.21.1-darwin-arm64/`, with `node`/`npm`/`npx`/`corepack`
+  symlinked into `~/.local/bin`. Also confirmed working from a from-scratch minimal shell.
+  This machine still has no Homebrew and no nvm — if a different Node version is ever
+  needed, this is a plain directory-of-binaries, not a version manager; swap the symlinks or
+  drop in a second version directory.
+
+**What's still open, for real this time:**
+1. `MANUAL_Setup_Installation.md`'s `cloudflared/` section needs the mac `lipo` step added,
+   parallel to how the `pgsql-mac/` section already documents Postgres.app sourcing —
+   currently only this handoff records it.
+2. Phase 2d (signing) — still deferred, still needs an Apple Developer account. All four Base
+   and all four Plus/Plus-Trial mac dmgs so far are ad-hoc/unsigned by design.
+3. Phase 3 (shared-database/"client mode") — explicitly not started this session, per the
+   owner's request. All the design is already in the plan; no code written yet.
+4. Phase 4 (scripts/docs — `allow-field-access.sh`, `reset-admin-password.sh`, CI
+   `macos-latest` job) — also still not started.
