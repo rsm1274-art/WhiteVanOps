@@ -14,11 +14,12 @@ WhiteVanOps is an internal field operations management dashboard. It tracks jobs
 WhiteVanOps ships in two plans running on the same installation:
 
 - **Base** — everything described in Modules 1–7 below: jobs, scheduling, personnel, fleet, inventory, and QuickBooks CSV export.
-- **Plus** — adds four feature areas on top of Base:
+- **Plus** — adds five feature areas on top of Base:
   - **Client notes & follow-up reminders** in the Clients & Jobs module (Module 2)
   - **Business Analytics** tab — revenue, technician hours, and fleet cost charts (Module 8)
   - **Quotes & Estimates** tab — priced quotes with a customer approval link (Module 9)
   - **Invoicing & Payments** tab — internal invoices with PDF generation and payment tracking (Module 10)
+  - **Custom Reports** tab — build your own ad-hoc reports and export them (Module 11)
 
 The plan is controlled by a license setting in **Settings → License & Plan** (superuser only — see that section below). Upgrading requires no reinstall: flip the plan and the new tabs appear on the next dashboard refresh. Downgrading hides the Plus tabs and blocks the Plus features, but **never deletes** notes, follow-ups, quotes, invoices, or payment records — everything reappears if the plan is re-activated.
 
@@ -519,6 +520,44 @@ The **Onboarding Data Import** section at the bottom of Settings imports a busin
 
 ---
 
+## Module 11: Custom Reports (Plus only)
+
+Build your own reports instead of waiting on a specific chart in Business Analytics. Every report starts from **Jobs** and can pull in the client, vehicle, assigned technicians, parts used, logged time, invoices, and quotes tied to those jobs.
+
+### The field catalog
+
+The **Reports** tab opens with a searchable, grouped list of every field you're allowed to report on — Job, Client, Vehicle, Technicians, Parts & Materials, Time, Equipment, Invoicing, Quotes. Click a field (or drag it) to add it as a column. Fields belonging to Technicians, Parts & Materials, Time, and Equipment are marked because a job can have *several* of each — see "One row per job" below for what that means for your results.
+
+### Building the report
+
+- **Columns** — the fields you've added appear in order on the canvas. Reorder them with the up/down arrows, rename the column header, or remove it.
+- **Conditions** — add filters: "Status equals Completed," "Scheduled Date is between two dates," "Technician equals Alex," and so on. The options offered (equals, contains, before/after, a fixed list of choices) depend on the field's type.
+- **Preview** — the results table below updates automatically as you build, capped at 200 rows so it stays fast while you work. The full result appears when you save and export.
+
+### One row per job — and the "expand" option
+
+By default, **a report always shows one row per job**, even if that job has three technicians or ten parts. Multi-valued fields (technicians, parts, etc.) show as a comma-separated list in one cell, and you can click the small arrow at the left of a row to expand it into a mini-table of just that job's technicians or parts.
+
+If you need one row *per part* or *per technician* instead — for example, to total hours by individual tech — turn on **"Expand to one row per…"** for that one relationship. You can only expand one relationship at a time; expanding both technicians and parts together would multiply rows against each other and produce misleading totals, so the tool won't let you do it.
+
+### Saving, folders, and sharing
+
+Press **Save Report** to name it and optionally file it into a folder. A folder can be marked **Public** so every admin/superuser can see the reports inside it; an individual report can also be marked **Shared** on its own without a public folder. A report that is neither shared nor in a public folder is visible only to the person who created it. Any admin or superuser can edit or delete any report — there is currently no separate "view only" office role.
+
+If a saved report references a field that no longer exists (rare — only happens if a future update removes a field), it opens with those columns dropped and a banner explaining what was removed, rather than failing to open at all.
+
+### Exporting
+
+Three formats, from the **Export** menu:
+
+- **CSV** — plain data, opens in any spreadsheet program.
+- **Excel (XLSX)** — formatted, with real dates and currency columns.
+- **PDF** — a printable, paginated report. Because a printed page can only fit so many columns, PDF export is capped at 8 columns — narrow your report or use CSV/Excel instead for wider reports.
+
+Exports run against the full result (up to 50,000 rows), not just the 200-row on-screen preview.
+
+---
+
 ## Common Questions
 
 **Can I edit a job after it's Completed?**
@@ -541,6 +580,9 @@ No. The Invoicing tab (Plus) is an internal AR ledger with its own PDF invoices 
 
 **What happens to my notes and invoices if the Plus license lapses?**
 Nothing is deleted. The Plus tabs disappear and the Plus features are blocked, but all notes, follow-ups, invoices, and payments remain in the database and reappear when Plus is re-activated.
+
+**Why does a report only show one row per job even though a job has three technicians?**
+That's the default and, for most reports, what you want — otherwise a job with three technicians would count three times in any total you build from it. Expand a row with the arrow on the left to see the individual technicians, or turn on "Expand to one row per…" if you specifically need one row per technician (see Module 11).
 
 ---
 

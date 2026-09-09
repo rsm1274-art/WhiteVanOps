@@ -12,7 +12,7 @@ if (!connectionString) {
   throw new Error("DATABASE_URL environment variable is not defined");
 }
 
-const pool = new pg.Pool({ connectionString });
+export const pool = new pg.Pool({ connectionString });
 const adapter = new PrismaPg(pool);
 
 export const prisma =

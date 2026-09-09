@@ -267,6 +267,12 @@ model Job {
   quotes              Quote[]
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+
+  // Added for the Plus-tier report builder (Phase 5): status/scheduledDate
+  // are the report engine's most likely filter columns, and Job had no
+  // index at all before this. See docs/superpowers/plans/
+  // 2026-09-09-report-builder-plus.md, "Performance guards".
+  @@index([status, scheduledDate])
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +375,8 @@ model User {
   auditLogs           AuditLog[]
   clientNotes         ClientNote[]
   paymentsRecorded    Payment[]
+  reportFolders       ReportFolder[]
+  savedReports        SavedReport[]
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 }
@@ -377,7 +385,7 @@ model AuditLog {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  action    String // "CREATE" | "UPDATE" | "DELETE"
+  action    String // "CREATE" | "UPDATE" | "DELETE" | "EXPORT"
   entity    String // "Job" | "TimeEntry" | "Client" | etc.
   entityId  String
   details   String? // JSON
@@ -473,4 +481,33 @@ model QuoteLineItem {
   quantity    Float
   rate        Float
   createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Plus tier — custom report builder
+// ---------------------------------------------------------------------------
+model ReportFolder {
+  id          String        @id @default(cuid())
+  name        String
+  isPublic    Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  reports     SavedReport[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model SavedReport {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  rootEntity  String        @default("job") // currently only "job" — see graph.ts
+  definition  Json // ReportDefinition shape; re-validated on every read, see definition.ts
+  folderId    String?
+  folder      ReportFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  isShared    Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }
