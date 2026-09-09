@@ -98,3 +98,43 @@ export function setExpandRelation(def: ReportDefinition, relationKey: string | u
 export function setSort(def: ReportDefinition, sort: ReportSort[] | undefined): ReportDefinition {
   return { ...def, sort: sort && sort.length > 0 ? sort : undefined };
 }
+
+export interface SanitizeResult {
+  definition: ReportDefinition;
+  droppedFieldKeys: string[];
+}
+
+/**
+ * Drops any column/condition/sort referencing a field key not in
+ * `knownFieldKeys`, and clears expandRelation if it names a relation with no
+ * surviving column (Phase 3: loading a SavedReport whose registry entries
+ * have since been removed — "definition drift"). Runs client-side against
+ * the already-fetched field catalog so the builder can open a stale saved
+ * report with a visible banner instead of failing to load at all. This is a
+ * UX convenience only — the server re-validates with validateDefinition on
+ * every save/run regardless, per definition.ts's own doc comment.
+ */
+export function sanitizeAgainstCatalog(def: ReportDefinition, knownFieldKeys: ReadonlySet<string>): SanitizeResult {
+  const dropped = new Set<string>();
+  const keep = (key: string) => {
+    if (knownFieldKeys.has(key)) return true;
+    dropped.add(key);
+    return false;
+  };
+
+  const columns = def.columns.filter((c) => keep(c.fieldKey));
+  const filters = def.filters
+    .map((group) => ({ ...group, conditions: group.conditions.filter((c) => keep(c.fieldKey)) }))
+    .filter((group) => group.conditions.length > 0);
+  const sort = def.sort?.filter((s) => keep(s.fieldKey));
+
+  return {
+    definition: {
+      ...def,
+      columns,
+      filters,
+      sort: sort && sort.length > 0 ? sort : undefined,
+    },
+    droppedFieldKeys: [...dropped],
+  };
+}

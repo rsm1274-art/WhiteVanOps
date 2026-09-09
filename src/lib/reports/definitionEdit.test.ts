@@ -11,6 +11,7 @@ import {
   removeCondition,
   setExpandRelation,
   setSort,
+  sanitizeAgainstCatalog,
 } from "./definitionEdit";
 import type { ReportDefinition } from "./types";
 
@@ -197,5 +198,47 @@ describe("setSort", () => {
 
   it("normalizes undefined to undefined", () => {
     expect(setSort(emptyDefinition(), undefined).sort).toBeUndefined();
+  });
+});
+
+describe("sanitizeAgainstCatalog", () => {
+  const known = new Set(["job.status", "client.name"]);
+
+  it("keeps columns, conditions, and sort whose field keys are known", () => {
+    let def = addColumn(emptyDefinition(), "job.status");
+    def = addCondition(def, { fieldKey: "job.status", operator: "eq", value: "Scheduled" });
+    def = setSort(def, [{ fieldKey: "job.status", direction: "asc" }]);
+
+    const { definition, droppedFieldKeys } = sanitizeAgainstCatalog(def, known);
+    expect(definition).toEqual(def);
+    expect(droppedFieldKeys).toEqual([]);
+  });
+
+  it("drops a column referencing an unknown field key and reports it", () => {
+    const def = addColumn(emptyDefinition(), "personnel.payRate");
+    const { definition, droppedFieldKeys } = sanitizeAgainstCatalog(def, known);
+    expect(definition.columns).toEqual([]);
+    expect(droppedFieldKeys).toEqual(["personnel.payRate"]);
+  });
+
+  it("drops only the unknown condition and removes an emptied filter group", () => {
+    let def = addCondition(emptyDefinition(), { fieldKey: "personnel.payRate", operator: "gt", value: 10 });
+    const { definition, droppedFieldKeys } = sanitizeAgainstCatalog(def, known);
+    expect(definition.filters).toEqual([]);
+    expect(droppedFieldKeys).toEqual(["personnel.payRate"]);
+  });
+
+  it("keeps a known condition in its group while dropping an unknown sibling", () => {
+    let def = addCondition(emptyDefinition(), { fieldKey: "job.status", operator: "eq", value: "Scheduled" });
+    def = addCondition(def, { fieldKey: "personnel.payRate", operator: "gt", value: 10 });
+    const { definition, droppedFieldKeys } = sanitizeAgainstCatalog(def, known);
+    expect(definition.filters).toEqual([{ join: "AND", conditions: [{ fieldKey: "job.status", operator: "eq", value: "Scheduled" }] }]);
+    expect(droppedFieldKeys).toEqual(["personnel.payRate"]);
+  });
+
+  it("normalizes an all-dropped sort list to undefined", () => {
+    const def = setSort(emptyDefinition(), [{ fieldKey: "personnel.payRate", direction: "desc" }]);
+    const { definition } = sanitizeAgainstCatalog(def, known);
+    expect(definition.sort).toBeUndefined();
   });
 });

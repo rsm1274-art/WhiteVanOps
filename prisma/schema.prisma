@@ -369,6 +369,8 @@ model User {
   auditLogs           AuditLog[]
   clientNotes         ClientNote[]
   paymentsRecorded    Payment[]
+  reportFolders       ReportFolder[]
+  savedReports        SavedReport[]
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 }
@@ -473,4 +475,33 @@ model QuoteLineItem {
   quantity    Float
   rate        Float
   createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Plus tier — custom report builder
+// ---------------------------------------------------------------------------
+model ReportFolder {
+  id          String        @id @default(cuid())
+  name        String
+  isPublic    Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  reports     SavedReport[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model SavedReport {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  rootEntity  String        @default("job") // currently only "job" — see graph.ts
+  definition  Json // ReportDefinition shape; re-validated on every read, see definition.ts
+  folderId    String?
+  folder      ReportFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  isShared    Boolean       @default(false)
+  createdById String?
+  createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 }

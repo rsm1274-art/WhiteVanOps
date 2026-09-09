@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, RotateCw } from "lucide-react";
+import { AlertTriangle, RotateCw, Save } from "lucide-react";
 import type { Aggregation, FieldDef, ReportDefinition } from "@/lib/reports/types";
+import type { SavedReport } from "@/types";
 import {
   emptyDefinition,
   addColumn,
@@ -14,11 +15,14 @@ import {
   updateCondition,
   removeCondition,
   setExpandRelation,
+  sanitizeAgainstCatalog,
 } from "@/lib/reports/definitionEdit";
 import FieldCatalog from "@/components/reports/FieldCatalog";
 import ColumnCanvas from "@/components/reports/ColumnCanvas";
 import ConditionBuilder from "@/components/reports/ConditionBuilder";
 import PreviewTable, { type ReportPreviewResult } from "@/components/reports/PreviewTable";
+import SavedReportsPanel from "@/components/reports/SavedReportsPanel";
+import SaveReportModal from "@/components/modals/SaveReportModal";
 
 // Container: owns the ReportDefinition being built and debounces a live preview
 // fetch against it. Deliberately does NOT use useDashboardData — that hook's
@@ -44,6 +48,10 @@ export default function ReportsTab({ onShowToast }: Props) {
   const [preview, setPreview] = useState<ReportPreviewResult | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [editingReport, setEditingReport] = useState<SavedReport | null>(null);
+  const [driftBanner, setDriftBanner] = useState<string | null>(null);
+  const [savedReportsRefreshToken, setSavedReportsRefreshToken] = useState(0);
 
   useEffect(() => {
     fetch("/api/reports/fields")
@@ -105,6 +113,24 @@ export default function ReportsTab({ onShowToast }: Props) {
     setDefinition((prev) => addColumn(prev, field.key, aggregation));
   };
 
+  const handleLoadReport = (report: SavedReport) => {
+    const known = new Set(fieldByKey.keys());
+    const { definition: sanitized, droppedFieldKeys } = sanitizeAgainstCatalog(report.definition, known);
+    setDefinition(sanitized);
+    setEditingReport(report);
+    setDriftBanner(
+      droppedFieldKeys.length > 0
+        ? `${droppedFieldKeys.length} column${droppedFieldKeys.length === 1 ? "" : "s"} in "${report.name}" no longer exist and were removed: ${droppedFieldKeys.join(", ")}.`
+        : null
+    );
+  };
+
+  const handleStartNewReport = () => {
+    setDefinition(emptyDefinition());
+    setEditingReport(null);
+    setDriftBanner(null);
+  };
+
   const selectedFieldKeys = useMemo(() => new Set(definition.columns.map((c) => c.fieldKey)), [definition.columns]);
   const conditions = definition.filters[0]?.conditions ?? [];
 
@@ -127,21 +153,61 @@ export default function ReportsTab({ onShowToast }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="pb-4 border-b border-zinc-200">
-        <h3 className="text-base font-bold uppercase text-zinc-800">Custom Reports</h3>
-        <p className="text-xs text-zinc-500 mt-1">
-          Build an ad-hoc report from job data. Pick fields, add filters, and preview live — nothing is saved yet.
-        </p>
+      <div className="pb-4 border-b border-zinc-200 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-bold uppercase text-zinc-800">Custom Reports</h3>
+          <p className="text-xs text-zinc-500 mt-1">
+            Build an ad-hoc report from job data. Pick fields, add filters, and preview live.
+            {editingReport && ` Editing "${editingReport.name}".`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {editingReport && (
+            <button
+              type="button"
+              onClick={handleStartNewReport}
+              className="text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-zinc-800 px-3 py-2"
+            >
+              New Report
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsSaveModalOpen(true)}
+            disabled={definition.columns.length === 0}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-white bg-blue-700 hover:bg-blue-800 disabled:bg-zinc-300 disabled:cursor-not-allowed rounded px-3 py-2"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {editingReport ? "Update Report" : "Save Report"}
+          </button>
+        </div>
       </div>
 
+      {driftBanner && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {driftBanner}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
-        <div className="lg:h-[420px]">
-          <FieldCatalog
-            fields={catalog.fields}
-            groups={catalog.groups}
-            selectedFieldKeys={selectedFieldKeys}
-            onAddField={handleAddField}
-          />
+        <div className="space-y-4">
+          <div className="lg:h-[420px]">
+            <FieldCatalog
+              fields={catalog.fields}
+              groups={catalog.groups}
+              selectedFieldKeys={selectedFieldKeys}
+              onAddField={handleAddField}
+            />
+          </div>
+          <div className="pt-3 border-t border-zinc-200">
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Saved Reports</h4>
+            <SavedReportsPanel
+              refreshToken={savedReportsRefreshToken}
+              onLoadReport={handleLoadReport}
+              onError={(msg) => onShowToast(msg, true)}
+            />
+          </div>
         </div>
 
         <div className="space-y-4 min-w-0">
@@ -193,6 +259,20 @@ export default function ReportsTab({ onShowToast }: Props) {
           </div>
         </div>
       </div>
+
+      {isSaveModalOpen && (
+        <SaveReportModal
+          definition={definition}
+          editing={editingReport}
+          onClose={() => setIsSaveModalOpen(false)}
+          onSuccess={(msg, report) => {
+            onShowToast(msg);
+            setEditingReport(report);
+            setSavedReportsRefreshToken((n) => n + 1);
+          }}
+          onError={(msg) => onShowToast(msg, true)}
+        />
+      )}
     </div>
   );
 }
