@@ -19,6 +19,7 @@ import {
   BarChart3,
   Receipt,
   FileCheck,
+  FileBarChart,
 } from "lucide-react";
 
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -37,6 +38,7 @@ import SettingsTab from "@/components/tabs/SettingsTab";
 import AnalyticsTab from "@/components/tabs/AnalyticsTab";
 import QuotesTab from "@/components/tabs/QuotesTab";
 import InvoicingTab from "@/components/tabs/InvoicingTab";
+import ReportsTab from "@/components/tabs/ReportsTab";
 
 // Modals
 import AddClientModal from "@/components/modals/AddClientModal";
@@ -71,7 +73,7 @@ import NotificationBell from "@/components/shared/NotificationBell";
 // ---------------------------------------------------------------------------
 // Types for modal context payloads
 // ---------------------------------------------------------------------------
-type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "analytics" | "quotes" | "invoicing" | "accounting" | "settings";
+type TabId = "overview" | "crm" | "scheduling" | "personnel" | "fleet" | "inventory" | "analytics" | "quotes" | "invoicing" | "reports" | "accounting" | "settings";
 
 const TAB_LABELS: Record<TabId, string> = {
   overview: "Operations Overview",
@@ -83,6 +85,7 @@ const TAB_LABELS: Record<TabId, string> = {
   analytics: "Business Analytics",
   quotes: "Quotes & Estimates",
   invoicing: "Invoicing & Payments",
+  reports: "Custom Reports",
   accounting: "QuickBooks Export Sync",
   settings: "System Settings",
 };
@@ -99,6 +102,7 @@ const NAV: { id: TabId; label: string; icon: React.ReactNode; plusOnly?: boolean
   { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" />, plusOnly: true },
   { id: "quotes", label: "Quotes", icon: <FileCheck className="h-4 w-4" />, plusOnly: true },
   { id: "invoicing", label: "Invoicing", icon: <Receipt className="h-4 w-4" />, plusOnly: true },
+  { id: "reports", label: "Reports", icon: <FileBarChart className="h-4 w-4" />, plusOnly: true },
   { id: "accounting", label: "QuickBooks Sync", icon: <FileSpreadsheet className="h-4 w-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
 ];
@@ -162,7 +166,7 @@ export default function Dashboard() {
   // now-hidden Plus tab (derived during render — no effect needed).
   const plus = data?.license.plus ?? false;
   const effectiveTab: TabId =
-    !plus && (activeTab === "analytics" || activeTab === "invoicing" || activeTab === "quotes")
+    !plus && (activeTab === "analytics" || activeTab === "invoicing" || activeTab === "quotes" || activeTab === "reports")
       ? "overview"
       : activeTab;
 
@@ -1051,6 +1055,8 @@ export default function Dashboard() {
               onDeleteInvoice={requestDeleteInvoice}
             />
           )}
+
+          {effectiveTab === "reports" && plus && <ReportsTab onShowToast={showToast} />}
 
           {effectiveTab === "accounting" && (
             <AccountingTab
