@@ -271,6 +271,16 @@ The Next.js server runs locally in the customer's office; nothing about field ac
 
 To do it by hand instead: Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port → TCP → 3000 → Allow → Private only. Don't rely on the one-time "Allow this app through the firewall" popup — it's easy to dismiss, and dismissing it creates a *block* rule that then has to be found and deleted.
 
+**Step 3 (macOS) — Allow the app through the macOS Application Firewall.** Same requirement, different mechanism: macOS's firewall is per-app rather than per-port, so there's no port number to configure — just the app itself.
+
+1. On the Mac, open Terminal and run:
+   ```bash
+   sudo scripts/recovery/allow-field-access.sh
+   ```
+   To undo, run it with `--remove`. Pass `--app-path` if WhiteVanOps isn't installed at the default `/Applications/WhiteVanOps.app`.
+2. The first time WhiteVanOps runs, macOS may separately prompt "Accept incoming network connections?" — click **Allow**. If it was dismissed or answered Deny, remove WhiteVanOps from System Settings → Network → Firewall → Options and re-run the script so it prompts again.
+3. **On macOS 15 and later, also grant the Local Network permission**: System Settings → Privacy & Security → Local Network → WhiteVanOps. Without it, the app never accepts LAN connections at all, firewall rule or not — this is the macOS 15 case the `NSLocalNetworkUsageDescription` in the app's Info.plist exists to explain to the user when the OS itself prompts for it.
+
 **Step 4 — Hand out access to field techs.**
 1. Have each tech, **while connected to the office WiFi**, scan the QR code with their phone camera and sign in.
 2. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.

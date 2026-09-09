@@ -47,10 +47,12 @@ if (args.includes("--help") || args.includes("-h")) {
 Admin password recovery for WhiteVanOps.
 
 Usage (via the wrapper):
-  .\\reset-admin-password.ps1 [-InstallDir <path>] [-Username <name>] [-List] [-Create]
+  Windows: .\\reset-admin-password.ps1 [-InstallDir <path>] [-Username <name>] [-List] [-Create]
+  macOS:   ./reset-admin-password.sh [--install-dir <path>] [--username <name>] [--list] [--create]
 
 Options:
-  --install-dir <path>  Install root (the folder containing resources\\nextjs).
+  --install-dir <path>  Install root — the folder containing resources\\nextjs
+                        on Windows, or the WhiteVanOps.app bundle on macOS.
                         Auto-detected when run from inside an install tree.
   --username <name>     Account to reset. Default: admin
   --list                Show existing admin/superuser accounts and exit without
@@ -72,7 +74,8 @@ function resolveNextjsDir() {
   const candidates = [];
 
   if (explicit) {
-    candidates.push(path.join(explicit, "resources", "nextjs"));
+    candidates.push(path.join(explicit, "resources", "nextjs")); // Windows: <install dir>\resources\nextjs
+    candidates.push(path.join(explicit, "Contents", "Resources", "nextjs")); // macOS: WhiteVanOps.app/Contents/Resources/nextjs
     candidates.push(path.join(explicit, "nextjs"));
     candidates.push(explicit);
   }
@@ -81,6 +84,7 @@ function resolveNextjsDir() {
   let dir = __dirname;
   for (let i = 0; i < 6; i++) {
     candidates.push(path.join(dir, "resources", "nextjs"));
+    candidates.push(path.join(dir, "Contents", "Resources", "nextjs"));
     candidates.push(path.join(dir, "nextjs"));
     dir = path.dirname(dir);
   }
