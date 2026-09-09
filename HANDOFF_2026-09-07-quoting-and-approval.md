@@ -289,3 +289,27 @@ Two stashes also survive from earlier sessions
 
 Before that, though, someone needs to run the migration and actually click through the
 quote flow once. Items 1 and 2 above are the blocking ones.
+
+## Owner note (2026-09-09): custom report builder, Plus tier — blocked on macOS QA
+
+Owner wants to start building a custom/ad-hoc report builder for the Plus tier (IAPro-style:
+drag/drop field catalog grouped by entity, live preview, query builder with enum/date-range
+conditions, incident/root-entity pivoting with join fan-out, row hyperlinks, stacking,
+CSV/XLSX/PDF export, saved reports with public folders and creator-or-admin edit rights).
+
+**Gate: do not start this until full macOS functionality is confirmed for the existing
+feature set.** This repo is Windows-only today (Electron installer, bundled PostgreSQL,
+build tooling — see "Windows is the only build target" in CLAUDE.md). The owner wants
+existing features verified working on macOS first, before adding a new Plus-tier feature
+on top.
+
+Once that's confirmed, the report builder work should start with WVO's root entity — most
+likely `Job` (with `Client`, `Vehicle`, `Personnel`/techs, `JobLineItem`, `TimeEntry` hanging
+off it) rather than IAPro's `Incident` — then a Phase 0 field registry (whitelist: key,
+label, group, data type, Prisma relation path, allowed operators, `requiresRole`) before
+any query execution work. Query layer likely needs Kysely alongside Prisma since Prisma's
+typed client can't express arbitrary user-composed joins; fix IAPro's known row-duplication
+flaw by rooting on the primary entity and aggregating one-to-many relations (`json_agg`)
+instead of reproducing the fan-out, with an explicit opt-in "expand to line-item rows" mode.
+Online-only (field techs are offline PWA), fits Plus's analytics bucket, needs registry +
+role gating designed in from Phase 0 to prevent ad-hoc queries over pay rates/customer PII.
