@@ -132,3 +132,82 @@ Windows show the same data. All the design is in the plan; none of the code
    (source the `pgsql-mac/` binaries, then run `npm run electron:build:mac` for real).
 3. Whichever happens first, Phase 1 and Phase 2's Windows-side code is a safe base to build
    on — it's tested and doesn't regress the existing Windows installers.
+
+---
+
+## Update — same day, on the Mac: Phase 2b done, and `npm run electron:build:mac` has now
+## actually run
+
+Everything above this line was written before ever touching a Mac. This picks up from
+"Phase 1 + 2 code, uncommitted" — that code is now **committed** (`3a1427b`), and Phase 2b
+is done.
+
+**Sourcing decision:** the plan's first-preference source (zonky's embedded-postgres
+darwin-arm64 archive) turned out to ship **no `pg_dump`, `psql`, or any client tool at
+all** — only `postgres`/`initdb`/`pg_ctl`. That's enough to start a database but not to
+back one up, which `electron/backup.js` and the backup API route both need. Went with
+Postgres.app instead (the plan's third-preference option): its binaries are universal
+(arm64 + x86_64 in one file, no Rosetta needed) and include the full toolset, so server and
+client tools come from the same build with no version-mismatch risk. Full sourcing steps —
+which exact binaries, which exact `lib/` dylibs (computed via `otool -L` closure, not copied
+wholesale — Postgres.app's PostGIS bundle drags in ~150 MB of unrelated GDAL/PROJ/GEOS libs
+that nothing here uses), which two `lib/postgresql/` extension modules are actually
+required and why — are now written up in `MANUAL_Setup_Installation.md`, mirroring its
+existing Windows `pgsql/` section. Final payload: ~160 MB, gitignored like `pgsql/`.
+
+**A real bug found by actually running the build:** `package.json`'s `mac.dmg` target
+builds both `arm64` and `x64` from one `electron-builder` invocation, but
+`scripts/electron-build.js`'s `ARTIFACT_NAMES.mac` entries were a single fixed filename
+per variant (e.g. `WhiteVanOps-Base-Setup.dmg`) with no arch in it. electron-builder built
+the arm64 dmg, wrote it to that name, then built the x64 dmg and **silently overwrote it**
+— the file left on disk was x64-only (needs Rosetta), and step 7b's post-build verification
+only ever checked the `mac-arm64` unpacked directory, so that surviving x64 file had never
+actually been asserted to contain `pgsql-mac`, the Prisma client, or anything else. Caught
+this by literally mounting the resulting dmg and checking `file` on the app binary inside —
+first run showed `x86_64` where `arm64` was expected. Fixed by giving `ARTIFACT_NAMES.mac`
+an `${arch}` token (electron-builder's own templating syntax, which it substitutes when
+writing each file) and restructuring the step-7b/7c verification, the final-artifact check,
+and the buildinfo/manifest bookkeeping to loop over both `{arch: 'arm64', unpackedDir:
+'mac-arm64'}` and `{arch: 'x64', unpackedDir: 'mac'}` instead of a single hardcoded target.
+Windows is untouched by this — its `ARTIFACT_NAMES.win` entries carry no `${arch}` token, so
+`resolvedArtifactName(null)` is a no-op and the single-target code path behaves exactly as
+before. Re-ran the build after the fix: both `WhiteVanOps-Base-Setup-arm64.dmg` (243 MB) and
+`WhiteVanOps-Base-Setup-x64.dmg` (244 MB) now exist as distinct files, each independently
+verified, and mounting each and running `file` on the app binary inside confirms `arm64` and
+`x86_64` respectively.
+
+**Full end-to-end first-run test, not just a packaging check:** built the mac Base **trial**
+variant (`npm run electron:build:mac:trial`) specifically so the run wouldn't block on
+license activation, then ran the unpacked `mac-arm64/WhiteVanOps.app` binary directly (not
+just `open`, so stdout is visible) against a wiped `~/Library/Application Support/whitevanops`.
+Result: `initdb` succeeded, PostgreSQL 17.11 started on port 5433, all 6 Prisma migrations
+applied, the admin superuser was bootstrapped, the backup scheduler initialized, and the
+Next.js standalone server came up ("✓ Ready in 0ms") — the exact sequence
+`ensurePostgres()`/`startServer()` are supposed to run, using the real `pgsql-mac/` payload
+inside the real packaged app, not a standalone binary test. Stopped it cleanly afterward
+(`pg_ctl ... stop`, confirmed no orphaned `postgres` process, wiped the test appData
+directory) — nothing from this test run is left on disk.
+
+**What's still true from before:** Phase 2d (signing) is still deferred by design — this Mac
+had no valid, non-expired code-signing identity available anyway (`electron-builder` listed
+several, all `CSSMERR_TP_CERT_EXPIRED`), so both dmgs built ad-hoc-signed/unsigned, exactly
+as planned for a first Mac build. Phase 3 (shared-database mode) and Phase 4 (scripts/docs)
+are both still not started.
+
+**Committed:** `scripts/electron-build.js`'s arch-naming fix. **Not committed:**
+`pgsql-mac/` itself (correctly gitignored, ~160 MB, machine-local — every future mac build
+on any machine needs to (re)create it per the new `MANUAL_Setup_Installation.md` section,
+same as `pgsql/` on Windows) and the built `.dmg`/`.dmg.blockmap`/`.buildinfo.txt` files
+under `dist-electron/` (also gitignored, disposable build output).
+
+## Next session should (updated)
+
+1. Phase 2 (Windows + Mac packaging) is now fully done and verified on real hardware —
+   Base builds clean on both platforms, both mac arches individually confirmed working
+   end-to-end including a real database bootstrap. Phase 2d (signing) stays deferred until
+   there's an Apple Developer account.
+2. A Plus mac build (`electron:build:mac:plus`) still needs a `cloudflared-mac/cloudflared`
+   binary sourced (darwin build from Cloudflare's releases) — nobody has done this yet, only
+   Base has been built/tested on mac.
+3. Move on to Phase 3 (shared-database/"client mode") — all the design is already in the
+   plan, no code written yet.

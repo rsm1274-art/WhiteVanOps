@@ -61,6 +61,23 @@ The build bundles portable PostgreSQL binaries from the project's `pgsql/` direc
 
 `npm run electron:build` **fails** if `pgsql/bin/pg_ctl.exe` is missing, and after packaging it re-verifies that `dist-electron/win-unpacked/resources/pgsql/bin/pg_ctl.exe` and `resources/nextjs/node_modules/next` exist. This guard exists because electron-builder silently skips missing `extraResources` sources — a `pgsql`-less build machine used to produce an installer with no database engine at all, which fails on first launch with "Failed to load dashboard data" on any machine without its own PostgreSQL. If a packaged app is ever started without bundled binaries (and nothing already listening on the database port), it now shows a "Database engine missing" startup error instead of opening a broken window.
 
+### PostgreSQL binaries for the macOS build (`pgsql-mac/` directory)
+
+The mac build bundles portable PostgreSQL binaries from `pgsql-mac/` (~160 MB, gitignored exactly like `pgsql/`). The zonky embedded-postgres darwin-arm64 archive (the plan's first-preference source) ships **no `pg_dump`, `psql`, or any other client tool** — only `postgres`/`initdb`/`pg_ctl`, which is enough to start a database but not to back one up. Sourced from Postgres.app instead, since its binaries are universal (arm64 + x86_64, no Rosetta) and include the full toolset. To (re)create it:
+
+1. Download the single-major-version dmg from the latest [Postgres.app release](https://github.com/PostgresApp/PostgresApp/releases/latest), e.g. `Postgres-2.9.6-17.dmg` (~120 MB — much smaller than the all-versions dmg).
+2. Mount it (`hdiutil attach`) and locate `Postgres.app/Contents/Versions/17/`.
+3. Copy only what this app actually invokes into a new `pgsql-mac/` at the project root:
+   - `bin/`: `postgres`, `initdb`, `pg_ctl`, `pg_dump` — the four binaries `electron/postgres.js` and `electron/backup.js`/`src/app/api/settings/backup/route.ts` call. Postgres.app's `bin/` also ships PostGIS/GDAL/PROJ tools (`gdal*`, `ogr*`, `proj*`, `postgis*`, etc.) and other core client tools (`psql`, `pg_restore`, ...) — none of these are used by the app, so leave them out.
+   - `lib/`: only the dylibs those four binaries actually load — run `otool -L` on each (and recursively on their own dependencies) to get the exact closure; do **not** copy `lib/` wholesale, since Postgres.app's PostGIS bundle drags in ~150 MB of unrelated GDAL/PROJ/GEOS libraries. As of PostgreSQL 17.11 the closure is: `libcrypto.3.dylib`, `libicudata.75.dylib`, `libicui18n.75.dylib`, `libicuuc.75.dylib`, `liblz4.1.dylib`, `libpq.5.dylib`, `libssl.3.dylib`, `libxml2.2.dylib`, `libzstd.1.dylib`.
+   - `lib/postgresql/`: `plpgsql.dylib` (Postgres registers the PL/pgSQL language by default on every `initdb`) and `dict_snowball.dylib` (the default text-search configuration's stemmer — `initdb`'s post-bootstrap step hard-fails without it, even though the app never calls it directly). No other extension module is needed; nothing in `prisma/migrations/` runs `CREATE EXTENSION`.
+   - `share/postgresql/`: copy the whole directory (timezone data, config templates, `information_schema.sql`, `tsearch_data/`, etc. — all required by `initdb`). Do not copy `share/gdal`, `share/proj`, `share/doc`, `share/man`, or the other Postgres.app extras.
+4. Preserve the executable bit on everything under `bin/` (`chmod +x pgsql-mac/bin/*`).
+
+Verify the payload works in isolation before trusting it in a full build — from the project root: `pgsql-mac/bin/initdb -D /tmp/pgtest -U wvo_user -E UTF8 --locale=C -A scram-sha-256 --pwfile=<(echo somepassword)`, then `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -l /tmp/pg.log -o "-p 5544" start`, then `pgsql-mac/bin/pg_dump -h 127.0.0.1 -p 5544 -U wvo_user postgres > /dev/null` should all succeed, followed by `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -m fast stop` and `rm -rf /tmp/pgtest`.
+
+`npm run electron:build:mac` fails the same way `electron:build` does if `pgsql-mac/bin/pg_ctl` is missing, and re-verifies both the `mac-arm64` and `mac` (x64) packaged outputs after building — mac produces two separate installers (`WhiteVanOps-Base-Setup-arm64.dmg` and `WhiteVanOps-Base-Setup-x64.dmg`) from one electron-builder invocation, and both are checked independently.
+
 ### `cloudflared` binary for the build (`cloudflared/` directory)
 
 Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:build:trial:plus`) — Base builds don't need it and must not have it. Gitignored, not committed to git, exactly like `pgsql/`. To (re)create it:
