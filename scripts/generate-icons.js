@@ -4,6 +4,10 @@
 //   public/icons/icon-512.png  PWA manifest icon
 //   public/apple-touch-icon.png 180px iOS home-screen icon
 //   src/app/favicon.ico        multi-size favicon (16/32/48/64/128/256)
+//   build/icon.png             1024px macOS app icon source — electron-builder
+//                              converts this into the .icns the `mac` target
+//                              needs; no .icns-writing library is installed,
+//                              and electron-builder accepts a large square PNG.
 const sharp = require('sharp');
 const pngToIcoModule = require('png-to-ico');
 const pngToIco = pngToIcoModule.default || pngToIcoModule;
@@ -20,11 +24,13 @@ async function render(size, dest) {
 
 (async () => {
   fs.mkdirSync(path.join(root, 'public', 'icons'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'build'), { recursive: true });
 
   await render(512, path.join(root, 'public', 'logo.png'));
   await render(192, path.join(root, 'public', 'icons', 'icon-192.png'));
   await render(512, path.join(root, 'public', 'icons', 'icon-512.png'));
   await render(180, path.join(root, 'public', 'apple-touch-icon.png'));
+  await render(1024, path.join(root, 'build', 'icon.png'));
 
   const icoSizes = [16, 32, 48, 64, 128, 256];
   const tmp = [];

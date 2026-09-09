@@ -1,4 +1,5 @@
-// Production build: Next.js standalone → electron-builder NSIS installer (Base / Plus / trial variants)
+// Production build: Next.js standalone → electron-builder installer (Base / Plus / trial
+// variants), NSIS .exe by default or a .dmg with --mac. The Mac build must run on a Mac.
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -10,6 +11,11 @@ const args = process.argv.slice(2);
 const isBase = args.includes('--base');
 const isPlus = args.includes('--plus');
 const isTrial = args.includes('--trial');
+// The Mac build must actually run on a Mac (electron-builder can't produce a
+// signed-shape .app on Windows, and the pgsql-mac/cloudflared-mac payloads are
+// macOS binaries). This flag only selects which config/checks apply here.
+const isMac = args.includes('--mac');
+const targetPlatform = isMac ? 'mac' : 'win';
 
 if (args.includes('--upgrade')) {
   console.error('\n❌ --upgrade was removed on 2026-07-24.');
@@ -53,14 +59,22 @@ const variant = isTrial ? 'trial' : 'full';
 const bundlesCloudflared = plan === 'plus';
 
 const ARTIFACT_NAMES = {
-  'full:base': 'WhiteVanOps-Base-Setup.exe',
-  'full:plus': 'WhiteVanOps-Plus-Setup.exe',
-  'trial:base': 'WhiteVanOps-Base-Trial-Setup.exe',
-  'trial:plus': 'WhiteVanOps-Plus-Trial-Setup.exe',
+  win: {
+    'full:base': 'WhiteVanOps-Base-Setup.exe',
+    'full:plus': 'WhiteVanOps-Plus-Setup.exe',
+    'trial:base': 'WhiteVanOps-Base-Trial-Setup.exe',
+    'trial:plus': 'WhiteVanOps-Plus-Trial-Setup.exe',
+  },
+  mac: {
+    'full:base': 'WhiteVanOps-Base-Setup.dmg',
+    'full:plus': 'WhiteVanOps-Plus-Setup.dmg',
+    'trial:base': 'WhiteVanOps-Base-Trial-Setup.dmg',
+    'trial:plus': 'WhiteVanOps-Plus-Trial-Setup.dmg',
+  },
 };
-const artifactName = ARTIFACT_NAMES[`${variant}:${plan}`];
+const artifactName = ARTIFACT_NAMES[targetPlatform][`${variant}:${plan}`];
 
-console.log(`\nBuilding ${artifactName}  (variant=${variant} plan=${plan} cloudflared=${bundlesCloudflared})`);
+console.log(`\nBuilding ${artifactName}  (platform=${targetPlatform} variant=${variant} plan=${plan} cloudflared=${bundlesCloudflared})`);
 
 function run(cmd, env = {}) {
   console.log(`\n> ${cmd}`);
@@ -83,12 +97,18 @@ const distElectron = path.join(root, 'dist-electron');
 // ==========================================
 // Clean only the temporary build output to preserve previously generated
 // installers. Do NOT blanket-delete dist-electron/: the finished installers
-// live here and they are built one variant at a time (four of them now), so a
-// wipe would destroy artifacts this run cannot rebuild.
+// live here and they are built one variant at a time (eight of them now
+// across both platforms), so a wipe would destroy artifacts this run cannot
+// rebuild.
 //
-const unpackedForTarget = path.join(distElectron, 'win-unpacked');
-if (fs.existsSync(unpackedForTarget)) {
-  fs.rmSync(unpackedForTarget, { recursive: true, force: true });
+// electron-builder names the unpacked dir per-arch on mac (mac-arm64, mac),
+// but always win-unpacked on Windows regardless of arch.
+const unpackedDirsForTarget = isMac ? ['mac-arm64', 'mac'] : ['win-unpacked'];
+for (const dir of unpackedDirsForTarget) {
+  const p = path.join(distElectron, dir);
+  if (fs.existsSync(p)) {
+    fs.rmSync(p, { recursive: true, force: true });
+  }
 }
 
 // Disposable per-build metadata and staging artifacts. Each build drops a fresh
@@ -205,13 +225,26 @@ fs.mkdirSync(path.join(root, '.next', 'db'), { recursive: true });
 fs.writeFileSync(path.join(root, '.next', 'db', 'schema.sql'), schemaSql);
 console.log(`\nGenerated .next/db/schema.sql from ${migrations.length} migrations.`);
 
+// Platform-aware payload dirs and binary names. Mac binaries live in
+// pgsql-mac/ and cloudflared-mac/ — parallel, gitignored directories, kept
+// separate from the Windows payloads because the binaries themselves differ
+// (no .exe suffix, different architectures).
+const pgPayloadDir = isMac ? 'pgsql-mac' : 'pgsql';
+const pgCtlName = isMac ? 'pg_ctl' : 'pg_ctl.exe';
+const cloudflaredPayloadDir = isMac ? 'cloudflared-mac' : 'cloudflared';
+const cloudflaredName = isMac ? 'cloudflared' : 'cloudflared.exe';
+
 // 6. Verify the bundled PostgreSQL binaries are present. electron-builder
-// silently skips a missing extraResources source, so building without pgsql/
+// silently skips a missing extraResources source, so building without them
 // would ship an installer with no database engine at all (every install that
 // self-boots would 500 on first query). Hard-fail instead.
-if (!fs.existsSync(path.join(root, 'pgsql', 'bin', 'pg_ctl.exe'))) {
-  console.error('\n❌ Error: pgsql/bin/pg_ctl.exe not found — the installer would ship WITHOUT PostgreSQL and every self-booting install would fail on first launch.');
-  console.error('Recreate pgsql/ per MANUAL_Setup_Installation.md §1 (portable PostgreSQL 17.6 zip at the project root).\n');
+if (!fs.existsSync(path.join(root, pgPayloadDir, 'bin', pgCtlName))) {
+  console.error(`\n❌ Error: ${pgPayloadDir}/bin/${pgCtlName} not found — the installer would ship WITHOUT PostgreSQL and every self-booting install would fail on first launch.`);
+  console.error(
+    isMac
+      ? `Fetch macOS PostgreSQL binaries (see PLAN_2026-09-08-macos-support.md Phase 2b) and place them at ${pgPayloadDir}/.\n`
+      : `Recreate pgsql/ per MANUAL_Setup_Installation.md §1 (portable PostgreSQL 17.6 zip at the project root).\n`
+  );
   process.exit(1);
 }
 
@@ -219,10 +252,13 @@ if (!fs.existsSync(path.join(root, 'pgsql', 'bin', 'pg_ctl.exe'))) {
 // pgsql check above: electron-builder silently skips a missing extraResources
 // source, so without this a "Plus" installer would ship with no way to open a
 // tunnel — the one capability that plan is sold on.
-if (bundlesCloudflared && !fs.existsSync(path.join(root, 'cloudflared', 'cloudflared.exe'))) {
-  console.error('\n❌ Error: cloudflared/cloudflared.exe not found — a Plus installer would ship WITHOUT the tunnel binary.');
-  console.error('Download the Windows amd64 build from Cloudflare and place it at cloudflared/cloudflared.exe.');
-  console.error('See MANUAL_Setup_Installation.md §1.\n');
+if (bundlesCloudflared && !fs.existsSync(path.join(root, cloudflaredPayloadDir, cloudflaredName))) {
+  console.error(`\n❌ Error: ${cloudflaredPayloadDir}/${cloudflaredName} not found — a Plus installer would ship WITHOUT the tunnel binary.`);
+  console.error(
+    isMac
+      ? `Download the macOS (darwin) cloudflared build from Cloudflare and place it at ${cloudflaredPayloadDir}/cloudflared.\n`
+      : 'Download the Windows amd64 build from Cloudflare and place it at cloudflared/cloudflared.exe.\nSee MANUAL_Setup_Installation.md §1.\n'
+  );
   process.exit(1);
 }
 
@@ -231,30 +267,34 @@ if (bundlesCloudflared && !fs.existsSync(path.join(root, 'cloudflared', 'cloudfl
 // only the delta (artifact name, and cloudflared for Plus) is computed here, so
 // the two cannot drift.
 const builderConfig = JSON.parse(JSON.stringify(require(path.join(root, 'package.json')).build));
-builderConfig.win.artifactName = artifactName;
+builderConfig[targetPlatform].artifactName = artifactName;
 if (bundlesCloudflared) {
-  builderConfig.win.extraResources.push({ from: 'cloudflared', to: 'cloudflared' });
+  builderConfig[targetPlatform].extraResources.push({ from: cloudflaredPayloadDir, to: 'cloudflared' });
 }
-const builderConfigPath = path.join(root, '.next', `electron-builder.${variant}-${plan}.json`);
+const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}-${variant}-${plan}.json`);
 fs.writeFileSync(builderConfigPath, JSON.stringify(builderConfig, null, 2), 'utf8');
-run(`npx electron-builder --win --config "${builderConfigPath}"`);
+run(`npx electron-builder --${targetPlatform} --config "${builderConfigPath}"`);
 
 // 7b. Assert the packaged output actually contains the pieces electron-builder
 // is known to drop silently (missing extraResources sources, node_modules).
-const unpackedDir = 'win-unpacked';
+// Mac's unpacked dir is arch-suffixed (mac-arm64 here — Apple Silicon is what
+// we verify, matching Plan 2c) and Resources sits inside the .app bundle,
+// unlike Windows's flat win-unpacked/resources.
+const unpackedDir = isMac ? 'mac-arm64' : 'win-unpacked';
+const resourcesRel = isMac ? ['WhiteVanOps.app', 'Contents', 'Resources'] : ['resources'];
 for (const rel of [
-  ['resources', 'pgsql', 'bin', 'pg_ctl.exe'],
-  ['resources', 'nextjs', 'node_modules', 'next'],
+  [...resourcesRel, 'pgsql', 'bin', pgCtlName],
+  [...resourcesRel, 'nextjs', 'node_modules', 'next'],
   // Turbopack externalizes @prisma/client but the standalone trace does not
   // copy it (or the generated .prisma/client) into the bundle. Without these,
   // the packaged server throws "Cannot find module '@prisma/client-<hash>'" at
   // runtime and every DB-backed route 500s — the login-500 bug that shipped in
   // the first self-booting installer. next.config.ts forces them in via
   // outputFileTracingIncludes; assert they actually landed.
-  ['resources', 'nextjs', 'node_modules', '@prisma', 'client'],
-  ['resources', 'nextjs', 'node_modules', '@prisma', 'client-runtime-utils'],
-  ['resources', 'nextjs', 'node_modules', '.prisma', 'client'],
-  ['resources', 'app.asar'],
+  [...resourcesRel, 'nextjs', 'node_modules', '@prisma', 'client'],
+  [...resourcesRel, 'nextjs', 'node_modules', '@prisma', 'client-runtime-utils'],
+  [...resourcesRel, 'nextjs', 'node_modules', '.prisma', 'client'],
+  [...resourcesRel, 'app.asar'],
 ]) {
   const p = path.join(distElectron, unpackedDir, ...rel);
   if (!fs.existsSync(p)) {
@@ -267,13 +307,13 @@ for (const rel of [
 // directions matter: electron-builder can silently drop it from a Plus build,
 // and a Base build that accidentally ships it erases the boundary between the
 // two products — a Base install would then need only a licence flip to tunnel.
-const cloudflaredPacked = path.join(distElectron, unpackedDir, 'resources', 'cloudflared', 'cloudflared.exe');
+const cloudflaredPacked = path.join(distElectron, unpackedDir, ...resourcesRel, 'cloudflared', cloudflaredName);
 if (bundlesCloudflared && !fs.existsSync(cloudflaredPacked)) {
-  console.error('\n❌ Error: Plus packaged output is missing resources/cloudflared/cloudflared.exe — do not ship it.');
+  console.error(`\n❌ Error: Plus packaged output is missing ${resourcesRel.join('/')}/cloudflared/${cloudflaredName} — do not ship it.`);
   process.exit(1);
 }
 if (!bundlesCloudflared && fs.existsSync(cloudflaredPacked)) {
-  console.error('\n❌ Error: Base packaged output CONTAINS resources/cloudflared/cloudflared.exe — the Base plan must not ship the tunnel binary.');
+  console.error(`\n❌ Error: Base packaged output CONTAINS ${resourcesRel.join('/')}/cloudflared/${cloudflaredName} — the Base plan must not ship the tunnel binary.`);
   process.exit(1);
 }
 
@@ -301,7 +341,7 @@ function asarTopLevelModules(asarPath) {
   }
 }
 
-const asarPath = path.join(distElectron, unpackedDir, 'resources', 'app.asar');
+const asarPath = path.join(distElectron, unpackedDir, ...resourcesRel, 'app.asar');
 let bundledModules;
 try {
   bundledModules = asarTopLevelModules(asarPath);
@@ -318,7 +358,7 @@ if (missingModules.length) {
 const asarMb = (fs.statSync(asarPath).size / (1024 * 1024)).toFixed(0);
 console.log(`\nVerified app.asar (${asarMb} MB, ${bundledModules.length} modules) carries all ${ELECTRON_RUNTIME_MODULES.length} Electron runtime deps.`);
 
-// 8. electron-builder already wrote the final name via builderConfig.win.artifactName
+// 8. electron-builder already wrote the final name via builderConfig[targetPlatform].artifactName
 // (set above from ARTIFACT_NAMES) — no post-hoc rename needed.
 const finalArtifact = path.join(distElectron, artifactName);
 if (fs.existsSync(finalArtifact)) {
@@ -374,8 +414,9 @@ if (fs.existsSync(finalArtifact)) {
   manifest[artifactName] = buildInfo;
   fs.writeFileSync(manifestJsonPath, JSON.stringify(manifest, null, 2), 'utf8');
 
-  const manifestLines = ['All four installers currently on record in dist-electron/:', ''];
-  for (const name of Object.values(ARTIFACT_NAMES)) {
+  const allArtifactNames = [...Object.values(ARTIFACT_NAMES.win), ...Object.values(ARTIFACT_NAMES.mac)];
+  const manifestLines = ['All installers currently on record in dist-electron/:', ''];
+  for (const name of allArtifactNames) {
     const info = manifest[name];
     if (!info) {
       manifestLines.push(`  ${name} — NOT BUILT YET`);

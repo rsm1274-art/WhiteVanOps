@@ -28,11 +28,13 @@ export async function POST() {
       return NextResponse.json({ error: "Configured backup directory does not exist." }, { status: 400 });
     }
 
-    // Try to find pg_dump.exe in the bundled pgsql directory
+    // Try to find pg_dump in the bundled pgsql directory
     // If not found, assume it is in the PATH
+    const isWin = process.platform === "win32";
+    const pgDumpName = isWin ? "pg_dump.exe" : "pg_dump";
     const pgBinPaths = [
-      path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ process.cwd(), 'pgsql', 'bin', 'pg_dump.exe'),
-      path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ process.cwd(), '..', 'pgsql', 'bin', 'pg_dump.exe'),
+      path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ process.cwd(), 'pgsql', 'bin', pgDumpName),
+      path.join(/* webpackIgnore: true */ /* turbopackIgnore: true */ process.cwd(), '..', 'pgsql', 'bin', pgDumpName),
     ];
     
     let pgDumpExe = 'pg_dump';

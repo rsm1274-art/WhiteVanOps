@@ -17,9 +17,6 @@
 /.next/
 /out/
 
-# production
-/build
-
 # misc
 .DS_Store
 *.pem
@@ -53,6 +50,8 @@ next-env.d.ts
 /dist-electron
 # portable PostgreSQL binaries bundled into the installer (see MANUAL_Setup_Installation.md)
 /pgsql
+# portable macOS PostgreSQL binaries (see PLAN_2026-09-08-macos-support.md Phase 2b)
+/pgsql-mac
 # local database cluster
 /pg_data
 
@@ -74,6 +73,7 @@ next-env.d.ts
 
 # Portable cloudflared for Plus installers — see MANUAL_Setup_Installation.md §1
 cloudflared/
+cloudflared-mac/
 
 # storefront/ — separate deployable service (own dependency tree); the
 # root-anchored /node_modules and /.next rules above don't reach this nested folder

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Lets the bundled PostgreSQL binaries (signed separately, or unsigned on
+       first builds) run under the hardened runtime. Without this, macOS
+       refuses to load them and the self-booted database never starts. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- The app is not sandboxed (it binds a LAN port and writes to its own
+       app-data directory outside any container), so no app-sandbox or
+       network entitlements are declared here. -->
+</dict>
+</plist>

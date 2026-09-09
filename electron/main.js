@@ -24,11 +24,12 @@ const firestore = getFirestore(firebaseApp);
 const isDev = !app.isPackaged;
 
 // Packaged builds get their own Chromium profile under the app-managed
-// %APPDATA%\whitevanops dir. Without this, dev and packaged runs share the
-// default profile derived from package.json "name" (%APPDATA%\white-van-ops),
-// and stale dev state — service worker registrations, localhost:3000 cookies —
-// leaks into packaged-install testing (2026-07-10: a zombie cache-first sw.js
-// served a cached dashboard into a fresh install). Must run before app ready.
+// per-OS app-data \whitevanops dir (app.getPath('appData')). Without this,
+// dev and packaged runs share the default profile derived from package.json
+// "name", and stale dev state — service worker registrations, localhost:3000
+// cookies — leaks into packaged-install testing (2026-07-10: a zombie
+// cache-first sw.js served a cached dashboard into a fresh install). Must run
+// before app ready.
 if (!isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), 'whitevanops', 'profile'));
 }
@@ -125,7 +126,10 @@ async function startServer() {
 
   // Start (and on first run, initialize) the bundled PostgreSQL server.
   // No-op when the DB port already has a listener or DATABASE_URL is remote.
-  postgres = await ensurePostgres({ resourcesPath: process.resourcesPath });
+  postgres = await ensurePostgres({
+    resourcesPath: process.resourcesPath,
+    appDataWvoDir: path.join(app.getPath('appData'), 'whitevanops'),
+  });
 
   // Production: require the standalone server inline (Electron's main process IS Node.js).
   const serverPath = path.join(process.resourcesPath, 'nextjs', 'server.js');
@@ -380,6 +384,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  // macOS apps conventionally stay running (in the Dock) with no windows
+  // open; `activate` below rebuilds the window when the Dock icon is clicked.
+  if (process.platform === 'darwin') return;
   if (serverProcess) serverProcess.kill();
   app.quit();
 });
