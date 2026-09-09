@@ -123,6 +123,13 @@ Windows show the same data. All the design is in the plan; none of the code
   `icon.png` (1024px PNG, regenerable via `node scripts/generate-icons.js`) and
   `entitlements.mac.plist` — both are meant to be tracked.
 
+## Owner's note for later — not part of this plan
+
+The owner wants an **IAPro WebReports-style query builder** added to the **Plus** tier,
+working on **both Mac and Windows**. This is a new, separate feature — not scoped or
+designed yet, and not part of the macOS work above. Flagging it here so it isn't lost;
+it needs its own planning session before any code.
+
 ## Next session should
 
 1. Decide whether to commit what's here now (nothing is committed) or keep iterating
