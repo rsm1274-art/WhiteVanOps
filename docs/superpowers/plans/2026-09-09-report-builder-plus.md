@@ -413,49 +413,53 @@ XLSX/PDF slip.
 
 ## Open technical questions for the owner
 
-1. **XLSX library.** `exceljs@^4.4.0` is already a devDependency (read-only, in the
-   data-import engine). Reusing it for writing means zero new dependencies and zero new
-   packaging risk. Recommendation: use it — accept that a very large export is a memory
-   spike (`exceljs`'s streaming `WorkbookWriter` is available if that becomes a problem).
-   The alternative, SheetJS/`xlsx`, has ongoing registry/licensing friction and would be
-   a new dep. **Confirm exceljs.**
-2. **Kysely vs. raw parameterized SQL.** Kysely gives an identifier-safe builder, typed
-   results, and `.compile()` (what makes the compiler unit-testable with no database).
-   Cost: one more dependency in a build pipeline CLAUDE.md documents as brittle.
-   Alternative: `prisma.$queryRawUnsafe` with hand-assembled SQL and `$1`-style params —
-   no new dep, but the safety property becomes a code-review discipline instead of a
-   type. **Recommendation: Kysely. Confirm.**
-3. **Kysely table types.** Hand-written minimal interface (~14 tables, no build step)
-   vs. `kysely-codegen` (auto-sync, but a second generator alongside `prisma generate`).
-   Recommendation: hand-written for v1.
-4. **Drag/drop implementation.** Native HTML5 DnD (no dependency, poor keyboard/touch
-   story, hence the mandatory click-to-add fallback) vs. `@dnd-kit/core` (~15kb, proper
-   keyboard sensors, another dep). Recommendation: native for v1, revisit if it feels bad.
-5. **Definition validation.** Hand-rolled validator matching
-   `src/lib/import/mappingSchema.ts`'s existing precedent, vs. adding `zod` (not used
-   anywhere in this codebase today). Recommendation: hand-roll for consistency.
-6. **Roles.** `requiresRole` on registry fields currently discriminates nothing — only
-   admin/superuser reach the dashboard, no pay-rate column exists. Options: (a) build
-   the machinery now, mark money/PII fields for later — recommended; (b) introduce a
-   read-only "office" role now; (c) drop `requiresRole`, keep only `sensitivity`.
-   **Owner decision.**
-7. **Root entities.** Is Job-only correct for v1? Client-rooted ("all clients including
-   those with no jobs") and Personnel-rooted ("utilisation by tech") are genuinely
-   different questions a Job root can't answer. Worth confirming this is an accepted v1
-   limitation.
-8. **Limits.** Suggested defaults (owner's numbers, not fixed): preview 200 rows,
-   export 50,000 rows, `statement_timeout` 15s, 40 columns, 25 conditions.
-9. **Auditing.** Should report *exports* get a new `"EXPORT"` audit action (real
-   data-egress significance), or is that scope creep? Saved-report CRUD is audited
-   either way.
-10. **React component tests.** No jsdom/Testing Library today (Vitest is `node`-only).
-    Add the frontend test stack now, or keep logic in testable `src/lib` helpers and
-    click-test components? Recommendation: the latter for v1.
-11. **Explicitly out of scope unless told otherwise:** scheduled/emailed reports (no
-    mail infrastructure exists at all in this repo), charts on report output (Recharts
-    is present, would be cheap, but is a distinct feature), cross-install report sharing.
-12. **Manual placement.** New "Module 11: Custom Reports (Plus only)" after Module 10
-    in `MANUAL_Administrator.md` — confirm.
+**Status as of the 2026-09-09 build session** (all 5 phases implemented — see
+`HANDOFF_2026-09-09-report-builder.md`): items 1-5, 9, and 10 were decided during the
+build, following each item's own recommendation, so the feature could keep moving without
+blocking on owner sign-off for implementation-detail choices. Items 6, 7, 8, and 11 are
+still genuinely open — the build proceeded on the recommended/default option for each, but
+none of them were confirmed by the owner and all remain easy to revisit. Item 12 is
+confirmed (done).
+
+1. ~~**XLSX library.**~~ **RESOLVED — exceljs.** Already a devDependency (read-only, in
+   the data-import engine); reused for writing, zero new dependencies added.
+2. ~~**Kysely vs. raw parameterized SQL.**~~ **RESOLVED — Kysely.** `kysely` added as a
+   devDependency; compiled directly into the webpack route bundle (verified — no separate
+   `node_modules/kysely` needed in the packaged app, so no packaging risk materialized).
+3. ~~**Kysely table types.**~~ **RESOLVED — hand-written.** `src/lib/reports/dbTypes.ts`,
+   12 tables (fewer than the ~14 estimated — built from what the registry/graph actually
+   reference, not guessed).
+4. ~~**Drag/drop implementation.**~~ **RESOLVED — native HTML5 DnD + click-to-add**, with
+   one further simplification made during the build: column *reordering* uses up/down
+   buttons rather than native drag-to-reorder (fully keyboard-accessible for free; native
+   reorder's drop-position math was judged not worth it for v1).
+5. ~~**Definition validation.**~~ **RESOLVED — hand-rolled**, matching
+   `src/lib/import/mappingSchema.ts`'s precedent. No `zod` added.
+6. **Roles — STILL OPEN.** `requiresRole` on registry fields currently discriminates
+   nothing — only admin/superuser reach the dashboard, no pay-rate column exists. The
+   build went with option (a) (build the machinery now, mark money/PII fields for later)
+   as the recommended default, but this is not an owner-confirmed decision. Options (b)
+   read-only "office" role, (c) drop `requiresRole` entirely, remain on the table.
+7. **Root entities — STILL OPEN.** Job-only shipped for v1. Client-rooted ("all clients
+   including those with no jobs") and Personnel-rooted ("utilisation by tech") remain
+   real, unaddressed use cases a Job root can't answer. Not confirmed as an accepted
+   permanent limitation vs. a v2 item.
+8. **Limits — STILL OPEN (numbers, not the mechanism).** The build kept every suggested
+   default as-is: preview 200 rows, export 50,000 rows, `statement_timeout` 15s, 40
+   columns, 25 conditions, PDF 8 columns. These are untested against real data volumes —
+   the owner should revisit them after the first live run against production-scale data.
+9. ~~**Auditing.**~~ **RESOLVED — added.** `AuditAction` gained `"EXPORT"`; saved-report
+   exports are audited, ad-hoc (unsaved) exports are not.
+10. ~~**React component tests.**~~ **RESOLVED — skipped**, logic pushed into tested
+    `src/lib/reports/` helpers instead (`definitionEdit.ts`, `stacking.ts`). Components
+    themselves have no automated coverage and have not yet been manually click-tested
+    either — see the handoff's "What's NOT done".
+11. **Out of scope — STILL OPEN as a future-scope question**, not reconsidered this
+    session: scheduled/emailed reports (no mail infrastructure exists at all in this
+    repo), charts on report output (Recharts is present, would be cheap, but is a
+    distinct feature), cross-install report sharing.
+12. ~~**Manual placement.**~~ **RESOLVED — confirmed and done.** "Module 11: Custom
+    Reports (Plus only)" added to `MANUAL_Administrator.md` after Module 10.
 
 ## Relevant files
 `CLAUDE.md`, `HANDOFF_2026-09-07-quoting-and-approval.md` (lines 293-316),

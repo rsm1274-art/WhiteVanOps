@@ -267,6 +267,12 @@ model Job {
   quotes              Quote[]
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
+
+  // Added for the Plus-tier report builder (Phase 5): status/scheduledDate
+  // are the report engine's most likely filter columns, and Job had no
+  // index at all before this. See docs/superpowers/plans/
+  // 2026-09-09-report-builder-plus.md, "Performance guards".
+  @@index([status, scheduledDate])
 }
 
 // ---------------------------------------------------------------------------
