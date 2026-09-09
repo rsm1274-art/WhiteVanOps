@@ -87,6 +87,23 @@ Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:b
 
 A Plus build **fails** before packaging if `cloudflared/cloudflared.exe` is missing, mirroring the `pgsql/bin/pg_ctl.exe` check. After packaging, step 7b also asserts the reverse: `win-unpacked/resources/cloudflared/cloudflared.exe` must **not** exist in a Base artifact — a Base install that quietly shipped the tunnel binary would erase the product boundary being sold.
 
+### `cloudflared` binary for the macOS build (`cloudflared-mac/` directory)
+
+Required only for the two mac Plus artifacts (`electron:build:mac:plus`, `electron:build:mac:trial:plus`). Gitignored, not committed to git, exactly like `pgsql-mac/`. Cloudflare does not publish a universal darwin binary — arm64 and amd64 ship as separate archives — so this one is assembled with `lipo` into a single universal binary that serves both the arm64 and x64 `.dmg` targets `electron:build:mac` already produces from one electron-builder invocation, the same way `pgsql-mac/` is one payload for both arches. To (re)create it:
+
+1. Download both darwin archives from the official releases (`https://github.com/cloudflare/cloudflared/releases/latest`):
+   - `cloudflared-darwin-arm64.tgz`
+   - `cloudflared-darwin-amd64.tgz`
+2. Extract each (`tar -xzf`) — both contain a single `cloudflared` binary.
+3. Merge them into one universal binary:
+   ```bash
+   lipo -create cloudflared-arm64/cloudflared cloudflared-amd64/cloudflared -output cloudflared-mac/cloudflared
+   chmod +x cloudflared-mac/cloudflared
+   ```
+4. Verify it's genuinely fat and runs: `file cloudflared-mac/cloudflared` should report both `arm64` and `x86_64`, and `cloudflared-mac/cloudflared --version` should run without needing Rosetta on an Apple Silicon Mac.
+
+`npm run electron:build:mac:plus` fails before packaging if `cloudflared-mac/cloudflared` is missing, and after packaging step 7b asserts it exists (and actually executes) inside both the `mac-arm64` and `mac` (x64) packaged `.app` bundles — mirroring the Windows Plus/Base present/absent checks above.
+
 ---
 
 ## 2. Database Setup
