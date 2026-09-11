@@ -101,7 +101,7 @@ function LogTimePanel({
     const date = dateRef.current?.value || todayStr();
     setSaving(true);
     try {
-      await submitWrite("/api/time", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
+      await submitWrite("/api/field/ops", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to log time");
@@ -193,7 +193,7 @@ function NotesPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      await submitWrite("/api/jobs", "PUT", { jobId: job.id, notes: note });
+      await submitWrite("/api/field/ops", "POST", { jobId: job.id, notes: note });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save notes");
@@ -271,7 +271,7 @@ function MaterialsPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      await submitWrite("/api/jobs", "PUT", { jobId: job.id, lineItems: lines });
+      await submitWrite("/api/field/ops", "POST", { jobId: job.id, lineItems: lines });
       onSuccess();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save materials");
@@ -373,7 +373,7 @@ export default function JobCard({
   const changeStatus = async (status: string) => {
     setActioning(true);
     try {
-      await submitWrite("/api/jobs", "PUT", { jobId: job.id, status });
+      await submitWrite("/api/field/ops", "POST", { jobId: job.id, status });
       onRefresh();
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to update status");
