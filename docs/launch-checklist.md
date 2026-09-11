@@ -85,14 +85,13 @@ This app has two faces — pick one path for each.
 
   **You'll know it worked when:** the app opens to the login screen and a desktop shortcut exists.
 
-> **Update, 2026-07-24 — this splits by plan now.** The port-forward + DDNS entries below (and
-> Phase 5's "remote field access") described the one-size transport this project shipped with,
-> framed at the time as temporary pending a tunnel. That framing was wrong for **Base**: LAN HTTP
-> is the permanent design there, not a stopgap, and it carries **no public-internet exposure** —
-> the traffic never leaves the building, so there's nothing to forward or resolve. The tunnel
-> item (and everything in this history about DDNS/CGNAT) now applies to **Plus** only. See
-> `docs/superpowers/specs/2026-07-24-wifi-sync-base-tier-design.md` and
-> `MANUAL_Setup_Installation.md` §7.
+> **Update, September 2026 (v2.0) — the port-forward + DDNS entries below are retired.** LAN HTTP
+> over the office WiFi is the app's one and only transport now, permanently — not a stopgap, not a
+> lesser tier. There is no remote/tunnel access at all (the Cloudflare tunnel this checklist's
+> later "Plus" framing anticipated was built, then removed entirely in v2.0), and traffic never
+> leaves the building, so there's nothing to forward or resolve. Treat the port-forwarding/DDNS
+> entries below as history of an earlier design, not as current setup steps — see
+> `MANUAL_Setup_Installation.md` §7 for the current (WiFi-only) instructions.
 
 **Field tech access (recommended path — dedicated server process):**
 
@@ -136,7 +135,7 @@ Don't call it launched until you've done this end to end, on the real production
   **You'll know it worked when:** every step above behaves the way the Administrator Manual describes, with no errors.
 
 - [ ] 🧑 **Full field tech walkthrough, on an actual phone.** (10 min)
-  1. On a phone, open `http://<your-ddns-url>:3000/field`. (Ensure port forwarding and DDNS are configured correctly on the office router).
+  1. While connected to the office WiFi, on a phone open `http://<office-lan-ip>:3000/field` (scan the Field Access QR from the dashboard sidebar rather than typing the address by hand).
   2. Log in as the technician you created above.
   3. Confirm their assigned job appears, log time against it, mark it complete.
 

@@ -1,7 +1,7 @@
 # WhiteVanOps — Administrator Reference Manual
 
 **Audience:** Business owner / office administrator
-**Last updated:** June 2026
+**Last updated:** September 2026
 
 ---
 
@@ -9,21 +9,14 @@
 
 WhiteVanOps is an internal field operations management dashboard. It tracks jobs, clients, crew, fleet, inventory, and produces QuickBooks-ready export files. It does **not** process payroll — that happens inside QuickBooks after you import the CSV exports this system generates.
 
-### Plans: Base & Plus
+WhiteVanOps is one product — every activated install runs the full feature set described in this
+manual: jobs, scheduling, personnel, fleet, and inventory (Modules 1–7), plus client notes &
+follow-ups (Module 2), Business Analytics (Module 8), Quotes & Estimates (Module 9), Invoicing &
+Payments (Module 10), and Custom Reports (Module 11). There is nothing to upgrade or unlock — an
+activation key just proves the install is licensed at all.
 
-WhiteVanOps ships in two plans running on the same installation:
-
-- **Base** — everything described in Modules 1–7 below: jobs, scheduling, personnel, fleet, inventory, and QuickBooks CSV export.
-- **Plus** — adds five feature areas on top of Base:
-  - **Client notes & follow-up reminders** in the Clients & Jobs module (Module 2)
-  - **Business Analytics** tab — revenue, technician hours, and fleet cost charts (Module 8)
-  - **Quotes & Estimates** tab — priced quotes with a customer approval link (Module 9)
-  - **Invoicing & Payments** tab — internal invoices with PDF generation and payment tracking (Module 10)
-  - **Custom Reports** tab — build your own ad-hoc reports and export them (Module 11)
-
-The plan is controlled by a license setting in **Settings → License & Plan** (superuser only — see that section below). Upgrading requires no reinstall: flip the plan and the new tabs appear on the next dashboard refresh. Downgrading hides the Plus tabs and blocks the Plus features, but **never deletes** notes, follow-ups, quotes, invoices, or payment records — everything reappears if the plan is re-activated.
-
-Open the **WhiteVanOps** application from your desktop shortcut or Start Menu. The app starts its internal server automatically — a loading screen appears for a few seconds, then the login page opens.
+Open the **WhiteVanOps** application from your desktop shortcut or Start Menu (macOS: from
+`/Applications`). The app starts its internal server automatically — a loading screen appears for a few seconds, then the login page opens.
 
 ### Using WhiteVanOps on more than one office computer
 
@@ -31,7 +24,7 @@ If your office runs WhiteVanOps on more than one machine (say, a Windows PC and 
 **one** of them actually holds the data — call it the **host**. Every other machine connects
 to that host over your office network instead of keeping its own separate copy, so everyone
 always sees the same jobs, clients, and inventory no matter which computer they're sitting
-at. A "connecting" machine's Base/Plus features follow the host's license — nothing to set
+at. A "connecting" machine simply opens whatever the host is serving — nothing to set
 up separately.
 
 The one thing to know: the host machine has to be turned on and connected to the network for
@@ -53,7 +46,7 @@ The initial superuser account is **admin / admin**. On first login you will be i
 
 After logging in, you see a two-panel layout:
 
-- **Left sidebar** — navigation between the modules (seven on Base; **Analytics**, **Quotes** and **Invoicing** also appear on Plus)
+- **Left sidebar** — navigation between all eleven modules
 - **Main area** — the active module's content
 
 The sidebar also shows:
@@ -68,8 +61,8 @@ The sidebar also shows:
 Click **Field Access QR** in the sidebar to open a modal showing a QR code for the field module URL. The URL field is editable and remembered per browser:
 
 - **Use detected address** — click this button and the modal fills in the office server's actual LAN address for you (calls `GET /api/field-access/lan-address`), so nobody has to type or guess an IP.
-- A `192.168.x`, `10.x`, or `172.16–31.x` address (a private LAN address) is **correct on both Base and Plus** — the modal shows a green confirmation, not a warning, and generates the QR.
-- A **public** address (a real hostname or public IP, not a LAN address) on the **Base** plan gets a warning that remote access is a Plus feature — the QR still generates, in case the customer has their own working arrangement, but it's flagged so you don't assume it will work for a tech off the office WiFi. On **Plus**, the same shape is the expected tunnel address and shows no warning.
+- A `192.168.x`, `10.x`, or `172.16–31.x` address (a private LAN address) is the **only correct** shape — the modal shows a green confirmation, not a warning, and generates the QR.
+- Any other address (a real hostname, a public IP) gets a warning that it cannot reach the field module — there is no remote-access path in this app, so an address like that will not work for a tech off the office WiFi, full stop.
 - The QR is withheld only when the address is **localhost** — a phone cannot reach `localhost` on the office PC, so there is nothing useful to scan.
 - A tech scans the code with their phone camera, signs in with their tech account, then uses **Add to Home Screen** (iPhone: Share → Add to Home Screen; Android: menu → Install app) to install the field module as a full-screen app with its own icon.
 
@@ -80,7 +73,7 @@ The top header shows the current module name, a yellow **Unsynced** badge when c
 The bell icon in the top header shows a red count badge when there are active alerts. Click it to open a panel listing:
 
 - **Overdue Jobs** — jobs still `Scheduled` or `In Progress` whose scheduled date has already passed
-- **Client Follow-Ups Due** *(Plus only)* — open client follow-ups whose due date is today or earlier
+- **Client Follow-Ups Due** — open client follow-ups whose due date is today or earlier
 - **Low Stock** — any stock level (warehouse or van) at or below its configured minimum threshold
 
 Clicking an individual alert jumps you to the relevant tab (Clients & Jobs for overdue jobs and follow-ups, Inventory Control for low stock) so you can act on it. This is in-app only — there is no push/email/SMS delivery.
@@ -137,9 +130,9 @@ Click **Add Client** to create a new client record. Fields:
 | Location Address | Site address where work is performed. |
 | Payment Terms | Select from: **Due on Receipt**, **Net 15**, or **Net 30**. This controls the invoice due date on QB exports. |
 
-### Client Notes & Follow-Ups (Plus only)
+### Client Notes & Follow-Ups
 
-With a Plus license, each client card gains a collapsible **notes & follow-ups** panel (click the "X notes · X follow-ups" row at the bottom of the card to expand it):
+Each client card has a collapsible **notes & follow-ups** panel (click the "X notes · X follow-ups" row at the bottom of the card to expand it):
 
 - **Add Note** — appends a timestamped entry to the client's communication log (calls, emails, site visits, anything worth remembering). Notes record who wrote them and cannot be edited or deleted — treat them as a permanent log.
 - **Follow-Up** — schedules a dated reminder for this client (e.g., "Call to confirm contract renewal"), optionally assigned to a crew member. Open follow-ups are listed on the card with:
@@ -366,7 +359,7 @@ The yellow **Unsynced** badge in the top header shows the total count of pending
 
 ---
 
-## Module 8: Business Analytics (Plus only)
+## Module 8: Business Analytics
 
 A read-only reporting tab covering the **trailing 12 months**. Numbers are computed live from your operational data — there is nothing to configure.
 
@@ -380,9 +373,9 @@ A read-only reporting tab covering the **trailing 12 months**. Numbers are compu
 
 ---
 
-## Module 9: Quotes & Estimates (Plus only)
+## Module 9: Quotes & Estimates
 
-Price a job before you do it, send the customer a link to accept it, then turn the accepted quote into an invoice without retyping anything.
+Price a job before you do it, send the customer a PDF, then turn the accepted quote into an invoice without retyping anything.
 
 ### Creating a quote
 
@@ -392,24 +385,11 @@ A new quote is saved as a **Draft**. Nothing has reached the customer yet, and a
 
 ### Sending a quote
 
-Press **Send** on a Draft. Two things happen:
+Press **Send** on a Draft to move it to **Sent** and print/download the quote PDF. Email or hand the PDF to the customer yourself — there is no online approval link; WhiteVanOps has no remote/public access surface for a customer's browser to reach.
 
-1. The quote moves to **Sent** and a private approval link is created for it.
-2. The link is copied to your clipboard so you can paste it into an email or text.
+### Recording the customer's decision
 
-The same link is printed at the bottom of the quote PDF under **Accept Online**, so a customer who received the PDF can always find it. Press **Link** on any sent quote to copy it again later.
-
-**The link only works from outside your office if the customer can reach your server.** It is built from the address in **Field Access QR** — so on **Plus**, where that is your secure tunnel address, the customer can open it from anywhere. On a plain office-LAN address, only someone on your WiFi can open it. If you have not set a Field Access address yet, do that first or the link will point at the office PC's own name and will not work for anyone else.
-
-### What the customer sees
-
-A single page showing your company details, the quote number, dates, the line items and total, your notes, and the payment terms. They press **Accept this quote** and type their full name to confirm, or **Decline** with an optional reason. Their name and the date are recorded against the quote as the record of approval.
-
-The page shows **nothing else** from your system — no other quotes, no job details, no other customers. The link is a long random code; it cannot be guessed or altered to reach a different quote.
-
-### Recording a decision yourself
-
-Most customers answer by phone. On a Sent quote press **Accepted** or **Declined** to record the decision by hand. The result is identical to them using the link, and the same rules apply — an expired quote cannot be accepted either way.
+The customer answers by phone, email, or in person. On a Sent quote press **Accepted** or **Declined** to record the decision by hand — this is the only way a quote's status changes after sending. An expired quote cannot be accepted either way (see below).
 
 ### Quote statuses
 
@@ -436,7 +416,7 @@ Three tiles at the top of the tab: how many quotes are **Awaiting Response**, th
 
 ---
 
-## Module 10: Invoicing & Payments (Plus only)
+## Module 10: Invoicing & Payments
 
 An internal accounts-receivable ledger with printable PDF invoices and payment tracking. It is **completely independent of the QuickBooks Export Sync tab** (Module 7) — creating an invoice here does not affect a job's QB sync status, and vice versa. Use whichever billing flow (or both) fits your business.
 
@@ -477,13 +457,28 @@ The tiles at the top show total **Outstanding AR** (unpaid balances across Sent/
 
 ## Settings: License & Plan
 
-Open **Settings** in the sidebar. The **License & Plan** section shows the current plan (Base or Plus).
+Open **Settings** in the sidebar. The **License & Plan** section shows your activation key and, if this is a trial install, the days remaining. There is no plan to upgrade or downgrade — every activated install runs the full feature set described in this manual.
 
-Upgrading to Plus requires superuser access and a cryptographically signed license payload from your vendor:
-1. **Locate your License Key:** If your plan is currently Base, copy the active **License Key** shown in the Settings tab.
-2. **Obtain Upgrade Payload:** Send this key to your vendor to request a Plus Upgrade. They will provide a signed upgrade JSON payload.
-3. **Apply the Upgrade:** Paste the JSON block into the "Paste License Code" box, or upload the JSON file in the upload zone, and click **Apply Plus Upgrade**. Plus features will unlock instantly.
-4. **Downgrading:** A superuser can downgrade to the Base plan by clicking the **Downgrade to Base Plan** button and confirming. This removes Plus features but retains your data in the database.
+---
+
+## Settings: Recover Field Work (admin/superuser)
+
+If a tech's phone loses its saved data — a factory reset, a replaced device, a browser storage
+issue — or a tech simply wants to hand you a backup of their queued/recent work, they can export
+it from `/field` (see `MANUAL_Field_Tech.md`, "Exporting your work"). This section is where that
+file comes back in:
+
+1. **Upload the export file** the tech sent you (`whitevanops-field-<tech>-<timestamp>.json`).
+2. **Preview** — the app shows what the file contains: entries that are new and would be applied,
+   entries already applied (nothing to do), entries superseded by newer work already on file, and
+   anything it couldn't understand.
+3. **Apply** — writes the new entries the same way the tech's phone would have, had it reached the
+   office directly.
+
+**Re-importing the exact same file a second time does nothing the second time.** Every entry in the
+export carries the id the app used to apply it the first time, so a repeat import is recognized as
+already-applied and changes nothing — safe to use without worrying about double-entering a tech's
+hours or duplicating materials on a job.
 
 ---
 
@@ -520,7 +515,7 @@ The **Onboarding Data Import** section at the bottom of Settings imports a busin
 
 ---
 
-## Module 11: Custom Reports (Plus only)
+## Module 11: Custom Reports
 
 Build your own reports instead of waiting on a specific chart in Business Analytics. Every report starts from **Jobs** and can pull in the client, vehicle, assigned technicians, parts used, logged time, invoices, and quotes tied to those jobs.
 
@@ -575,11 +570,11 @@ The invoice export will include one generic placeholder line ("Operations:Servic
 **Can I export only some records, not all pending ones?**
 No. The current export includes all pending records at once. Lock records only after a full successful import.
 
-**Do Plus invoices replace the QuickBooks export?**
-No. The Invoicing tab (Plus) is an internal AR ledger with its own PDF invoices and payment tracking; the QuickBooks Export Sync tab is unchanged and works exactly as before. They do not affect each other.
+**Does the Invoicing tab replace the QuickBooks export?**
+No. The Invoicing tab is an internal AR ledger with its own PDF invoices and payment tracking; the QuickBooks Export Sync tab is unchanged and works exactly as before. They do not affect each other.
 
-**What happens to my notes and invoices if the Plus license lapses?**
-Nothing is deleted. The Plus tabs disappear and the Plus features are blocked, but all notes, follow-ups, invoices, and payments remain in the database and reappear when Plus is re-activated.
+**How does a customer accept or decline a quote?**
+By phone, email, or in person — you record their answer yourself with the **Accepted**/**Declined** buttons on the Quotes tab. There is no online approval link; the quote goes out as a PDF.
 
 **Why does a report only show one row per job even though a job has three technicians?**
 That's the default and, for most reports, what you want — otherwise a job with three technicians would count three times in any total you build from it. Expand a row with the arrow on the left to see the individual technicians, or turn on "Expand to one row per…" if you specifically need one row per technician (see Module 11).

@@ -1,6 +1,10 @@
 # WhiteVanOps — Project Status Summary
 
-*As of July 19, 2026*
+*As of July 19, 2026, with a v2.0 update appended September 2026 — see Phase 15 and the
+"Current State" table, which reflects v2.0. Phases 1–14 below are the historical build log and
+are left as originally written even where later superseded (e.g. the Base/Plus tier and the
+Cloudflare tunnel, both removed in v2.0) — each such phase is a true account of what shipped at
+the time.*
 
 ---
 
@@ -149,6 +153,45 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 - **Linux build target removed** — it had never produced a shipped artifact.
 - **Fixed a packaged-installer login 500**: Next 16 defaulted to Turbopack, which emitted an unresolvable external require for the Prisma client, and the standalone output trace didn't copy Prisma 7's runtime packages either way. `npm run build` now runs `prisma generate && next build --webpack`, and `next.config.ts`'s `outputFileTracingIncludes` explicitly lists the Prisma runtime closure; `electron-build.js` step 7b asserts those directories landed in the packaged output. See `CLAUDE.md` for the full writeup.
 
+### Phase 15 — v2.0: One Product, WiFi-Only Sync, Idempotent Field Writes, Export/Import Recovery (September 2026)
+
+A seven-phase, documentation-included effort that removed the Base/Plus tier and the Cloudflare
+tunnel, and replaced the field module's write path with an idempotent, authorization-explicit
+architecture. See `HANDOFF_2026-09-11-v2-wifi-sync-and-export-recovery.md` for the full writeup,
+including what's still unverified by hand.
+
+- **One product.** No more Base/Plus split — every activated install runs the full feature set
+  (CRM notes/follow-ups, Analytics, Invoicing, Quoting, and the Report Builder that landed
+  alongside macOS support). `License.tier` is gone from the schema; `hasPlusLicense()`/
+  `requirePlus()` are gone from the code. One installer per platform, not two.
+- **WiFi-only transport, permanently.** The Cloudflare tunnel is fully removed — no `cloudflared`
+  binary, no tunnel runbook, no remote/cellular access story at all. The field module is reachable
+  only on the office LAN or via `localhost`. `fieldUrlVerdict()` now returns `"localhost"` /
+  `"ok-lan"` / `"not-lan"`, with no tier-aware branch.
+- **Quotes are PDF-only.** The public customer-facing approval link (`/quote/[token]`,
+  `/api/public/quotes/[token]`, `Quote.publicToken`) is removed — it depended on the tunnel to be
+  reachable off-LAN. The operator now marks a Sent quote Accepted/Declined by hand as the only
+  path; `canRespondToQuote()` still gates it. This also removed the app's only unauthenticated
+  data surface.
+- **New field-write architecture.** `POST /api/field/ops` replaces the old split across
+  `POST /api/time` and `PUT /api/jobs`; every write carries a client-generated `opId`
+  (`src/lib/opId.ts`) and is applied idempotently by `src/lib/fieldOps.ts` against a new
+  `AppliedOp` table, with an ordering guard (`src/lib/opOrdering.ts`) for replace-semantics writes.
+  This also fixed a real, previously-live bug: techs could not actually save job notes or
+  materials before v2.0 (the old route 403'd those fields for tech role, and that 403 was
+  misclassified as an auth failure that halted the entire offline sync queue). IndexedDB moved to
+  schema v4, adding a 30-day `history` store of synced ops.
+- **Export/import recovery**, a new feature: a tech can export a JSON snapshot of their queued,
+  stuck, and recently-synced work from `/field` at any time (`src/lib/fieldExport.ts`); an
+  admin/superuser can import it back in from **Settings → Recover Field Work**
+  (`POST /api/field/import`). Re-importing the same file twice is a guaranteed no-op, since every
+  op's own `AppliedOp` row makes a repeat apply do nothing.
+- **All three manuals plus `CLAUDE.md` and this file updated** to match — a documentation-only
+  final phase, since no source code changed in it.
+- **Nothing in this phase has been manually verified in a running app or on a real phone** —
+  every phase was checked via `tsc`/`lint`/`npm test`/`npm run build` only. See the handoff for
+  the manual-verification checklist before shipping.
+
 ---
 
 ## Current State (What Works)
@@ -158,20 +201,22 @@ Offline field techs can produce sync ops that permanently fail (deleted parent r
 | Database schema | Complete — all models, relations, and indexes in place |
 | Admin dashboard | Complete — 7 tabs, 14 modals, full CRUD |
 | Auth / roles | Complete — login, JWT, role enforcement, forced password change, per-account lockout + per-IP rate limiting, centralized password validation |
-| License tier (Base/Plus) | Complete — Offline cryptographically signed license verification bound to machine ID; tier is encoded inside the signed activation key itself (no plaintext override). Since 2026-07-24 Base and Plus are separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; only Plus bundles cloudflared) and the in-place Upgrade Patch installer is gone — Base→Plus is a discounted Plus purchase |
-| Trial/Demo installer | Complete — `WhiteVanOps-{Base,Plus}-Trial-Setup.exe` (superseded 2026-07-24 from a single Plus-preactivated build), 30-day machine-locked timer, converts to the purchased tier on unlock; see Phase 13 |
+| License / activation | Complete — one product as of v2.0 (Phase 15), no Base/Plus tier. Offline cryptographically signed license verification bound to machine ID; one installer per platform (`WhiteVanOps-Setup.exe` on Windows, `WhiteVanOps-Setup-{arm64,x64}.dmg` on macOS) |
+| Trial/Demo installer | Complete — `WhiteVanOps-Trial-Setup.exe` / `WhiteVanOps-Trial-Setup-{arm64,x64}.dmg`, 30-day machine-locked timer, runs the full (only) feature set during the trial; see Phase 13 for its original design, Phase 15 for the tier removal |
 | Field sync stuck-record resolution | Complete — offline sync queue quarantines permanently-failed ops instead of stalling, with a tech-facing resolution panel and an admin sync-review dashboard card; see Phase 12 |
+| Field write idempotency (`opId`/`AppliedOp`) | Complete (Phase 15) — every field write is safely replayable; fixed a real bug where techs could not save notes/materials at all before v2.0 |
+| Field export/import recovery | Complete (Phase 15) — tech-side export of queued/stuck/recent work, admin-side re-import via Settings → Recover Field Work, re-import of the same file is a guaranteed no-op |
 | Audit logging | Complete — every write action recorded |
 | Field tech module | Complete — mobile-optimized, auto-selects linked tech |
 | QuickBooks CSV export | Complete — Invoice and Time exports, sync-lock via `/api/sync` |
 | Fleet & equipment | Complete — vehicles, maintenance logs, repair records, equipment assets |
 | Personnel | Complete — qualifications, time-off, user account linking |
 | Inventory | Complete — multi-location stock levels, low-stock alerts, job deduction on completion |
-| Network & Access | Complete — per-plan transport since 2026-07-24: Base syncs field devices over the office LAN only (plain `http://` on a private address — traffic never leaves the building; DHCP reservation/static IP required), Plus adds a Cloudflare HTTPS tunnel for remote access. Port Forwarding + Dynamic DNS is retired; see `MANUAL_Setup_Installation.md` |
+| Network & Access | Complete — WiFi-only transport, permanently, as of v2.0 (Phase 15): field devices sync over the office LAN only (plain `http://` on a private address — traffic never leaves the building; DHCP reservation/static IP required). There is no remote/tunnel access at all — the earlier Cloudflare tunnel (added 2026-07-24) and, before that, Port Forwarding + Dynamic DNS, are both retired; see `MANUAL_Setup_Installation.md` |
 | Backup & Recovery | Complete — Built-in Target Directory Mirror executing nightly automated `pg_dump` local backups; verified end-to-end producing a valid, restorable archive |
 | Security & Git | Complete — private git repo with pre-commit secret scanning; command injection, cookie-flag, and job-authorization bugs fixed; see Phase 9 |
 | Automated tests | Started — 36 Vitest tests on pure-logic modules; see Phase 10. Not comprehensive (no API route, component, or e2e tests yet) |
-| Offline / PWA | Complete — IndexedDB cache and Service Worker sync queue. Field module functions fully offline |
+| Offline / PWA | Complete — IndexedDB cache and sync queue. Field module functions fully offline once loaded. Note: the Service Worker registration is a no-op in production because it runs on a plain-http LAN origin (a secure context is required) — the page cannot be reloaded from scratch while off the office WiFi; see `CLAUDE.md`'s Field page section |
 | Electron desktop app | Complete — dev and production build pipelines, NSIS installer |
 | End-user/internal manuals | Complete — `MANUAL_Setup_Installation.md`, `MANUAL_Administrator.md`, `MANUAL_Field_Tech.md`, plus `docs/MANUAL_Troubleshooting.md`, `docs/MANUAL_White_Glove_Installation.md`, `docs/MANUAL_Golden_State_Demo.md`, `docs/MANUAL_Live_Demo.md`, and `docs/BUSINESS_Purchase_to_Install_Playbook.md` |
 | Job editing | Complete — `EditJobModal` updates client/vehicle/date/notes on Scheduled/In Progress jobs; `PUT /api/jobs` re-runs the same double-booking, repair, and time-off checks used at creation (shared via `src/lib/jobConflicts.ts`), and blocks edits once a job is Completed |
