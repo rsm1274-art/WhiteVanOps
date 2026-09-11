@@ -86,3 +86,42 @@ jobs:
           else
             echo "No storefront/ on this branch — skipping"
           fi
+
+  # macOS support added 2026-09-08/09 (see PLAN_2026-09-08-macos-support.md).
+  # This catches platform-specific regressions in shared code paths (e.g. a
+  # path.join assumption that only breaks on macOS, or a future change to
+  # electron/*.js that isn't guarded by process.platform) before they reach a
+  # Mac build — which can only happen manually, on an actual Mac, since
+  # electron-builder's mac target needs a macOS host and the pgsql-mac/
+  # cloudflared-mac binary payloads are machine-local and gitignored (see
+  # MANUAL_Setup_Installation.md §1). So this job is deliberately narrower
+  # than `check` above: tsc + unit tests only, no `next build` and no
+  # electron-build.js/packaging — those need the Mac-only binaries this
+  # runner doesn't have and never will.
+  check-macos:
+    runs-on: macos-latest
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      SESSION_SECRET: ci-dummy
+      HUSKY: 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test

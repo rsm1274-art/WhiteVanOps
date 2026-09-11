@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WhiteVanOps — Connect to Office Server</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: white;
+      padding: 32px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    h1 {
+      color: #111827;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #4b5563;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    input {
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    #hostInput {
+      flex: 3;
+    }
+    #portInput {
+      flex: 1;
+      text-align: center;
+    }
+    button {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      width: 100%;
+      font-weight: 500;
+    }
+    button:hover {
+      background-color: #1d4ed8;
+    }
+    button:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+    #error {
+      color: #dc2626;
+      font-size: 14px;
+      margin-top: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Connect to an Office Server</h1>
+    <p>Enter the address of the computer already running WhiteVanOps.</p>
+    <div class="row">
+      <input type="text" id="hostInput" placeholder="192.168.1.50" />
+      <input type="text" id="portInput" placeholder="3000" value="3000" />
+    </div>
+    <button id="connectBtn">Connect</button>
+    <div id="error"></div>
+  </div>
+
+  <script>
+    // Node is not exposed to this window; the client-setup-preload.js bridge
+    // provides the only two calls we need.
+    const connectBtn = document.getElementById('connectBtn');
+    const hostInput = document.getElementById('hostInput');
+    const portInput = document.getElementById('portInput');
+    const errorDiv = document.getElementById('error');
+
+    connectBtn.addEventListener('click', () => {
+      const host = hostInput.value.trim();
+      const port = parseInt(portInput.value.trim(), 10) || 3000;
+      if (!host) return;
+
+      connectBtn.disabled = true;
+      connectBtn.innerText = 'Connecting...';
+      errorDiv.style.display = 'none';
+
+      window.wvoClientSetup.verify(host, port);
+    });
+
+    window.wvoClientSetup.onResult((result) => {
+      connectBtn.disabled = false;
+      connectBtn.innerText = 'Connect';
+
+      if (result.success) {
+        document.body.innerHTML = '<div class="container"><h1>Connected!</h1><p>Starting WhiteVanOps...</p></div>';
+      } else {
+        errorDiv.innerText = result.error;
+        errorDiv.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

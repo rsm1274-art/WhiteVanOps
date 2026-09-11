@@ -61,6 +61,23 @@ The build bundles portable PostgreSQL binaries from the project's `pgsql/` direc
 
 `npm run electron:build` **fails** if `pgsql/bin/pg_ctl.exe` is missing, and after packaging it re-verifies that `dist-electron/win-unpacked/resources/pgsql/bin/pg_ctl.exe` and `resources/nextjs/node_modules/next` exist. This guard exists because electron-builder silently skips missing `extraResources` sources — a `pgsql`-less build machine used to produce an installer with no database engine at all, which fails on first launch with "Failed to load dashboard data" on any machine without its own PostgreSQL. If a packaged app is ever started without bundled binaries (and nothing already listening on the database port), it now shows a "Database engine missing" startup error instead of opening a broken window.
 
+### PostgreSQL binaries for the macOS build (`pgsql-mac/` directory)
+
+The mac build bundles portable PostgreSQL binaries from `pgsql-mac/` (~160 MB, gitignored exactly like `pgsql/`). The zonky embedded-postgres darwin-arm64 archive (the plan's first-preference source) ships **no `pg_dump`, `psql`, or any other client tool** — only `postgres`/`initdb`/`pg_ctl`, which is enough to start a database but not to back one up. Sourced from Postgres.app instead, since its binaries are universal (arm64 + x86_64, no Rosetta) and include the full toolset. To (re)create it:
+
+1. Download the single-major-version dmg from the latest [Postgres.app release](https://github.com/PostgresApp/PostgresApp/releases/latest), e.g. `Postgres-2.9.6-17.dmg` (~120 MB — much smaller than the all-versions dmg).
+2. Mount it (`hdiutil attach`) and locate `Postgres.app/Contents/Versions/17/`.
+3. Copy only what this app actually invokes into a new `pgsql-mac/` at the project root:
+   - `bin/`: `postgres`, `initdb`, `pg_ctl`, `pg_dump` — the four binaries `electron/postgres.js` and `electron/backup.js`/`src/app/api/settings/backup/route.ts` call. Postgres.app's `bin/` also ships PostGIS/GDAL/PROJ tools (`gdal*`, `ogr*`, `proj*`, `postgis*`, etc.) and other core client tools (`psql`, `pg_restore`, ...) — none of these are used by the app, so leave them out.
+   - `lib/`: only the dylibs those four binaries actually load — run `otool -L` on each (and recursively on their own dependencies) to get the exact closure; do **not** copy `lib/` wholesale, since Postgres.app's PostGIS bundle drags in ~150 MB of unrelated GDAL/PROJ/GEOS libraries. As of PostgreSQL 17.11 the closure is: `libcrypto.3.dylib`, `libicudata.75.dylib`, `libicui18n.75.dylib`, `libicuuc.75.dylib`, `liblz4.1.dylib`, `libpq.5.dylib`, `libssl.3.dylib`, `libxml2.2.dylib`, `libzstd.1.dylib`.
+   - `lib/postgresql/`: `plpgsql.dylib` (Postgres registers the PL/pgSQL language by default on every `initdb`) and `dict_snowball.dylib` (the default text-search configuration's stemmer — `initdb`'s post-bootstrap step hard-fails without it, even though the app never calls it directly). No other extension module is needed; nothing in `prisma/migrations/` runs `CREATE EXTENSION`.
+   - `share/postgresql/`: copy the whole directory (timezone data, config templates, `information_schema.sql`, `tsearch_data/`, etc. — all required by `initdb`). Do not copy `share/gdal`, `share/proj`, `share/doc`, `share/man`, or the other Postgres.app extras.
+4. Preserve the executable bit on everything under `bin/` (`chmod +x pgsql-mac/bin/*`).
+
+Verify the payload works in isolation before trusting it in a full build — from the project root: `pgsql-mac/bin/initdb -D /tmp/pgtest -U wvo_user -E UTF8 --locale=C -A scram-sha-256 --pwfile=<(echo somepassword)`, then `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -l /tmp/pg.log -o "-p 5544" start`, then `pgsql-mac/bin/pg_dump -h 127.0.0.1 -p 5544 -U wvo_user postgres > /dev/null` should all succeed, followed by `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -m fast stop` and `rm -rf /tmp/pgtest`.
+
+`npm run electron:build:mac` fails the same way `electron:build` does if `pgsql-mac/bin/pg_ctl` is missing, and re-verifies both the `mac-arm64` and `mac` (x64) packaged outputs after building — mac produces two separate installers (`WhiteVanOps-Base-Setup-arm64.dmg` and `WhiteVanOps-Base-Setup-x64.dmg`) from one electron-builder invocation, and both are checked independently.
+
 ### `cloudflared` binary for the build (`cloudflared/` directory)
 
 Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:build:trial:plus`) — Base builds don't need it and must not have it. Gitignored, not committed to git, exactly like `pgsql/`. To (re)create it:
@@ -69,6 +86,23 @@ Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:b
 2. Place it at `cloudflared/cloudflared.exe` in the project root.
 
 A Plus build **fails** before packaging if `cloudflared/cloudflared.exe` is missing, mirroring the `pgsql/bin/pg_ctl.exe` check. After packaging, step 7b also asserts the reverse: `win-unpacked/resources/cloudflared/cloudflared.exe` must **not** exist in a Base artifact — a Base install that quietly shipped the tunnel binary would erase the product boundary being sold.
+
+### `cloudflared` binary for the macOS build (`cloudflared-mac/` directory)
+
+Required only for the two mac Plus artifacts (`electron:build:mac:plus`, `electron:build:mac:trial:plus`). Gitignored, not committed to git, exactly like `pgsql-mac/`. Cloudflare does not publish a universal darwin binary — arm64 and amd64 ship as separate archives — so this one is assembled with `lipo` into a single universal binary that serves both the arm64 and x64 `.dmg` targets `electron:build:mac` already produces from one electron-builder invocation, the same way `pgsql-mac/` is one payload for both arches. To (re)create it:
+
+1. Download both darwin archives from the official releases (`https://github.com/cloudflare/cloudflared/releases/latest`):
+   - `cloudflared-darwin-arm64.tgz`
+   - `cloudflared-darwin-amd64.tgz`
+2. Extract each (`tar -xzf`) — both contain a single `cloudflared` binary.
+3. Merge them into one universal binary:
+   ```bash
+   lipo -create cloudflared-arm64/cloudflared cloudflared-amd64/cloudflared -output cloudflared-mac/cloudflared
+   chmod +x cloudflared-mac/cloudflared
+   ```
+4. Verify it's genuinely fat and runs: `file cloudflared-mac/cloudflared` should report both `arm64` and `x86_64`, and `cloudflared-mac/cloudflared --version` should run without needing Rosetta on an Apple Silicon Mac.
+
+`npm run electron:build:mac:plus` fails before packaging if `cloudflared-mac/cloudflared` is missing, and after packaging step 7b asserts it exists (and actually executes) inside both the `mac-arm64` and `mac` (x64) packaged `.app` bundles — mirroring the Windows Plus/Base present/absent checks above.
 
 ---
 
@@ -237,6 +271,16 @@ The Next.js server runs locally in the customer's office; nothing about field ac
 
 To do it by hand instead: Windows Defender Firewall with Advanced Security → Inbound Rules → New Rule → Port → TCP → 3000 → Allow → Private only. Don't rely on the one-time "Allow this app through the firewall" popup — it's easy to dismiss, and dismissing it creates a *block* rule that then has to be found and deleted.
 
+**Step 3 (macOS) — Allow the app through the macOS Application Firewall.** Same requirement, different mechanism: macOS's firewall is per-app rather than per-port, so there's no port number to configure — just the app itself.
+
+1. On the Mac, open Terminal and run:
+   ```bash
+   sudo scripts/recovery/allow-field-access.sh
+   ```
+   To undo, run it with `--remove`. Pass `--app-path` if WhiteVanOps isn't installed at the default `/Applications/WhiteVanOps.app`.
+2. The first time WhiteVanOps runs, macOS may separately prompt "Accept incoming network connections?" — click **Allow**. If it was dismissed or answered Deny, remove WhiteVanOps from System Settings → Network → Firewall → Options and re-run the script so it prompts again.
+3. **On macOS 15 and later, also grant the Local Network permission**: System Settings → Privacy & Security → Local Network → WhiteVanOps. Without it, the app never accepts LAN connections at all, firewall rule or not — this is the macOS 15 case the `NSLocalNetworkUsageDescription` in the app's Info.plist exists to explain to the user when the OS itself prompts for it.
+
 **Step 4 — Hand out access to field techs.**
 1. Have each tech, **while connected to the office WiFi**, scan the QR code with their phone camera and sign in.
 2. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
@@ -256,6 +300,49 @@ The practical consequence is the plan difference:
 - **A bare office-LAN address** — only someone on the office WiFi can open the link. Customers will see nothing. Quotes still work; the operator just records the acceptance by hand from the Quotes tab instead.
 
 **Set the Field Access address before issuing the first quote.** With none saved, the app falls back to whatever address the dashboard itself was opened on — normally `localhost` — and the generated link works only on the office PC. Fixing it later means re-sending the link to any customer who already had one.
+
+---
+
+## 7A. Connecting a Second Machine (Client Mode)
+
+If your office has more than one computer running WhiteVanOps (for example a Windows PC and
+a Mac), they do **not** each get their own database. One machine is the **host** — it runs
+the database and the server, exactly as a single-machine install always has, and it is the
+machine that gets backed up (§8). Every other machine runs in **client mode**: it opens no
+database, runs no server, and simply displays the host's dashboard in its own window — the
+same relationship a field tech's phone already has with the office PC (§7), just in a
+desktop app instead of a browser tab.
+
+**Why not two databases?** WhiteVanOps has no way to merge two independently-edited copies
+of the data back together without risking silent data loss or corruption (duplicate invoice
+numbers, resurrected deleted records, conflicting stock counts). One shared database, always
+reachable over the office network, avoids that entirely.
+
+**Setting up the host.** Install and activate WhiteVanOps on the host machine exactly as
+described in §1-6 above. Nothing about that process changes.
+
+**Setting up a client.** On the second machine, install WhiteVanOps as usual but do **not**
+enter a license key when the activation window appears. Instead, click **"Connecting to an
+existing office server instead?"** and enter the host machine's LAN address (the same
+address shown in the host's Field Access QR modal, §7) and its port (`3000` unless the host
+had to fall back to a different one). The app verifies a real WhiteVanOps server answers at
+that address before accepting it — a typo or an unrelated server will be rejected with an
+error rather than silently saved.
+
+**What a client cannot do:**
+- **The host machine must be on.** If it's off, asleep, or disconnected from the network,
+  every client shows "Cannot reach the office server" and will not fall back to running its
+  own local copy — that is deliberate, so two machines never silently diverge. Retry once
+  the host is back, or use **Reconfigure** to point at a different address.
+- A client install never asks for its own license key — its Base/Plus features follow
+  whatever the host is licensed for, the same as anyone opening the dashboard in a plain
+  browser.
+- A client is not backed up separately (§8) — only the host holds the data, so only the host
+  needs a backup destination configured.
+
+**Reconfiguring or switching a machine back to host mode.** There is currently no in-app
+toggle for this after initial setup; contact support if a client machine needs to be
+repointed at a different host or converted back to standalone.
 
 ---
 

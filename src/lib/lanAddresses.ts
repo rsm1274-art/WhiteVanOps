@@ -18,13 +18,18 @@ const VIRTUAL_NAME_MARKERS = [
   "hyper-v",
   "virtualbox",
   "vmware",
-  "vmnet",
+  "vmnet", // also covers macOS vmnet interfaces (vmnet0, vmnet8, ...)
   "docker",
   "wsl",
   "loopback",
   "bluetooth",
   "tap-windows", // OpenVPN and friends
   "npcap",
+  "awdl", // macOS Apple Wireless Direct Link (AirDrop/Handoff)
+  "llw", // macOS low-latency WLAN, paired with awdl0
+  "utun", // macOS VPN/tunnel interfaces
+  "bridge", // macOS bridge100 (Internet Sharing / virtualization bridge)
+  "ap1", // macOS Wi-Fi AP/hotspot virtual interface
 ];
 
 /**

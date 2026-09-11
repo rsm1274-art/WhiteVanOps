@@ -37,25 +37,21 @@ async function runBackupNow(isDev, resourcesPath) {
     return;
   }
 
-  // Find pg_dump.exe
-  const pgBinDir = isDev 
-    ? path.join(__dirname, '..', 'pgsql', 'bin') 
+  // Find pg_dump
+  const isWin = process.platform === 'win32';
+  const pgBinDir = isDev
+    ? path.join(__dirname, '..', 'pgsql', 'bin')
     : path.join(resourcesPath, 'pgsql', 'bin');
-  
-  const pgDumpExe = path.join(pgBinDir, 'pg_dump.exe');
-  
+
+  const pgDumpExe = path.join(pgBinDir, isWin ? 'pg_dump.exe' : 'pg_dump');
+
   if (!fs.existsSync(pgDumpExe)) {
-    console.error(`[backup] pg_dump.exe not found at ${pgDumpExe}`);
+    console.error(`[backup] pg_dump not found at ${pgDumpExe}`);
     return;
   }
 
-  // Create filename: WhiteVanOps_Backup_YYYYMMDD_HHMM.sql.gz
-  // Note: we can just produce a .sql file, or use pg_dump -Z 9 for gzip output 
-  // actually pg_dump supports -F c (custom format which is compressed) but user asked for .sql.gz
-  // It's easiest to pipe pg_dump to a file if we can't do `.gz` directly, but pg_dump handles compression with `-Z 9 -F p` in newer versions? 
-  // Wait, standard pg_dump to plain text isn't compressed unless piped, but we can just save it as .sql for safety if gzip isn't available in Windows shell natively via spawn.
-  // Actually pg_dump -F c is automatically compressed and can be restored easily. Let's output .backup (custom format).
-  // If .sql is strictly requested, we can use pg_dump -Z 9 -F p > file.sql.gz but wait, Windows doesn't pipe well via spawn. Let's just output .sql for simplicity.
+  // pg_dump -F c (custom format) is compressed and easily restorable, so we
+  // output that directly via spawn args rather than piping through a shell.
   const now = new Date();
   const dateStr = now.toISOString().replace(/T/, '_').replace(/:/g, '').substring(0, 15);
   const fileName = `WhiteVanOps_Backup_${dateStr}.sql`;
@@ -63,8 +59,9 @@ async function runBackupNow(isDev, resourcesPath) {
 
   console.log(`[backup] Starting backup to ${filePath}...`);
 
-  // We need the DATABASE_URL. In Electron, process.env.DATABASE_URL might be set from .env.local
-  // We can parse it from resources/nextjs/.env.local or project root.
+  // We need the DATABASE_URL. In Electron, process.env.DATABASE_URL is set
+  // directly by main.js before the server boots, so this file fallback only
+  // matters when runBackupNow runs outside that flow (dev/testing).
   let dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     const envPath = isDev 

@@ -121,6 +121,38 @@ export interface Quote {
   updatedAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Plus tier — custom report builder
+// ---------------------------------------------------------------------------
+
+export interface ReportFolder {
+  id: string;
+  name: string;
+  isPublic: boolean;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedReport {
+  id: string;
+  name: string;
+  description: string | null;
+  rootEntity: "job";
+  /**
+   * Untrusted whether freshly saved or read back from the database — always
+   * re-validated with validateDefinition() before compiling or executing.
+   * See src/lib/reports/definition.ts.
+   */
+  definition: import("@/lib/reports/types").ReportDefinition;
+  folderId: string | null;
+  folder?: ReportFolder | null;
+  isShared: boolean;
+  createdById: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PersonnelQualification {
   id: string;
   personnelId: string;
@@ -483,6 +515,8 @@ export type ModalType =
   | "addInvoice"
   | "recordPayment"
   | "syncReview"
+  | "saveReport"
+  | "reportFolder"
   | null;
 
 // ---------------------------------------------------------------------------

@@ -231,7 +231,7 @@ Check in this order — most likely first:
 
 1. **The office PC's local IP changed.** By far the most common cause. If you set a static IP *on the PC* instead of a **DHCP Reservation on the router**, the router doesn't know about it and can hand that address to somebody's laptop. Now your port forward points at a printer. Fix: `ipconfig /all` on the PC, compare to the forward rule, and set a proper DHCP reservation by MAC address.
 2. **The DDNS hostname is stale.** The customer's public IP changes periodically — that's the whole reason DuckDNS exists. If the updater stopped, the hostname points at an address that isn't theirs anymore. Check with `nslookup your-client.duckdns.org` and compare to whatismyip.com on their PC. Also confirm the Windows Task Scheduler entry actually ran — a Windows update or a password change can silently disable a scheduled task.
-3. **A Windows update reset the firewall**, or a new antivirus/security suite got installed with its own firewall. Re-check inbound TCP 3000.
+3. **A Windows update reset the firewall**, or a new antivirus/security suite got installed with its own firewall. Re-check inbound TCP 3000. On a Mac, re-run `scripts/recovery/allow-field-access.sh` — a macOS update can reset the Application Firewall's allowed-apps list the same way.
 4. **The router rebooted and lost its config**, or the ISP swapped the hardware during a service call. ISP techs replace routers and don't restore custom rules. If they had a service visit, this is almost certainly it.
 5. **The PC is asleep or off.** See §3.1.
 
@@ -375,6 +375,24 @@ If PowerShell blocks the script ("running scripts is disabled"), use:
 **How it works** (useful when it misbehaves): the wrapper finds `WhiteVanOps.exe`, then runs the `.js` through it with `ELECTRON_RUN_AS_NODE=1` — Electron's main process *is* Node, so the installed app doubles as a Node interpreter. It reads `DATABASE_URL` from `<install>\resources\nextjs\.env.local` and borrows `pg` and `bcryptjs` from the app's own bundled `node_modules`. Nothing gets installed on the customer's machine.
 
 The new password is deliberately **not** accepted as a command-line argument — on Windows that would land in PSReadLine history and be visible in the process list to anyone else on the machine.
+
+**On a Mac,** the same recovery uses `reset-admin-password.sh` + `reset-admin-password.js` instead of the `.ps1`. Copy both files onto the machine (same USB-stick approach), start WhiteVanOps and leave it at the login screen, then from Terminal in the folder with those two files:
+
+```bash
+# See which admin/superuser accounts exist — changes nothing. Start here.
+./reset-admin-password.sh --list
+
+# Reset 'admin' to a random temporary password
+./reset-admin-password.sh
+
+# A different account name, or a non-standard install location
+./reset-admin-password.sh --username owner --install-dir "/Applications/WhiteVanOps.app"
+
+# The account itself was deleted — recreate it as a superuser
+./reset-admin-password.sh --create
+```
+
+Everything else — the printed temporary password, the forced password change, the lockout clear — works identically to the Windows version above. If the script won't run ("permission denied"), make it executable first: `chmod +x reset-admin-password.sh`. Unlike the Windows wrapper, there's no `Start-Process` indirection to worry about — `--install-dir` here points at the `WhiteVanOps.app` bundle itself, and the script execs `Contents/MacOS/WhiteVanOps` directly with `ELECTRON_RUN_AS_NODE=1`.
 
 **Prevention:** at handoff, **create a second superuser account** and make the owner write both passwords somewhere real. Record them in your own customer file too. That turns this whole entry into a two-click problem.
 

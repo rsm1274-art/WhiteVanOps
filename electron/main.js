@@ -24,11 +24,12 @@ const firestore = getFirestore(firebaseApp);
 const isDev = !app.isPackaged;
 
 // Packaged builds get their own Chromium profile under the app-managed
-// %APPDATA%\whitevanops dir. Without this, dev and packaged runs share the
-// default profile derived from package.json "name" (%APPDATA%\white-van-ops),
-// and stale dev state — service worker registrations, localhost:3000 cookies —
-// leaks into packaged-install testing (2026-07-10: a zombie cache-first sw.js
-// served a cached dashboard into a fresh install). Must run before app ready.
+// per-OS app-data \whitevanops dir (app.getPath('appData')). Without this,
+// dev and packaged runs share the default profile derived from package.json
+// "name", and stale dev state — service worker registrations, localhost:3000
+// cookies — leaks into packaged-install testing (2026-07-10: a zombie
+// cache-first sw.js served a cached dashboard into a fresh install). Must run
+// before app ready.
 if (!isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), 'whitevanops', 'profile'));
 }
@@ -43,6 +44,9 @@ let loadingWindow;
 let serverProcess;
 let postgres = { managed: false };
 
+// Waits for a locally-started server to come up. Not used in client mode —
+// there, app.whenReady() has already confirmed the remote host answers
+// before startServer() (a no-op there) even runs.
 function waitForServer(retries = 60) {
   return new Promise((resolve, reject) => {
     const attempt = (n) => {
@@ -57,14 +61,16 @@ function waitForServer(retries = 60) {
   });
 }
 
-// True only when the listener on `port` is actually a WhiteVanOps server —
-// identified by GET /api/health returning { app: "whitevanops" }. A bare
-// "something answered" check is not enough: any other product publishing the
-// same port (2026-07-14: an Open WebUI Docker container on 3000) would be
-// mistaken for our PM2 server and loaded straight into the app window.
-function isWvoServer(port) {
+// True only when the listener on `host`:`port` is actually a WhiteVanOps
+// server — identified by GET /api/health returning { app: "whitevanops" }. A
+// bare "something answered" check is not enough: any other product publishing
+// the same port (2026-07-14: an Open WebUI Docker container on 3000) would be
+// mistaken for our PM2 server and loaded straight into the app window. `host`
+// defaults to localhost for the existing same-machine reuse check; client
+// mode passes a remote host to probe the configured office server instead.
+function isWvoServer(host, port) {
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${port}/api/health`, (res) => {
+    const req = http.get(`http://${host}:${port}/api/health`, (res) => {
       if (res.statusCode !== 200) {
         res.resume();
         resolve(false);
@@ -110,12 +116,22 @@ async function startServer() {
     return;
   }
 
+  // Client mode: this machine is not the host. Never boot a local database or
+  // server here — that is exactly how you end up with two divergent copies of
+  // the data, which shared-database mode exists to avoid. app.whenReady()
+  // already confirmed the host answers before we get this far, so there is
+  // nothing left for startServer() to do.
+  const hostConfig = readHostConfig();
+  if (hostConfig.mode === 'client') {
+    return;
+  }
+
   // If a WhiteVanOps server is already serving this port (e.g. the always-on
   // PM2 field-tech service `whitevanops`), reuse it — two servers cannot bind
   // the same port, and booting a second one here just stalls startup. The
   // /api/health identity check keeps us from adopting a foreign app that
   // happens to hold 3000; in that case, fall back to the next free port.
-  if (await isWvoServer(PORT)) {
+  if (await isWvoServer('localhost', PORT)) {
     return;
   }
   if (!(await isPortFree(PORT))) {
@@ -125,7 +141,10 @@ async function startServer() {
 
   // Start (and on first run, initialize) the bundled PostgreSQL server.
   // No-op when the DB port already has a listener or DATABASE_URL is remote.
-  postgres = await ensurePostgres({ resourcesPath: process.resourcesPath });
+  postgres = await ensurePostgres({
+    resourcesPath: process.resourcesPath,
+    appDataWvoDir: path.join(app.getPath('appData'), 'whitevanops'),
+  });
 
   // Production: require the standalone server inline (Electron's main process IS Node.js).
   const serverPath = path.join(process.resourcesPath, 'nextjs', 'server.js');
@@ -180,7 +199,7 @@ async function createMainWindow() {
     return { action: 'deny' };
   });
 
-  await mainWindow.loadURL(`http://localhost:${PORT}`);
+  await mainWindow.loadURL(`http://${connectionTarget.host}:${connectionTarget.port}`);
 
   if (loadingWindow && !loadingWindow.isDestroyed()) {
     loadingWindow.close();
@@ -199,6 +218,42 @@ function getLicensePath() {
   if (!fs.existsSync(wvoPath)) fs.mkdirSync(wvoPath, { recursive: true });
   return path.join(wvoPath, 'license.json');
 }
+
+// Shared-database ("client mode") config. Absence of this file — the state of
+// every install that predates this feature — means "host": run the database
+// and server on this machine exactly as before. Only a machine an operator
+// has explicitly pointed at another office server carries
+// { mode: "client", host, port }. Never inferred, never defaulted to client.
+function getHostConfigPath() {
+  const appDataPath = app.getPath('appData');
+  const wvoPath = path.join(appDataPath, 'whitevanops');
+  if (!fs.existsSync(wvoPath)) fs.mkdirSync(wvoPath, { recursive: true });
+  return path.join(wvoPath, 'host.json');
+}
+
+function readHostConfig() {
+  try {
+    const raw = fs.readFileSync(getHostConfigPath(), 'utf8');
+    const data = JSON.parse(raw);
+    if (data.mode === 'client' && typeof data.host === 'string' && Number.isInteger(data.port)) {
+      return data;
+    }
+  } catch {
+    // Missing or malformed file — fall through to host mode below.
+  }
+  return { mode: 'host' };
+}
+
+function writeHostConfig(config) {
+  fs.writeFileSync(getHostConfigPath(), JSON.stringify(config));
+}
+
+// Set once at startup to whichever address createMainWindow() should load —
+// localhost:PORT for a host machine, or the configured remote office server
+// for a client. Read by both createMainWindow() and the `activate` handler
+// (Dock icon re-click on macOS), which re-enters window creation on a
+// separate path and must resolve to the same target rather than re-prompting.
+let connectionTarget = { host: 'localhost', port: PORT };
 
 // The local license file is HMAC-signed so it cannot be forged by hand-editing
 // license.json. The signature binds the key to this machine's hardware id, and
@@ -279,6 +334,12 @@ function isTrialBuild() {
   }
 }
 
+// Resolves with { mode: 'host' } once a license is activated, or
+// { mode: 'client', host, port } if the operator instead chose "connect to an
+// existing office server" and completed the client-setup window. Only shown
+// when no valid license is already on disk — an already-activated machine
+// never sees this, which is what keeps every existing single-machine install
+// unaffected by client mode's existence.
 function showActivationWindow() {
   return new Promise((resolve) => {
     const activationWindow = new BrowserWindow({
@@ -295,11 +356,11 @@ function showActivationWindow() {
 
     activationWindow.loadFile(path.join(__dirname, 'activation.html'));
 
-    let activated = false;
+    let settled = false;
 
     // Registered with `on` (not `once`) so a mistyped key can be corrected and
     // retried; the listener is removed on success and on window close.
-    const handler = async (event, key) => {
+    const licenseHandler = async (event, key) => {
       try {
         const docRef = doc(firestore, 'licenses', key);
         const docSnap = await getDoc(docRef);
@@ -332,44 +393,172 @@ function showActivationWindow() {
         // tier field existed have no `tier` and correctly resolve to base.
         const tier = data.tier === 'plus' ? 'plus' : 'base';
         writeLicense(key, hwid, tier);
-        activated = true;
+        settled = true;
 
         event.reply('license-result', { success: true });
 
         setTimeout(() => {
-          ipcMain.removeListener('verify-license', handler);
+          ipcMain.removeListener('verify-license', licenseHandler);
+          ipcMain.removeListener('switch-to-client-setup', switchHandler);
           if (!activationWindow.isDestroyed()) activationWindow.close();
-          resolve();
+          resolve({ mode: 'host' });
         }, 1500);
       } catch (err) {
         event.reply('license-result', { success: false, error: err.message });
       }
     };
 
-    ipcMain.on('verify-license', handler);
+    // The operator has an existing office server already and wants this
+    // machine to be a client instead of activating its own license.
+    const switchHandler = async () => {
+      settled = true;
+      ipcMain.removeListener('verify-license', licenseHandler);
+      ipcMain.removeListener('switch-to-client-setup', switchHandler);
+      if (!activationWindow.isDestroyed()) activationWindow.close();
+      const target = await showClientSetupWindow();
+      resolve({ mode: 'client', ...target });
+    };
+
+    ipcMain.on('verify-license', licenseHandler);
+    ipcMain.on('switch-to-client-setup', switchHandler);
 
     activationWindow.on('closed', () => {
-      ipcMain.removeListener('verify-license', handler);
-      if (!activated && !fs.existsSync(getLicensePath())) {
+      ipcMain.removeListener('verify-license', licenseHandler);
+      ipcMain.removeListener('switch-to-client-setup', switchHandler);
+      if (!settled && !fs.existsSync(getLicensePath())) {
         app.quit();
       }
     });
   });
 }
 
+// Small window (modeled on showActivationWindow above — same
+// ipcMain.on/event.reply pattern, no ipcMain.handle) that takes a host[:port]
+// for an existing WhiteVanOps office server, verifies it before accepting,
+// and writes host.json. Resolves with { host, port } on success. Used both
+// from the first-run activation window and from handleUnreachableHost()
+// below when a saved host stops answering and the operator reconfigures.
+function showClientSetupWindow() {
+  return new Promise((resolve) => {
+    const setupWindow = new BrowserWindow({
+      width: 480,
+      height: 380,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'client-setup-preload.js'),
+      },
+      resizable: false,
+      center: true,
+    });
+
+    setupWindow.loadFile(path.join(__dirname, 'client-setup.html'));
+
+    let connected = false;
+
+    const handler = async (event, { host, port }) => {
+      try {
+        const reachable = await isWvoServer(host, port);
+        if (!reachable) {
+          event.reply('host-result', {
+            success: false,
+            error: `No WhiteVanOps server found at ${host}:${port}. Check the address and that computer's power and network connection.`,
+          });
+          return;
+        }
+
+        writeHostConfig({ mode: 'client', host, port });
+        connected = true;
+
+        event.reply('host-result', { success: true });
+
+        setTimeout(() => {
+          ipcMain.removeListener('verify-host', handler);
+          if (!setupWindow.isDestroyed()) setupWindow.close();
+          resolve({ host, port });
+        }, 1000);
+      } catch (err) {
+        event.reply('host-result', { success: false, error: err.message });
+      }
+    };
+
+    ipcMain.on('verify-host', handler);
+
+    setupWindow.on('closed', () => {
+      ipcMain.removeListener('verify-host', handler);
+      if (!connected) {
+        app.quit();
+      }
+    });
+  });
+}
+
+// A saved client-mode host that doesn't answer at startup. Never falls back
+// to booting a local database — that is the exact divergent-copy failure
+// mode shared-database mode exists to avoid. Loops on Retry; Reconfigure
+// re-opens the setup window (which re-verifies before writing); Quit exits.
+// Returns the (now-reachable) host config, or null if the operator quit.
+async function handleUnreachableHost(hostConfig) {
+  for (;;) {
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: 'WhiteVanOps — Cannot Reach Office Server',
+      message: `Cannot reach the office server at ${hostConfig.host}:${hostConfig.port}.`,
+      detail: "Make sure that computer is turned on and connected to the same network, then try again.",
+      buttons: ['Retry', 'Reconfigure', 'Quit'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+
+    if (response === 2) {
+      app.quit();
+      return null;
+    }
+
+    if (response === 1) {
+      const target = await showClientSetupWindow();
+      return { mode: 'client', ...target };
+    }
+
+    if (await isWvoServer(hostConfig.host, hostConfig.port)) {
+      return hostConfig;
+    }
+  }
+}
+
 app.whenReady().then(async () => {
   createLoadingWindow();
 
   try {
-    const isActivated = isTrialBuild() ? true : await verifyLicenseSilent();
-    if (!isActivated) {
-      if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
-      await showActivationWindow();
-      createLoadingWindow();
+    let hostConfig = readHostConfig();
+
+    if (hostConfig.mode === 'host') {
+      const isActivated = isTrialBuild() ? true : await verifyLicenseSilent();
+      if (!isActivated) {
+        if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
+        const choice = await showActivationWindow();
+        createLoadingWindow();
+        if (choice.mode === 'client') {
+          hostConfig = choice;
+        }
+      }
     }
 
-    await startServer();
-    await waitForServer();
+    if (hostConfig.mode === 'client') {
+      const reachable = await isWvoServer(hostConfig.host, hostConfig.port);
+      if (!reachable) {
+        if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
+        hostConfig = await handleUnreachableHost(hostConfig);
+        if (!hostConfig) return; // operator chose Quit; app.quit() already called
+        createLoadingWindow();
+      }
+      connectionTarget = { host: hostConfig.host, port: hostConfig.port };
+    } else {
+      await startServer();
+      connectionTarget = { host: 'localhost', port: PORT };
+      await waitForServer();
+    }
+
     await createMainWindow();
   } catch (err) {
     console.error('[startup] Fatal:', err);
@@ -380,6 +569,9 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  // macOS apps conventionally stay running (in the Dock) with no windows
+  // open; `activate` below rebuilds the window when the Dock icon is clicked.
+  if (process.platform === 'darwin') return;
   if (serverProcess) serverProcess.kill();
   app.quit();
 });

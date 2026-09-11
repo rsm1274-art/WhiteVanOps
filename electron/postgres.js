@@ -2,15 +2,17 @@
 //
 // The installer ships portable PostgreSQL binaries in resources/pgsql and the
 // concatenated Prisma migrations in resources/db/schema.sql. On startup we:
-//   1. Ensure resources/nextjs/.env.local exists (generate one with unique
-//      random credentials on first launch of a generic build).
+//   1. Ensure appDataWvoDir/.env.local exists (generate one with unique
+//      random credentials on first launch of a generic build). This lives in
+//      the OS app-data directory, not inside resourcesPath, so writing it
+//      never touches the signed app bundle on macOS.
 //   2. Parse DATABASE_URL. If it isn't a localhost URL, or something is
 //      already listening on its port (the office PM2 machine's own Postgres,
 //      or a user-managed install), we manage nothing.
-//   3. Otherwise initdb a data directory under %APPDATA%/whitevanops/pgdata
-//      on first run, start the server with pg_ctl, and on first run create
-//      the database, apply the schema, and bootstrap the admin/admin
-//      superuser (mustChangePassword = true).
+//   3. Otherwise initdb a data directory under appDataWvoDir/pgdata on first
+//      run, start the server with pg_ctl, and on first run create the
+//      database, apply the schema, and bootstrap the admin/admin superuser
+//      (mustChangePassword = true).
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -46,11 +48,22 @@ function parseEnvFile(file) {
   return out;
 }
 
-function ensureEnvLocal(nextjsDir) {
-  const envPath = path.join(nextjsDir, '.env.local');
+// Generated per-install credentials live under appDataWvoDir/.env.local, never
+// under resourcesPath — writing into the packaged app's own Resources dir
+// breaks the macOS code signature and fails under Gatekeeper translocation.
+// A build-time bundled nextjsDir/.env.local (optional, e.g. a per-customer
+// pre-configured DATABASE_URL) is read as a seed but never written back to.
+function ensureEnvLocal(appDataWvoDir, nextjsDir) {
+  fs.mkdirSync(appDataWvoDir, { recursive: true });
+  const envPath = path.join(appDataWvoDir, '.env.local');
+  const bundledPath = path.join(nextjsDir, '.env.local');
+
   let env = {};
+  if (fs.existsSync(bundledPath)) {
+    env = { ...env, ...parseEnvFile(bundledPath) };
+  }
   if (fs.existsSync(envPath)) {
-    env = parseEnvFile(envPath);
+    env = { ...env, ...parseEnvFile(envPath) };
   }
 
   let modified = false;
@@ -72,6 +85,14 @@ function ensureEnvLocal(nextjsDir) {
     fs.writeFileSync(envPath, content, { mode: 0o600 });
     log('Updated env.local with generated credentials.');
   }
+
+  // The standalone Next.js server auto-loads .env.local from its own
+  // directory (resourcesPath/nextjs), not from appDataWvoDir. Since this
+  // process requires server.js in-process later, setting these directly on
+  // process.env (without overriding anything the caller already set) is what
+  // actually gets the generated credentials to the server.
+  if (!process.env.DATABASE_URL) process.env.DATABASE_URL = env.DATABASE_URL;
+  if (!process.env.SESSION_SECRET) process.env.SESSION_SECRET = env.SESSION_SECRET;
 
   return env;
 }
@@ -173,13 +194,13 @@ async function testDbConnection(port, user, password, dbName) {
   }
 }
 
-async function ensurePostgres({ resourcesPath }) {
+async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
   const nextjsDir = path.join(resourcesPath, 'nextjs');
   const pgDir = path.join(resourcesPath, 'pgsql');
   const schemaFile = path.join(resourcesPath, 'db', 'schema.sql');
-  const envPath = path.join(nextjsDir, '.env.local');
+  const envPath = path.join(appDataWvoDir, '.env.local');
 
-  const env = ensureEnvLocal(nextjsDir);
+  const env = ensureEnvLocal(appDataWvoDir, nextjsDir);
   if (!env.DATABASE_URL) {
     log('No DATABASE_URL — skipping database management.');
     return { managed: false };
@@ -215,15 +236,11 @@ async function ensurePostgres({ resourcesPath }) {
   }
 
   const bin = (exe) => path.join(pgDir, 'bin', isWin ? `${exe}.exe` : exe);
-  const dataDir = path.join(
-    (!isWin && os.homedir()) || process.env.APPDATA || os.homedir(),
-    'whitevanops',
-    'pgdata'
-  );
-  const logFile = path.join(path.dirname(dataDir), 'postgres.log');
+  const dataDir = path.join(appDataWvoDir, 'pgdata');
+  const logFile = path.join(appDataWvoDir, 'postgres.log');
   // Sentinel written only after initdb + schema + admin bootstrap all
   // succeeded — a failed first run is wiped and retried on next launch.
-  const sentinel = path.join(path.dirname(dataDir), 'bootstrap-complete');
+  const sentinel = path.join(appDataWvoDir, 'bootstrap-complete');
   const firstRun = !fs.existsSync(sentinel);
 
   let portCollision = false;

@@ -67,6 +67,17 @@
       margin-top: 16px;
       display: none;
     }
+    #switchLink {
+      display: block;
+      margin-top: 20px;
+      color: #6b7280;
+      font-size: 13px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #switchLink:hover {
+      color: #2563eb;
+    }
   </style>
 </head>
 <body>
@@ -76,6 +87,7 @@
     <input type="text" id="licenseKey" placeholder="WVO-XXXX-XXXX-XXXX-XXXX" />
     <button id="activateBtn">Activate</button>
     <div id="error"></div>
+    <a id="switchLink">Connecting to an existing office server instead?</a>
   </div>
 
   <script>
@@ -94,6 +106,10 @@
       errorDiv.style.display = 'none';
 
       window.wvoActivation.verify(key);
+    });
+
+    document.getElementById('switchLink').addEventListener('click', () => {
+      window.wvoActivation.switchToClientSetup();
     });
 
     window.wvoActivation.onResult((result) => {
