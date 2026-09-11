@@ -99,12 +99,6 @@ export interface Quote {
   issueDate: string;
   expiryDate: string;
   notes: string | null;
-  /**
-   * The secret in the customer's approval link, null until the quote is issued.
-   * Reaches the dashboard so the operator can re-copy the link after a reload —
-   * never render it as text.
-   */
-  publicToken: string | null;
   sentAt: string | null;
   respondedAt: string | null;
   respondedName: string | null;

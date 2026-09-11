@@ -7,7 +7,6 @@ const EXCLUDED_COLUMNS = [
   "passwordHash",
   "failedLoginAttempts",
   "lockedUntil",
-  "publicToken",
   "auditLog",
   "syncReviewItem",
   "license",

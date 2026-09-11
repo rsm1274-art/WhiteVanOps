@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { QuoteStatus, buildQuoteApprovalUrl, computeQuoteTotal, deriveQuoteStatus } from "@/lib/quote";
+import { QuoteStatus, computeQuoteTotal, deriveQuoteStatus } from "@/lib/quote";
 import { dateToLocalStr } from "@/lib/dateUtils";
 import { LEFT, MUTED, RIGHT, TOP, createDocCanvas, money, readCompanyDetails, truncate } from "@/lib/pdfDoc";
-
-const FIELD_ACCESS_SETTING_KEY = "field_access_url";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
@@ -102,17 +100,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     );
     y -= 16;
     text(`Payment terms on acceptance: ${quote.client.paymentTerms}`, LEFT, y, { size: 9, color: MUTED });
-
-    // Only an issued quote has a live approval link to print.
-    if (quote.publicToken) {
-      const fieldAccess = settings.find((s) => s.key === FIELD_ACCESS_SETTING_KEY);
-      y -= 24;
-      text("ACCEPT ONLINE", LEFT, y, { font: bold, size: 8, color: MUTED });
-      y -= 12;
-      text(buildQuoteApprovalUrl(fieldAccess?.value, new URL(request.url).origin, quote.publicToken), LEFT, y, {
-        size: 8,
-      });
-    }
 
     const bytes = await doc.save();
 

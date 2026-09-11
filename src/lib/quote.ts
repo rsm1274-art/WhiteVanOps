@@ -2,8 +2,11 @@
 // and unit tests. No DB imports — keep this module side-effect free.
 //
 // It must also stay free of Node built-ins: the client-side Quotes tab imports
-// it, and a bare `crypto` import here would break the browser bundle. Token
-// minting therefore lives in the server-only src/lib/quoteToken.ts.
+// it, and a bare Node import here would break the browser bundle.
+//
+// Quotes go out as a PDF (pdf-lib) — there is no customer-facing public
+// approval link. The operator records the customer's decision manually on the
+// dashboard; canRespondToQuote() below is the single gate on that decision.
 //
 // Mirrors src/lib/invoice.ts, the same idea for the post-sale half of the loop.
 
@@ -53,9 +56,9 @@ export interface RespondCheck {
 }
 
 /**
- * Whether a customer may still approve or decline. Called by both the public
- * route and the dashboard's manual record-a-decision path, so the two can't
- * drift on what counts as still-open.
+ * Whether a customer may still approve or decline, as recorded manually by
+ * the operator on the dashboard after the customer replies by phone, email,
+ * or in person over the PDF quote.
  */
 export function canRespondToQuote(status: QuoteStatus, expiryDate: Date, now: Date = new Date()): RespondCheck {
   if (status === "Draft") return { ok: false, reason: "This quote has not been issued yet." };
@@ -65,35 +68,4 @@ export function canRespondToQuote(status: QuoteStatus, expiryDate: Date, now: Da
     return { ok: false, reason: "This quote has expired. Please contact us for an updated price." };
   }
   return { ok: true };
-}
-
-/** Path of the customer-facing approval page for a given token. */
-export function quoteApprovalPath(token: string): string {
-  return `/quote/${token}`;
-}
-
-/**
- * Absolute link to send a customer.
- *
- * The dashboard is normally opened at http://localhost:3000, so the request's
- * own origin is useless in a customer email. The address that actually reaches
- * this server from outside is the one the operator already configured for field
- * access (SystemSetting "field_access_url", e.g. a Plus tunnel hostname), so we
- * borrow its origin and fall back to the request origin only when unset.
- */
-export function buildQuoteApprovalUrl(
-  fieldAccessUrl: string | null | undefined,
-  requestOrigin: string,
-  token: string
-): string {
-  let base = requestOrigin;
-  if (fieldAccessUrl) {
-    try {
-      base = new URL(fieldAccessUrl).origin;
-    } catch {
-      // Malformed setting — keep the request origin rather than emitting a
-      // broken link.
-    }
-  }
-  return `${base.replace(/\/+$/, "")}${quoteApprovalPath(token)}`;
 }

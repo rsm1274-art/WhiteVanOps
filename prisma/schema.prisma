@@ -434,10 +434,12 @@ model SystemSetting {
 }
 
 // ---------------------------------------------------------------------------
-// Quoting (Plus tier). A Quote is the pre-sale half of the money loop:
+// Quoting. A Quote is the pre-sale half of the money loop:
 // Draft -> Sent -> Approved -> Converted (into an Invoice). Declined and
 // Expired are the dead ends. Line items mirror InvoiceLineItem exactly so the
-// conversion is a straight copy.
+// conversion is a straight copy. Quotes go out as a PDF — there is no
+// customer-facing public approval link; the operator records the customer's
+// decision by hand.
 // ---------------------------------------------------------------------------
 
 model Quote {
@@ -452,15 +454,9 @@ model Quote {
   expiryDate  DateTime
   notes       String?
 
-  // Customer-facing approval link. Null until the quote is marked Sent, when a
-  // 32-byte random token is minted. GET/POST /api/public/quotes/[token] is the
-  // ONLY unauthenticated data surface in the app — see that route for what it
-  // is allowed to expose.
-  publicToken String?   @unique
-  sentAt      DateTime?
+  sentAt DateTime?
 
-  // The customer's decision, whether taken through the public link or recorded
-  // by hand in the dashboard.
+  // The customer's decision, recorded by hand in the dashboard.
   respondedAt   DateTime?
   respondedName String? // Name the customer typed when approving
   declineReason String?

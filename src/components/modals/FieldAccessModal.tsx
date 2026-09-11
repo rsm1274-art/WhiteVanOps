@@ -8,8 +8,6 @@ import { fieldUrlVerdict } from "@/lib/fieldAccessUrl";
 
 interface Props {
   onClose: () => void;
-  /** Plus licences the HTTPS tunnel. Base serves the field module over the office LAN only. */
-  isPlusLicensed: boolean;
 }
 
 const SETTING_KEY = "field_access_url";
@@ -23,13 +21,12 @@ const SETTING_KEY = "field_access_url";
  * `http://localhost:3000` and produces a QR code that only "works" on the
  * machine running the dashboard, never on a phone (ERR_CONNECTION_FAILED).
  *
- * The correct address depends on the plan. Base syncs over the office LAN, so
+ * WhiteVanOps v2.0 syncs the field module over the office LAN only, so
  * `http://<office-lan-ip>:3000/field` is right and must NOT be warned about as
- * insecure — it never leaves the building. Plus adds an HTTPS tunnel hostname.
- * QR generation is refused only while the URL is localhost, so a broken code is
- * never handed to a tech.
+ * insecure — it never leaves the building. QR generation is refused only
+ * while the URL is localhost, so a broken code is never handed to a tech.
  */
-export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
+export default function FieldAccessModal({ onClose }: Props) {
   // The modal only mounts in the browser (opened by a click), so window and
   // localStorage are safe to read in the initializer. This is just the
   // first-paint guess — the server value (fetched below) is authoritative.
@@ -80,7 +77,7 @@ export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
     }, 500);
   }
 
-  const verdict = fieldUrlVerdict(url, isPlusLicensed);
+  const verdict = fieldUrlVerdict(url);
   const isLocalhost = verdict === "localhost";
 
   useEffect(() => {
@@ -113,7 +110,7 @@ export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
           value={url}
           onChange={(e) => handleUrlChange(e.target.value)}
           className={inputCls}
-          placeholder={isPlusLicensed ? "https://acme.whitevanops.com/field" : "http://192.168.1.20:3000/field"}
+          placeholder="http://192.168.1.20:3000/field"
         />
       </Field>
 
@@ -140,9 +137,8 @@ export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
         <p className="text-[11px] text-red-600 leading-relaxed font-medium">
           This is a localhost address — a phone scanning it will get
           &quot;localhost is unreachable,&quot; not the field module. Use this
-          machine&apos;s office-network address instead
-          {isPlusLicensed ? ", or your tunnel address" : ""} — the QR code below
-          is disabled until this is fixed.
+          machine&apos;s office-network address instead — the QR code below is
+          disabled until this is fixed.
         </p>
       )}
       {verdict === "ok-lan" && (
@@ -151,20 +147,11 @@ export default function FieldAccessModal({ onClose, isPlusLicensed }: Props) {
           from the building is held on the phone and saved when they return.
         </p>
       )}
-      {verdict === "remote-needs-plus" && (
+      {verdict === "not-lan" && (
         <p className="text-[11px] text-amber-600 leading-relaxed">
-          This is not an office-network address. Remote field access is a Plus
-          feature — on this plan a phone can only reach the field module on your
-          office WiFi, so this address will not connect. Use the detected
-          address above.
-        </p>
-      )}
-      {verdict === "public-plain-http" && (
-        <p className="text-[11px] text-amber-600 leading-relaxed">
-          This is a public <span className="font-mono">http://</span> address —
-          credentials would travel unencrypted over the internet. Use the{" "}
-          <span className="font-mono">https://</span> tunnel address so logins
-          are encrypted and the session cookie is accepted.
+          This is not an office-network address. WhiteVanOps serves the field
+          module over your office WiFi only, so a phone will not be able to
+          reach it here. Use the detected address above.
         </p>
       )}
 

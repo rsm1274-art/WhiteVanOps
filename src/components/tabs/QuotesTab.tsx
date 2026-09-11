@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, FileText, Send, Link2, Check, X, Trash2, ArrowRight } from "lucide-react";
+import { Plus, FileText, Send, Check, X, Trash2, ArrowRight } from "lucide-react";
 import { DashboardData, Quote, QuoteStatus } from "@/types";
 import { formatDate } from "@/lib/dateUtils";
-import { buildQuoteApprovalUrl, canConvertQuote, computeQuoteTotal, deriveQuoteStatus } from "@/lib/quote";
+import { canConvertQuote, computeQuoteTotal, deriveQuoteStatus } from "@/lib/quote";
 
 const STATUS_STYLES: Record<QuoteStatus, string> = {
   Draft: "bg-zinc-100 text-zinc-600",
@@ -26,7 +26,6 @@ interface Props {
   onRecordDecision: (quote: Quote, decision: "Approved" | "Declined") => void;
   onConvertQuote: (quote: Quote) => void;
   onDeleteQuote: (quote: Quote) => void;
-  onCopyLink: (url: string) => void;
 }
 
 export default function QuotesTab({
@@ -36,7 +35,6 @@ export default function QuotesTab({
   onRecordDecision,
   onConvertQuote,
   onDeleteQuote,
-  onCopyLink,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<(typeof ALL_FILTERS)[number]>("All");
 
@@ -57,11 +55,6 @@ export default function QuotesTab({
   const answered = quotes.filter((q) => ["Approved", "Converted", "Declined"].includes(q.effectiveStatus));
   const won = answered.filter((q) => q.effectiveStatus !== "Declined");
   const winRate = answered.length === 0 ? null : Math.round((won.length / answered.length) * 100);
-
-  const linkFor = (quote: Quote): string | null => {
-    if (!quote.publicToken || typeof window === "undefined") return null;
-    return buildQuoteApprovalUrl(localStorage.getItem("wvo.fieldAccessUrl"), window.location.origin, quote.publicToken);
-  };
 
   return (
     <div className="space-y-8">
@@ -141,7 +134,6 @@ export default function QuotesTab({
               ) : (
                 filtered.map((q) => {
                   const status = q.effectiveStatus;
-                  const link = linkFor(q);
                   return (
                     <tr key={q.id} className="hover:bg-zinc-50">
                       <td className="py-4 px-6 font-mono text-xs font-bold text-zinc-700 align-top">
@@ -195,17 +187,6 @@ export default function QuotesTab({
                                 <Trash2 className="h-3 w-3" />
                               </button>
                             </>
-                          )}
-
-                          {link && status !== "Draft" && (
-                            <button
-                              onClick={() => onCopyLink(link)}
-                              className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide rounded inline-flex items-center gap-1"
-                              title="Copy the customer's approval link"
-                            >
-                              <Link2 className="h-3 w-3" />
-                              Link
-                            </button>
                           )}
 
                           {status === "Sent" && (

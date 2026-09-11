@@ -200,31 +200,15 @@ export default function Dashboard() {
   };
 
   // ---------------------------------------------------------------------------
-  // Plus tier — quote actions
+  // Quote actions
   // ---------------------------------------------------------------------------
-
-  /**
-   * Puts a URL on the clipboard. The Clipboard API needs a secure context, and
-   * the dashboard is normally plain http on the LAN, so failure is expected
-   * rather than exceptional — say where else to find the link instead of
-   * reporting a dead end.
-   */
-  const copyQuoteLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Approval link copied to the clipboard.");
-    } catch {
-      handleError(`Could not copy automatically. The link is also printed on the quote PDF: ${url}`);
-    }
-  };
 
   const sendQuote = async (quote: Quote) => {
     try {
       const res = await fetch(`/api/quotes/${quote.id}/send`, { method: "POST" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Failed to send quote");
-      handleSuccess(`${quote.quoteNumber} issued. Send the customer their approval link.`);
-      await copyQuoteLink(result.approvalUrl);
+      handleSuccess(`${quote.quoteNumber} issued. Send the customer the PDF, then record their decision here.`);
     } catch (err: unknown) {
       handleError(err instanceof Error ? err.message : "Failed to send quote");
     }
@@ -1032,7 +1016,6 @@ export default function Dashboard() {
               onRecordDecision={recordQuoteDecision}
               onConvertQuote={requestConvertQuote}
               onDeleteQuote={requestDeleteQuote}
-              onCopyLink={copyQuoteLink}
             />
           )}
 
@@ -1219,7 +1202,7 @@ export default function Dashboard() {
         // Out of scope for the tier collapse (field-sync/tunnel transport is a
         // later phase — see fieldAccessUrl.ts) — every install now runs what
         // was previously the Plus feature set, so this stays true unconditionally.
-        <FieldAccessModal onClose={closeModal} isPlusLicensed={true} />
+        <FieldAccessModal onClose={closeModal} />
       )}
 
       {activeModal === "addClientNote" && selectedClient && (

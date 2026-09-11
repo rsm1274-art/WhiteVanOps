@@ -2,24 +2,9 @@ import { describe, expect, test } from "vitest";
 import { classifyFieldUrl, fieldUrlVerdict } from "@/lib/fieldAccessUrl";
 
 describe("classifyFieldUrl", () => {
-  test("https tunnel URL is https, not localhost, not plain http", () => {
-    expect(classifyFieldUrl("https://acme.whitevanops.com/field")).toEqual({
-      isLocalhost: false,
-      isPlainHttp: false,
-      isHttps: true,
-      isPrivateLan: false,
-    });
-  });
-
-  test("client-owned https URL classifies as https", () => {
-    expect(classifyFieldUrl("https://app.acmevans.com/field").isHttps).toBe(true);
-  });
-
-  test("http localhost is localhost, not plain-http-public", () => {
+  test("http localhost is localhost, not private LAN", () => {
     expect(classifyFieldUrl("http://localhost:3000/field")).toEqual({
       isLocalhost: true,
-      isPlainHttp: false,
-      isHttps: false,
       isPrivateLan: false,
     });
   });
@@ -28,17 +13,15 @@ describe("classifyFieldUrl", () => {
     expect(classifyFieldUrl("http://127.0.0.1:3000/field").isLocalhost).toBe(true);
   });
 
-  test("public plain http is flagged as plain http, not https", () => {
-    expect(classifyFieldUrl("http://acme.duckdns.org:3000/field")).toEqual({
+  test("a public hostname is neither localhost nor private LAN", () => {
+    expect(classifyFieldUrl("https://app.acme.com/field")).toEqual({
       isLocalhost: false,
-      isPlainHttp: true,
-      isHttps: false,
       isPrivateLan: false,
     });
   });
 
-  test("scheme match is case-insensitive", () => {
-    expect(classifyFieldUrl("HTTPS://acme.whitevanops.com/field").isHttps).toBe(true);
+  test("scheme match is case-insensitive for localhost detection", () => {
+    expect(classifyFieldUrl("HTTP://LOCALHOST:3000/field").isLocalhost).toBe(true);
   });
 });
 
@@ -67,25 +50,27 @@ describe("isPrivateLan", () => {
 });
 
 describe("fieldUrlVerdict", () => {
-  test("localhost is unusable on both plans", () => {
-    expect(fieldUrlVerdict("http://localhost:3000/field", false)).toBe("localhost");
-    expect(fieldUrlVerdict("http://localhost:3000/field", true)).toBe("localhost");
+  test("localhost is never reachable from a phone", () => {
+    expect(fieldUrlVerdict("http://localhost:3000/field")).toBe("localhost");
+    expect(fieldUrlVerdict("https://localhost:3000/field")).toBe("localhost");
   });
 
-  // The whole point of the Base plan: a plain-http LAN address is CORRECT and
-  // must not raise the "credentials travel unencrypted" warning.
-  test("LAN address is correct on both plans", () => {
-    expect(fieldUrlVerdict("http://192.168.1.20:3000/field", false)).toBe("ok-lan");
-    expect(fieldUrlVerdict("http://192.168.1.20:3000/field", true)).toBe("ok-lan");
+  // The whole point of WiFi-only sync: a plain-http LAN address is CORRECT and
+  // must not raise any kind of insecure-transport warning.
+  test("LAN address is correct", () => {
+    expect(fieldUrlVerdict("http://192.168.1.20:3000/field")).toBe("ok-lan");
+    expect(fieldUrlVerdict("http://officepc.local:3000/field")).toBe("ok-lan");
   });
 
-  test("public https is a tunnel on Plus, needs Plus on Base", () => {
-    expect(fieldUrlVerdict("https://app.acme.com/field", true)).toBe("ok-tunnel");
-    expect(fieldUrlVerdict("https://app.acme.com/field", false)).toBe("remote-needs-plus");
+  test("a public https hostname cannot reach the field module", () => {
+    expect(fieldUrlVerdict("https://app.acme.com/field")).toBe("not-lan");
   });
 
-  test("public plain http warns about plaintext on Plus, needs Plus on Base", () => {
-    expect(fieldUrlVerdict("http://app.acme.com/field", true)).toBe("public-plain-http");
-    expect(fieldUrlVerdict("http://app.acme.com/field", false)).toBe("remote-needs-plus");
+  test("a public plain-http hostname cannot reach the field module", () => {
+    expect(fieldUrlVerdict("http://app.acme.com/field")).toBe("not-lan");
+  });
+
+  test("any other non-LAN, non-localhost address is not-lan", () => {
+    expect(fieldUrlVerdict("http://169.254.10.1:3000/field")).toBe("not-lan");
   });
 });
