@@ -424,3 +424,52 @@ export async function setJobStatus(
 
   return { outcome: "applied", resultId: updatedId };
 }
+
+// ---------------------------------------------------------------------------
+// classifyOpForImport — read-only preview for the file-recovery import
+// (Phase 5). Reuses targetKeyFor/shouldApply exactly as the appliers above
+// do, but performs no writes at all — safe to call repeatedly while an admin
+// previews an import file before committing to it.
+// ---------------------------------------------------------------------------
+
+export type OpClassification = "new" | "duplicate" | "superseded";
+
+/** Either a PrismaClient or an open Prisma.TransactionClient — this only reads. */
+type ReadableClient = {
+  appliedOp: {
+    findUnique: (args: { where: { opId: string } }) => Promise<{ opId: string } | null>;
+    findFirst: (args: {
+      where: { targetKey: string; outcome: string; opId: { not: string } };
+      orderBy: { opId: "desc" };
+    }) => Promise<{ opId: string } | null>;
+  };
+};
+
+/**
+ * Classifies what would happen if this op were applied right now, without
+ * applying it. Mirrors the idempotency/ordering checks the four appliers
+ * above perform (AppliedOp primary key for duplicates, targetKeyFor +
+ * shouldApply for replace-semantics ordering), but as pure reads.
+ *
+ * "time" is insert semantics (see opOrdering.ts) — a non-duplicate time op is
+ * always "new", with no ordering check, exactly as logTime itself has none.
+ */
+export async function classifyOpForImport(
+  client: ReadableClient,
+  opType: FieldOpType,
+  jobId: string,
+  opId: string
+): Promise<OpClassification> {
+  const targetKey = targetKeyFor(opType, jobId, opId);
+
+  const existing = await client.appliedOp.findUnique({ where: { opId } });
+  if (existing) return "duplicate";
+
+  if (opType === "time") return "new";
+
+  const prior = await client.appliedOp.findFirst({
+    where: { targetKey, outcome: "applied", opId: { not: opId } },
+    orderBy: { opId: "desc" },
+  });
+  return shouldApply(opId, prior?.opId ?? null) ? "new" : "superseded";
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
-import { logTime, setJobNotes, setJobLineItems, setJobStatus, type FieldActor } from "./fieldOps";
+import { logTime, setJobNotes, setJobLineItems, setJobStatus, classifyOpForImport, type FieldActor } from "./fieldOps";
 
 vi.mock("@/lib/audit", () => ({
   audit: vi.fn(),
@@ -345,5 +345,68 @@ describe("setJobStatus — stock deduction and idempotency", () => {
     const res = await setJobStatus(tx as unknown as Prisma.TransactionClient, adminActor, "op1", { jobId: "ghost", status: "Completed" });
     expect(res).toEqual({ outcome: "rejected", status: 404, error: "Job not found" });
     expect(tx.appliedOp.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("classifyOpForImport", () => {
+  function makeReadClient() {
+    return {
+      appliedOp: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+      },
+    };
+  }
+
+  it("classifies a never-seen opId as new", async () => {
+    const client = makeReadClient();
+    client.appliedOp.findUnique.mockResolvedValue(null);
+    client.appliedOp.findFirst.mockResolvedValue(null);
+
+    const result = await classifyOpForImport(client, "notes", "job1", "01NEW");
+
+    expect(result).toBe("new");
+    expect(client.appliedOp.findUnique).toHaveBeenCalledWith({ where: { opId: "01NEW" } });
+  });
+
+  it("classifies an opId matching an existing AppliedOp as duplicate", async () => {
+    const client = makeReadClient();
+    client.appliedOp.findUnique.mockResolvedValue({ opId: "01DUP" });
+
+    const result = await classifyOpForImport(client, "status", "job1", "01DUP");
+
+    expect(result).toBe("duplicate");
+    // Duplicate short-circuits — no need to run the ordering check at all.
+    expect(client.appliedOp.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("classifies an older opId for a targetKey with a newer applied op as superseded", async () => {
+    const client = makeReadClient();
+    client.appliedOp.findUnique.mockResolvedValue(null);
+    client.appliedOp.findFirst.mockResolvedValue({ opId: "01ZZZZZZZZZZZZZZZZZZZZZZZZ" });
+
+    const result = await classifyOpForImport(client, "notes", "job1", "01AAAAAAAAAAAAAAAAAAAAAAAA");
+
+    expect(result).toBe("superseded");
+  });
+
+  it("classifies a newer opId for a targetKey with an older applied op as new", async () => {
+    const client = makeReadClient();
+    client.appliedOp.findUnique.mockResolvedValue(null);
+    client.appliedOp.findFirst.mockResolvedValue({ opId: "01AAAAAAAAAAAAAAAAAAAAAAAA" });
+
+    const result = await classifyOpForImport(client, "notes", "job1", "01ZZZZZZZZZZZZZZZZZZZZZZZZ");
+
+    expect(result).toBe("new");
+  });
+
+  it("classifies a non-duplicate time op as new with no ordering check performed", async () => {
+    const client = makeReadClient();
+    client.appliedOp.findUnique.mockResolvedValue(null);
+
+    const result = await classifyOpForImport(client, "time", "job1", "01TIME");
+
+    expect(result).toBe("new");
+    expect(client.appliedOp.findFirst).not.toHaveBeenCalled();
   });
 });

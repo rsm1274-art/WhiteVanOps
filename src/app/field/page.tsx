@@ -2,15 +2,16 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, type StuckOp } from "@/lib/idb";
+import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, getHistory, type StuckOp } from "@/lib/idb";
 import { submitWrite, drainSyncQueue, type DrainResult } from "@/lib/offlineWrite";
 import { deriveSyncStatus } from "@/lib/syncStatus";
 import { shouldWarnAboutStorage } from "@/lib/storagePressure";
 import { formatTimeOnly } from "@/lib/dateUtils";
+import { buildExport } from "@/lib/fieldExport";
 import StuckOpsPanel from "@/components/field/StuckOpsPanel";
 import SyncStatusBar from "@/components/field/SyncStatusBar";
 import JobCard from "@/components/field/JobCard";
-import { ArrowLeft, RotateCw, AlertTriangle } from "lucide-react";
+import { ArrowLeft, RotateCw, AlertTriangle, Download } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -270,6 +271,47 @@ export default function FieldPage() {
     setJobs([]);
   };
 
+  /**
+   * The escape hatch: a snapshot of everything queued, stuck, and recently
+   * synced, written to a file the tech can hand to the office by any means
+   * (email, USB, AirDrop) independent of WiFi sync ever working again. Always
+   * available — never conditional on an error state — and read-only: it does
+   * not touch the queue, so normal draining still happens if the phone
+   * reaches the office WiFi later.
+   */
+  const exportWork = async () => {
+    if (!tech) return;
+    try {
+      const [queue, stuck, history] = await Promise.all([getSyncQueue(), getStuckOps(), getHistory()]);
+      const data = buildExport({
+        techId: tech.id,
+        techName: `${tech.firstName} ${tech.lastName}`,
+        queue,
+        stuck,
+        history,
+      });
+
+      const slug = data.techName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `whitevanops-field-${slug}-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${data.ops.length} item${data.ops.length === 1 ? "" : "s"} to your downloads.`);
+    } catch (err) {
+      console.error("Export failed", err);
+      showToast("Failed to export your work", true);
+    }
+  };
+
   const filteredJobs = jobs.filter((j) => {
     if (statusFilter === "active") return j.status !== "Completed";
     if (statusFilter === "completed") return j.status === "Completed";
@@ -351,6 +393,13 @@ export default function FieldPage() {
             title="Refresh"
           >
             <RotateCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={exportWork}
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            title="Export my work to a file"
+          >
+            <Download className="h-4 w-4" />
           </button>
           <button
             onClick={signOut}

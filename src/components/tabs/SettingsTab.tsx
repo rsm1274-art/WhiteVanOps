@@ -3,6 +3,7 @@ import { Save, Server, AlertCircle, BadgeCheck, Building2 } from "lucide-react";
 import { formatDate } from "@/lib/dateUtils";
 import { TrialUnlockForm } from "@/components/trial/TrialUnlockForm";
 import { DataImportSection } from "@/components/settings/DataImportSection";
+import { RecoverFieldWorkSection } from "@/components/settings/RecoverFieldWorkSection";
 
 interface LicenseResponse {
   licenseKey: string | null;
@@ -338,6 +339,8 @@ export default function SettingsTab({
           </div>
         </div>
       </div>
+
+      <RecoverFieldWorkSection onShowToast={onShowToast} onImported={onDataImported} />
 
       {isSuperuser && (
         <DataImportSection onShowToast={onShowToast} onImported={onDataImported} />
