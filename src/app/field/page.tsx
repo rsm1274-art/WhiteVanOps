@@ -5,6 +5,8 @@ import Link from "next/link";
 import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, type StuckOp } from "@/lib/idb";
 import { submitWrite, drainSyncQueue, type DrainResult } from "@/lib/offlineWrite";
 import { deriveSyncStatus } from "@/lib/syncStatus";
+import { shouldWarnAboutStorage } from "@/lib/storagePressure";
+import { formatTimeOnly } from "@/lib/dateUtils";
 import StuckOpsPanel from "@/components/field/StuckOpsPanel";
 import SyncStatusBar from "@/components/field/SyncStatusBar";
 import JobCard from "@/components/field/JobCard";
@@ -77,6 +79,26 @@ export default function FieldPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [stuckOps, setStuckOps] = useState<StuckOp[]>([]);
   const [showStuckPanel, setShowStuckPanel] = useState(false);
+  const [jobsLastRefreshedAt, setJobsLastRefreshedAt] = useState<number | null>(null);
+  const [storagePressure, setStoragePressure] = useState(false);
+  const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
+
+  const checkStoragePressure = useCallback(async () => {
+    try {
+      const q = await getSyncQueue();
+      let estimate: { usage: number; quota: number } | null = null;
+      if ("storage" in navigator && typeof navigator.storage?.estimate === "function") {
+        const raw = await navigator.storage.estimate();
+        if (typeof raw.usage === "number" && typeof raw.quota === "number") {
+          estimate = { usage: raw.usage, quota: raw.quota };
+        }
+      }
+      setStoragePressure(shouldWarnAboutStorage(estimate, q.length));
+    } catch {
+      // Best effort — an estimate() failure or a getSyncQueue() failure just
+      // means the warning stays whatever it last was.
+    }
+  }, []);
 
   const checkSyncStatus = async () => {
     try {
@@ -107,6 +129,7 @@ export default function FieldPage() {
     try {
       const { synced, stuck, stopped } = await drainSyncQueue();
       setLastStop(stopped);
+      checkStoragePressure();
       if (synced > 0) {
         const now = Date.now();
         localStorage.setItem(LAST_SYNCED_KEY, String(now));
@@ -145,6 +168,7 @@ export default function FieldPage() {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     checkSyncStatus();
+    checkStoragePressure();
 
     // Drain on mount, not just on an online event: if the server was down while
     // the device kept its connection, no online event ever fires and queued
@@ -211,11 +235,13 @@ export default function FieldPage() {
       setJobs(data.jobs ?? []);
       setInventoryItems(data.inventoryItems ?? []);
       await cacheApiResponse(url, data);
+      setJobsLastRefreshedAt(Date.now());
     } catch {
       const cached = await getCachedApiResponse(url);
       if (cached) {
         setJobs(cached.jobs ?? []);
         setInventoryItems(cached.inventoryItems ?? []);
+        setJobsLastRefreshedAt(Date.now());
         showToast("Loaded jobs from offline cache", false);
       } else {
         showToast("Failed to load assignments", true);
@@ -351,6 +377,20 @@ export default function FieldPage() {
         </button>
       )}
 
+      {storagePressure && !storageBannerDismissed && (
+        <div className="w-full flex items-center justify-between gap-2 bg-amber-500/15 border border-amber-500/40 text-amber-700 text-xs font-medium rounded-lg px-4 py-3 mx-0">
+          <span>
+            {pendingCount} item{pendingCount === 1 ? "" : "s"} waiting to sync — try to reach the office WiFi soon.
+          </span>
+          <button
+            onClick={() => setStorageBannerDismissed(true)}
+            className="text-[10px] font-bold uppercase tracking-widest opacity-70 hover:opacity-100 shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Admin link */}
       <div className="bg-zinc-800 text-center py-1.5">
         <Link href="/" className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 hover:text-zinc-300 transition-colors">
@@ -375,6 +415,9 @@ export default function FieldPage() {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Your Assignments</p>
             <p className="text-2xl font-bold text-zinc-900">{filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}</p>
+            {jobsLastRefreshedAt !== null && (
+              <p className="text-[10px] text-zinc-400">Assignments as of {formatTimeOnly(jobsLastRefreshedAt)}</p>
+            )}
           </div>
           <div className="flex gap-1.5 bg-white border border-zinc-200 rounded-lg p-1">
             {[

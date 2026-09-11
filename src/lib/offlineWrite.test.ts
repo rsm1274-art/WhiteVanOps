@@ -1,12 +1,14 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { submitWrite, drainSyncQueue, classifyRejection } from "@/lib/offlineWrite";
-import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck } from "@/lib/idb";
+import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck, recordHistory, pruneHistory } from "@/lib/idb";
 
 vi.mock("@/lib/idb", () => ({
   addToSyncQueue: vi.fn(),
   getSyncQueue: vi.fn(),
   removeFromSyncQueue: vi.fn(),
   moveToStuck: vi.fn(),
+  recordHistory: vi.fn(),
+  pruneHistory: vi.fn(),
 }));
 
 describe("submitWrite", () => {
@@ -292,6 +294,63 @@ describe("drainSyncQueue", () => {
     expect(moveToStuck).toHaveBeenCalledWith(op(1, { a: 1 }), { status: 422, message: "Request failed (422)" });
   });
 
+  test("quarantines a 403 (fieldOps.ts business rejection) and continues draining the rest — the actual bug this fixes", async () => {
+    // Arrange — op 1 hits a job the tech isn't assigned to (403); op 2 is
+    // fine. Before this fix, 403 was bucketed with 401 and halted the whole
+    // drain, freezing op 2 behind a rejection re-login could never resolve.
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 })]);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 403, json: async () => ({ error: "Not assigned to this job" }) })
+        .mockResolvedValueOnce({ ok: true })
+    );
+
+    // Act
+    const result = await drainSyncQueue();
+
+    // Assert
+    expect(result).toEqual({ synced: 1, stuck: 1, remaining: 0, stopped: "complete" });
+    expect(moveToStuck).toHaveBeenCalledWith(op(1, { a: 1 }), { status: 403, message: "Not assigned to this job" });
+    expect(removeFromSyncQueue).toHaveBeenCalledWith(2);
+    expect(removeFromSyncQueue).not.toHaveBeenCalledWith(1);
+  });
+
+  test("records history for a successful op before removing it from the queue, then prunes", async () => {
+    // Arrange
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { status: "Complete" })]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+
+    // Act
+    await drainSyncQueue();
+
+    // Assert
+    expect(recordHistory).toHaveBeenCalledWith(op(1, { status: "Complete" }));
+    expect(pruneHistory).toHaveBeenCalledTimes(1);
+
+    // recordHistory must be called before removeFromSyncQueue for this op, so
+    // a crash between the two still leaves the history entry behind.
+    const recordOrder = vi.mocked(recordHistory).mock.invocationCallOrder[0];
+    const removeOrder = vi.mocked(removeFromSyncQueue).mock.invocationCallOrder[0];
+    expect(recordOrder).toBeLessThan(removeOrder);
+  });
+
+  test("does not record history for a quarantined or stopped-on op", async () => {
+    // Arrange
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 })]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "Job not found" }) })
+    );
+
+    // Act
+    await drainSyncQueue();
+
+    // Assert
+    expect(recordHistory).not.toHaveBeenCalled();
+  });
+
   test("stops without quarantining when the session has expired, keeping every op queued", async () => {
     // Arrange — 401 means the cookie is bad, not the data. Quarantining here
     // would invite a tech to discard real work over a login prompt.
@@ -340,10 +399,18 @@ describe("classifyRejection", () => {
     expect(classifyRejection(status)).toBe("permanent");
   });
 
-  test.each([401, 403])("classifies %i as auth — the data is fine, the cookie isn't", (status) => {
-    // A 401/403 must never quarantine: surfacing an expired session as a stuck
+  test("classifies 403 as permanent — it's a fieldOps.ts business rejection, not a cookie problem", () => {
+    // Every field-write 403 now originates from fieldOps.ts (Phase 3): "not
+    // assigned to this job" / "not linked to a personnel record". Re-logging
+    // in can never fix that, so it must quarantine (like a 404) rather than
+    // halt the entire drain the way a real session problem does.
+    expect(classifyRejection(403)).toBe("permanent");
+  });
+
+  test("classifies 401 as auth — the data is fine, the cookie isn't", () => {
+    // A 401 must never quarantine: surfacing an expired session as a stuck
     // record would invite a tech to discard real work over a login prompt.
-    expect(classifyRejection(status)).toBe("auth");
+    expect(classifyRejection(401)).toBe("auth");
   });
 
   test.each([408, 429, 500, 502, 503])("classifies %i as transient", (status) => {

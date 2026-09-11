@@ -1,7 +1,7 @@
 import { generateOpId } from "@/lib/opId";
 
 export const DB_NAME = "WhiteVanOpsField";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export interface SyncOperation {
   id?: number;
@@ -69,6 +69,16 @@ export function openDB(): Promise<IDBDatabase> {
           }
           cursor.continue();
         };
+      }
+
+      // v4: 30-day local history of synced ops. Distinct from stuckOps —
+      // this is a record of writes that DID succeed, kept so a tech (or a
+      // later export feature) can see what already reached the office, since
+      // today a synced op is just deleted from syncQueue with no local trace
+      // it ever happened.
+      if (e.oldVersion < 4 && !db.objectStoreNames.contains("history")) {
+        const store = db.createObjectStore("history", { keyPath: "id", autoIncrement: true });
+        store.createIndex("syncedAt", "syncedAt", { unique: false });
       }
     };
   });
@@ -219,6 +229,73 @@ export async function removeFromStuckOps(id: number): Promise<void> {
     const tx = db.transaction("stuckOps", "readwrite");
     tx.objectStore("stuckOps").delete(id);
     tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export interface HistoryEntry {
+  id?: number;
+  opId: string;
+  url: string;
+  method: string;
+  body: unknown;
+  queuedAt: number; // the original SyncOperation.timestamp
+  syncedAt: number; // Date.now() at the moment it succeeded
+}
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Record a successfully-synced op in the local history store. */
+export async function recordHistory(op: SyncOperation): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readwrite");
+    tx.objectStore("history").add({
+      opId: op.opId,
+      url: op.url,
+      method: op.method,
+      body: op.body,
+      queuedAt: op.timestamp,
+      syncedAt: Date.now(),
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getHistory(): Promise<HistoryEntry[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readonly");
+    const request = tx.objectStore("history").getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Delete history entries older than `olderThanMs` (default 30 days) and
+ * return how many were removed. A plain cursor delete loop over the
+ * `syncedAt` index — no need for anything fancier over a bounded window.
+ */
+export async function pruneHistory(olderThanMs: number = THIRTY_DAYS_MS): Promise<number> {
+  const db = await openDB();
+  const cutoff = Date.now() - olderThanMs;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("history", "readwrite");
+    const store = tx.objectStore("history");
+    const index = store.index("syncedAt");
+    const range = IDBKeyRange.upperBound(cutoff);
+    let removed = 0;
+    const cursorRequest = index.openCursor(range);
+    cursorRequest.onsuccess = () => {
+      const cursor = cursorRequest.result;
+      if (!cursor) return;
+      cursor.delete();
+      removed++;
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve(removed);
     tx.onerror = () => reject(tx.error);
   });
 }

@@ -8,7 +8,7 @@ import { IDBFactory } from "fake-indexeddb";
 // short-circuiting with "IndexedDB is not available on the server".
 vi.stubGlobal("window", {});
 
-import { DB_NAME, DB_VERSION, openDB, addToSyncQueue, getSyncQueue, moveToStuck } from "@/lib/idb";
+import { DB_NAME, DB_VERSION, openDB, addToSyncQueue, getSyncQueue, moveToStuck, recordHistory, getHistory, pruneHistory, type SyncOperation } from "@/lib/idb";
 
 function freshIndexedDB() {
   // A brand-new fake-indexeddb instance per test so databases from one test
@@ -103,9 +103,10 @@ describe("v2 -> v3 upgrade", () => {
     });
     v2db.close();
 
-    // Act: reopen at v3 through the real openDB(), triggering the migration.
+    // Act: reopen through the real openDB(), triggering the migration to the
+    // current DB_VERSION (v3's opId backfill, then v4's history store).
     const db = await openDB();
-    expect(db.version).toBe(3);
+    expect(db.version).toBe(DB_VERSION);
     db.close();
 
     const queue = await getSyncQueue();
@@ -149,5 +150,96 @@ describe("v2 -> v3 upgrade", () => {
     const store = tx.objectStore("syncQueue");
     expect(store.indexNames.contains("opId")).toBe(true);
     db.close();
+  });
+});
+
+describe("v3 -> v4 upgrade", () => {
+  test("creates the history store with a syncedAt index on top of a Phase-2-shaped v3 database", async () => {
+    // Arrange: build a real v3 database (Phase 2 shape: apiCache, syncQueue
+    // with opId, stuckOps — no history store yet), then close it.
+    const v3db: IDBDatabase = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 3);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        db.createObjectStore("apiCache", { keyPath: "url" });
+        const store = db.createObjectStore("syncQueue", { keyPath: "id", autoIncrement: true });
+        store.createIndex("timestamp", "timestamp", { unique: false });
+        store.createIndex("opId", "opId", { unique: true });
+        db.createObjectStore("stuckOps", { keyPath: "id", autoIncrement: true });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    v3db.close();
+
+    // Act: reopen at v4 through the real openDB(), triggering the migration.
+    const db = await openDB();
+    expect(db.version).toBe(4);
+    expect(db.objectStoreNames.contains("history")).toBe(true);
+
+    const tx = db.transaction("history", "readonly");
+    const store = tx.objectStore("history");
+    expect(store.indexNames.contains("syncedAt")).toBe(true);
+    db.close();
+  });
+});
+
+describe("recordHistory / getHistory / pruneHistory", () => {
+  const op = (opId: string, timestamp: number): SyncOperation => ({
+    opId,
+    url: "/api/jobs",
+    method: "PUT",
+    body: { status: "Complete" },
+    timestamp,
+  });
+
+  test("recordHistory + getHistory round-trip", async () => {
+    await recordHistory(op("OP1", 1_700_000_000_000));
+
+    const history = await getHistory();
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      opId: "OP1",
+      url: "/api/jobs",
+      method: "PUT",
+      body: { status: "Complete" },
+      queuedAt: 1_700_000_000_000,
+    });
+    expect(typeof history[0].syncedAt).toBe("number");
+  });
+
+  test("pruneHistory removes only entries older than the cutoff and returns the removed count", async () => {
+    const db = await openDB();
+    const now = Date.now();
+    const old1 = now - 40 * 24 * 60 * 60 * 1000; // 40 days ago — stale
+    const old2 = now - 31 * 24 * 60 * 60 * 1000; // 31 days ago — stale
+    const recent = now - 1 * 24 * 60 * 60 * 1000; // 1 day ago — keep
+
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("history", "readwrite");
+      const store = tx.objectStore("history");
+      store.add({ opId: "A", url: "/api/jobs", method: "PUT", body: {}, queuedAt: old1, syncedAt: old1 });
+      store.add({ opId: "B", url: "/api/jobs", method: "PUT", body: {}, queuedAt: old2, syncedAt: old2 });
+      store.add({ opId: "C", url: "/api/jobs", method: "PUT", body: {}, queuedAt: recent, syncedAt: recent });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+
+    const removed = await pruneHistory();
+    expect(removed).toBe(2);
+
+    const remaining = await getHistory();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].opId).toBe("C");
+  });
+
+  test("pruneHistory respects a custom olderThanMs window", async () => {
+    await recordHistory(op("OLD", Date.now()));
+    // syncedAt is set to Date.now() inside recordHistory, so this row is a
+    // few milliseconds old at most — an olderThanMs of 0 should catch it.
+    const removed = await pruneHistory(0);
+    expect(removed).toBe(1);
+    expect(await getHistory()).toHaveLength(0);
   });
 });
