@@ -1,5 +1,6 @@
-// Production build: Next.js standalone → electron-builder installer (Base / Plus / trial
-// variants), NSIS .exe by default or a .dmg with --mac. The Mac build must run on a Mac.
+// Production build: Next.js standalone → electron-builder installer (full or
+// trial variant), NSIS .exe by default or a .dmg with --mac. The Mac build must
+// run on a Mac.
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -8,62 +9,28 @@ const root = path.join(__dirname, '..');
 const standalone = path.join(root, '.next', 'standalone');
 
 const args = process.argv.slice(2);
-const isBase = args.includes('--base');
-const isPlus = args.includes('--plus');
 const isTrial = args.includes('--trial');
 // The Mac build must actually run on a Mac (electron-builder can't produce a
-// signed-shape .app on Windows, and the pgsql-mac/cloudflared-mac payloads are
-// macOS binaries). This flag only selects which config/checks apply here.
+// signed-shape .app on Windows, and the pgsql-mac payload is macOS binaries).
+// This flag only selects which config/checks apply here.
 const isMac = args.includes('--mac');
 const targetPlatform = isMac ? 'mac' : 'win';
 
 if (args.includes('--upgrade')) {
-  console.error('\n❌ --upgrade was removed on 2026-07-24.');
-  console.error('   There is no in-place Base→Plus upgrade any more: Base and Plus are separate');
-  console.error('   products with different payloads (only Plus bundles cloudflared), so a licence');
-  console.error('   patch would unlock Plus features on an install that physically cannot tunnel.');
-  console.error('   A Base customer moving to Plus buys Plus and installs WhiteVanOps-Plus-Setup.exe.\n');
+  console.error('\n❌ --upgrade was removed on 2026-07-24, and Base/Plus no longer exist at all (v2.0).\n');
   process.exit(1);
 }
-
-if (isBase && isPlus) {
-  console.error('\n❌ Pass exactly one of --base or --plus.\n');
+if (args.includes('--base') || args.includes('--plus')) {
+  console.error('\n❌ --base/--plus were removed in v2.0 — there is one product now. Use --trial for a demo build, or no flag for the full installer.\n');
   process.exit(1);
-}
-
-// The plan decides the payload (cloudflared present or absent) and, for trial
-// builds, the pre-activated tier. It is required for --trial: defaulting it
-// would let one mistyped flag ship a prospect the wrong plan.
-let plan;
-if (isTrial) {
-  const planIdx = args.indexOf('--plan');
-  plan = planIdx !== -1 ? args[planIdx + 1] : null;
-  if (plan !== 'base' && plan !== 'plus') {
-    console.error('\n❌ --trial requires --plan base or --plan plus.');
-    console.error('   Usage: node scripts/electron-build.js --trial --plan base\n');
-    process.exit(1);
-  }
-} else {
-  if (!isBase && !isPlus) {
-    console.error('\n❌ Pass --base, --plus, or --trial --plan base|plus.\n');
-    process.exit(1);
-  }
-  plan = isPlus ? 'plus' : 'base';
 }
 
 const variant = isTrial ? 'trial' : 'full';
 
-// Only Plus ships the tunnel binary. A Base install therefore cannot open a
-// tunnel for two independent reasons — no Plus entitlement in its signed key,
-// and no cloudflared on disk. Neither is a file a customer can edit.
-const bundlesCloudflared = plan === 'plus';
-
 const ARTIFACT_NAMES = {
   win: {
-    'full:base': 'WhiteVanOps-Base-Setup.exe',
-    'full:plus': 'WhiteVanOps-Plus-Setup.exe',
-    'trial:base': 'WhiteVanOps-Base-Trial-Setup.exe',
-    'trial:plus': 'WhiteVanOps-Plus-Trial-Setup.exe',
+    full: 'WhiteVanOps-Setup.exe',
+    trial: 'WhiteVanOps-Trial-Setup.exe',
   },
   // Mac builds both arm64 and x64 from one electron-builder invocation
   // (package.json's mac.target lists both arches against the dmg target).
@@ -72,13 +39,11 @@ const ARTIFACT_NAMES = {
   // token here, both builds resolve to the same filename and the second one
   // (x64) silently overwrites the first (arm64) on disk.
   mac: {
-    'full:base': 'WhiteVanOps-Base-Setup-${arch}.dmg',
-    'full:plus': 'WhiteVanOps-Plus-Setup-${arch}.dmg',
-    'trial:base': 'WhiteVanOps-Base-Trial-Setup-${arch}.dmg',
-    'trial:plus': 'WhiteVanOps-Plus-Trial-Setup-${arch}.dmg',
+    full: 'WhiteVanOps-Setup-${arch}.dmg',
+    trial: 'WhiteVanOps-Trial-Setup-${arch}.dmg',
   },
 };
-const artifactName = ARTIFACT_NAMES[targetPlatform][`${variant}:${plan}`];
+const artifactName = ARTIFACT_NAMES[targetPlatform][variant];
 
 // Resolve our own copy of electron-builder's "${arch}" substitution, so the
 // verification/manifest code below (which electron-builder never sees) can
@@ -89,14 +54,14 @@ function resolvedArtifactName(arch) {
 
 console.log(
   isMac
-    ? `\nBuilding ${resolvedArtifactName('arm64')} and ${resolvedArtifactName('x64')}  (platform=${targetPlatform} variant=${variant} plan=${plan} cloudflared=${bundlesCloudflared})`
-    : `\nBuilding ${artifactName}  (platform=${targetPlatform} variant=${variant} plan=${plan} cloudflared=${bundlesCloudflared})`
+    ? `\nBuilding ${resolvedArtifactName('arm64')} and ${resolvedArtifactName('x64')}  (platform=${targetPlatform} variant=${variant})`
+    : `\nBuilding ${artifactName}  (platform=${targetPlatform} variant=${variant})`
 );
 
 function run(cmd, env = {}) {
   console.log(`\n> ${cmd}`);
-  execSync(cmd, { 
-    cwd: root, 
+  execSync(cmd, {
+    cwd: root,
     stdio: 'inherit',
     env: { ...process.env, ...env }
   });
@@ -110,13 +75,12 @@ function copyDir(src, dst) {
 const distElectron = path.join(root, 'dist-electron');
 
 // ==========================================
-// TARGET: Full App Installer (Base / Plus / trial variants)
+// TARGET: Full App Installer (full / trial variants)
 // ==========================================
 // Clean only the temporary build output to preserve previously generated
 // installers. Do NOT blanket-delete dist-electron/: the finished installers
-// live here and they are built one variant at a time (eight of them now
-// across both platforms), so a wipe would destroy artifacts this run cannot
-// rebuild.
+// live here and they are built one variant at a time across both platforms,
+// so a wipe would destroy artifacts this run cannot rebuild.
 //
 // electron-builder names the unpacked dir per-arch on mac (mac-arm64, mac),
 // but always win-unpacked on Windows regardless of arch.
@@ -188,45 +152,14 @@ let envContent = '';
 if (fs.existsSync(envSrc)) {
   envContent = fs.readFileSync(envSrc, 'utf8');
 }
-// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock,
-// plus a SIGNED plan stamp so src/lib/license.ts knows which plan the trial
-// demonstrates. The signature is the whole point: this file ships as plain text
-// inside resources/nextjs/, and WVO_DEFAULT_TIER taught us that an unsigned plan
-// value there is a one-word Notepad edit away from granting the paid tier.
-// verifyTrialPlan() fails closed to "base", so tampering can only cost features.
-//
-// Non-trial builds still carry NO plan stamp at all — an activated install's
-// tier comes only from its signed, machine-bound activation key
-// (scripts/license-manager.js --tier base|plus).
-//
-// This must stay byte-identical to signTrialPlan() in src/lib/licenseCrypto.ts.
-function signTrialPlan(planName) {
-  // No env-var fallback: the verifier (src/lib/licenseCrypto.ts) uses ONLY the
-  // hardcoded literal below, so an env var set at build time would sign with a
-  // secret the verifier never checks against — Plus trials would silently
-  // verify as Base. Keep byte-identical to electron/main.js,
-  // scripts/activate-dev.js, and scripts/license-manager.js.
-  const LICENSE_SIGNING_SECRET =
-    'wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765';
-  return require('crypto')
-    .createHmac('sha256', LICENSE_SIGNING_SECRET)
-    .update(`trial-plan:${planName}`)
-    .digest('hex');
-}
-
+// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock.
+// There is no plan stamp any more (v2.0 has no tier) — a trial build simply
+// runs the full feature set for 30 days, same as every other install.
 if (variant === 'trial') {
   envContent += `\nWVO_IS_TRIAL="true"\n`;
-  envContent += `WVO_TRIAL_PLAN="${plan}"\n`;
-  envContent += `WVO_TRIAL_PLAN_SIG="${signTrialPlan(plan)}"\n`;
 }
 fs.writeFileSync(envDest, envContent, 'utf8');
-console.log(
-  `\nCopied .env.local into standalone bundle${
-    variant === 'trial'
-      ? ` with WVO_IS_TRIAL and a signed WVO_TRIAL_PLAN="${plan}"`
-      : ' (tier comes from the activation key)'
-  }.`
-);
+console.log(`\nCopied .env.local into standalone bundle${variant === 'trial' ? ' with WVO_IS_TRIAL' : ''}.`);
 
 // 5. Concatenate Prisma migrations into a single schema.sql — applied by
 // electron/postgres.js when the bundled PostgreSQL initializes on first run.
@@ -243,13 +176,11 @@ fs.writeFileSync(path.join(root, '.next', 'db', 'schema.sql'), schemaSql);
 console.log(`\nGenerated .next/db/schema.sql from ${migrations.length} migrations.`);
 
 // Platform-aware payload dirs and binary names. Mac binaries live in
-// pgsql-mac/ and cloudflared-mac/ — parallel, gitignored directories, kept
-// separate from the Windows payloads because the binaries themselves differ
-// (no .exe suffix, different architectures).
+// pgsql-mac/ — a parallel, gitignored directory, kept separate from the
+// Windows payload because the binaries themselves differ (no .exe suffix,
+// different architectures).
 const pgPayloadDir = isMac ? 'pgsql-mac' : 'pgsql';
 const pgCtlName = isMac ? 'pg_ctl' : 'pg_ctl.exe';
-const cloudflaredPayloadDir = isMac ? 'cloudflared-mac' : 'cloudflared';
-const cloudflaredName = isMac ? 'cloudflared' : 'cloudflared.exe';
 
 // 6. Verify the bundled PostgreSQL binaries are present. electron-builder
 // silently skips a missing extraResources source, so building without them
@@ -265,30 +196,12 @@ if (!fs.existsSync(path.join(root, pgPayloadDir, 'bin', pgCtlName))) {
   process.exit(1);
 }
 
-// 6b. Verify the tunnel binary for Plus variants. Same failure mode as the
-// pgsql check above: electron-builder silently skips a missing extraResources
-// source, so without this a "Plus" installer would ship with no way to open a
-// tunnel — the one capability that plan is sold on.
-if (bundlesCloudflared && !fs.existsSync(path.join(root, cloudflaredPayloadDir, cloudflaredName))) {
-  console.error(`\n❌ Error: ${cloudflaredPayloadDir}/${cloudflaredName} not found — a Plus installer would ship WITHOUT the tunnel binary.`);
-  console.error(
-    isMac
-      ? `Download the macOS (darwin) cloudflared build from Cloudflare and place it at ${cloudflaredPayloadDir}/cloudflared.\n`
-      : 'Download the Windows amd64 build from Cloudflare and place it at cloudflared/cloudflared.exe.\nSee MANUAL_Setup_Installation.md §1.\n'
-  );
-  process.exit(1);
-}
-
 // 7. Package with electron-builder using a per-variant config derived from
 // package.json's "build" key. package.json stays the single source of truth;
-// only the delta (artifact name, and cloudflared for Plus) is computed here, so
-// the two cannot drift.
+// only the delta (artifact name) is computed here, so the two cannot drift.
 const builderConfig = JSON.parse(JSON.stringify(require(path.join(root, 'package.json')).build));
 builderConfig[targetPlatform].artifactName = artifactName;
-if (bundlesCloudflared) {
-  builderConfig[targetPlatform].extraResources.push({ from: cloudflaredPayloadDir, to: 'cloudflared' });
-}
-const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}-${variant}-${plan}.json`);
+const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}-${variant}.json`);
 fs.writeFileSync(builderConfigPath, JSON.stringify(builderConfig, null, 2), 'utf8');
 run(`npx electron-builder --${targetPlatform} --config "${builderConfigPath}"`);
 
@@ -355,20 +268,6 @@ for (const { arch, unpackedDir } of buildTargets) {
     }
   }
 
-  // 7b-ii. The tunnel binary must be present on Plus and ABSENT on Base. Both
-  // directions matter: electron-builder can silently drop it from a Plus build,
-  // and a Base build that accidentally ships it erases the boundary between the
-  // two products — a Base install would then need only a licence flip to tunnel.
-  const cloudflaredPacked = path.join(distElectron, unpackedDir, ...resourcesRel, 'cloudflared', cloudflaredName);
-  if (bundlesCloudflared && !fs.existsSync(cloudflaredPacked)) {
-    console.error(`\n❌ Error: Plus packaged output (${label}) is missing ${resourcesRel.join('/')}/cloudflared/${cloudflaredName} — do not ship it.`);
-    process.exit(1);
-  }
-  if (!bundlesCloudflared && fs.existsSync(cloudflaredPacked)) {
-    console.error(`\n❌ Error: Base packaged output (${label}) CONTAINS ${resourcesRel.join('/')}/cloudflared/${cloudflaredName} — the Base plan must not ship the tunnel binary.`);
-    process.exit(1);
-  }
-
   // 7c. Assert app.asar still carries every module electron/*.js requires at launch.
   const asarPath = path.join(distElectron, unpackedDir, ...resourcesRel, 'app.asar');
   let bundledModules;
@@ -421,7 +320,6 @@ try {
   // Not fatal — a build should still succeed outside a git checkout.
 }
 const builtAt = new Date().toISOString();
-const planLabel = plan === 'plus' ? 'Plus (bundles the Cloudflare tunnel)' : 'Base (WiFi sync only)';
 
 const manifestJsonPath = path.join(distElectron, '.build-manifest.json');
 let manifest = {};
@@ -438,13 +336,12 @@ for (const { arch } of buildTargets) {
   const finalArtifact = path.join(distElectron, name);
   if (!fs.existsSync(finalArtifact)) continue;
 
-  const buildInfo = { artifactName: name, variant, plan, appVersion, gitCommit, gitDirty, builtAt };
+  const buildInfo = { artifactName: name, variant, appVersion, gitCommit, gitDirty, builtAt };
 
   fs.writeFileSync(
     path.join(distElectron, `${name}.buildinfo.txt`),
     [
       `Installer:    ${name}`,
-      `Plan:         ${planLabel}`,
       `App version:  ${appVersion}`,
       `Git commit:   ${gitCommit}${gitDirty ? ' (built with uncommitted changes — do not ship)' : ''}`,
       `Built:        ${builtAt}`,

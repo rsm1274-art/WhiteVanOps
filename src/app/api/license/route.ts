@@ -2,18 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole, setSessionCookie, signSessionToken } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import {
-  getLicense,
-  isPlusActive,
-  LICENSE_ROW_ID,
-  getBaseLicense,
-  verifyPlusLicense,
-  getAppDataWvoDir,
-} from "@/lib/license";
+import { getLicense, LICENSE_ROW_ID, getBaseLicense } from "@/lib/license";
 import { getTrialStatus, verifyTrialUnlock, markTrialUnlocked, TrialUnlockPayload } from "@/lib/trial";
 import { machineIdSync } from "node-machine-id";
-import fs from "fs";
-import path from "path";
 
 export async function GET() {
   const user = await getSessionUser();
@@ -26,7 +17,6 @@ export async function GET() {
     const trial = getTrialStatus();
     return NextResponse.json({
       ...license,
-      plus: isPlusActive(license),
       activeBaseKey: baseLicense ? baseLicense.key : null,
       trial,
     });
@@ -36,7 +26,7 @@ export async function GET() {
   }
 }
 
-// Superuser-only: updating the license tier is a business-level action.
+// Superuser-only: converting a trial install is a business-level action.
 export async function POST(request: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "superuser");
@@ -69,7 +59,6 @@ export async function POST(request: Request) {
 
       const expiresAt = unlockPayload.expiresAt ? new Date(unlockPayload.expiresAt) : null;
       const data = {
-        tier: unlockPayload.tier,
         licenseKey: null,
         notes: unlockPayload.notes,
         expiresAt,
@@ -81,7 +70,7 @@ export async function POST(request: Request) {
         create: { id: LICENSE_ROW_ID, ...data },
       });
 
-      await audit(user!.userId, "UPDATE", "License", row.id, { action: "unlock-trial", tier: unlockPayload.tier });
+      await audit(user!.userId, "UPDATE", "License", row.id, { action: "unlock-trial" });
 
       // Re-issue the session JWT: trialLocked is stamped ONLY at login and is
       // what edge middleware reads to redirect to /trial-expired. Without
@@ -99,130 +88,17 @@ export async function POST(request: Request) {
       });
 
       const res = NextResponse.json({
-        tier: row.tier,
         licenseKey: row.licenseKey,
         notes: row.notes,
         activatedAt: row.activatedAt,
         expiresAt: row.expiresAt,
-        plus: unlockPayload.tier === "plus",
         trial,
       });
       setSessionCookie(res, token, request);
       return res;
     }
 
-    const { tier } = body;
-
-    if (tier !== "base" && tier !== "plus") {
-      return NextResponse.json({ error: "tier must be 'base' or 'plus'" }, { status: 400 });
-    }
-
-    const appDataDir = getAppDataWvoDir();
-    // Legacy read-only path (2026-07-24): the Plus Upgrade Installer is gone.
-    // Kept so an install already patched in the field keeps working.
-    const plusPath = path.join(appDataDir, "plus_license.json");
-
-    if (tier === "plus") {
-      // 1. Resolve base license key
-      const baseLicense = getBaseLicense();
-      if (!baseLicense) {
-        return NextResponse.json(
-          { error: "Application is not activated. Base license must be active." },
-          { status: 400 }
-        );
-      }
-
-      // 2. Parse and validate Plus license payload
-      let payload = body.licensePayload;
-      if (!payload && body.licenseKey) {
-        try {
-          payload = JSON.parse(body.licenseKey.trim());
-        } catch (e) {
-          return NextResponse.json(
-            { error: "Invalid license format. Must be a valid cryptographically signed JSON block." },
-            { status: 400 }
-          );
-        }
-      }
-
-      if (!payload || !verifyPlusLicense(payload, baseLicense.key)) {
-        return NextResponse.json(
-          { error: "Invalid cryptographic signature. License is invalid or does not match this machine's activation key." },
-          { status: 400 }
-        );
-      }
-
-      // 3. Check for expiration
-      const expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : null;
-      if (expiresAt && expiresAt.getTime() < Date.now()) {
-        return NextResponse.json({ error: "The provided license has expired." }, { status: 400 });
-      }
-
-      // 4. Save license.json file to local filesystem
-      if (!fs.existsSync(appDataDir)) {
-        fs.mkdirSync(appDataDir, { recursive: true });
-      }
-      fs.writeFileSync(plusPath, JSON.stringify(payload, null, 2), "utf8");
-
-      // 5. Update database state
-      const data = {
-        tier: "plus",
-        licenseKey: payload.licenseKey,
-        notes: payload.notes || null,
-        expiresAt: expiresAt,
-        activatedAt: new Date(),
-      };
-      const row = await prisma.license.upsert({
-        where: { id: LICENSE_ROW_ID },
-        update: data,
-        create: { id: LICENSE_ROW_ID, ...data },
-      });
-
-      await audit(user!.userId, "UPDATE", "License", row.id, { tier: "plus" });
-
-      return NextResponse.json({
-        tier: row.tier,
-        licenseKey: row.licenseKey,
-        notes: row.notes,
-        activatedAt: row.activatedAt,
-        expiresAt: row.expiresAt,
-        plus: true,
-      });
-    } else {
-      // tier === "base" (Downgrade)
-      // 1. Delete local file
-      if (fs.existsSync(plusPath)) {
-        try {
-          fs.unlinkSync(plusPath);
-        } catch (e) {
-          // Legacy read-only path (2026-07-24): the Plus Upgrade Installer is gone.
-          // Kept so an install already patched in the field keeps working.
-          console.error("Failed to delete local plus_license.json:", e);
-        }
-      }
-
-      // 2. Reset database state
-      const data = {
-        tier: "base",
-        activatedAt: null,
-      };
-      const row = await prisma.license.upsert({
-        where: { id: LICENSE_ROW_ID },
-        update: data,
-        create: { id: LICENSE_ROW_ID, ...data },
-      });
-
-      await audit(user!.userId, "UPDATE", "License", row.id, { tier: "base" });
-
-      return NextResponse.json({
-        tier: row.tier,
-        licenseKey: row.licenseKey,
-        notes: row.notes,
-        activatedAt: row.activatedAt,
-        expiresAt: row.expiresAt,
-        plus: false,
-      });
-    }
+    return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   } catch (error) {
     console.error("License POST API Error:", error);
     return NextResponse.json({ error: "Failed to update license" }, { status: 500 });

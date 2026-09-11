@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { formatInvoiceNumber, INVOICE_NUMBER_SETTING_KEY } from "@/lib/invoice";
 import { parseLocalDate } from "@/lib/dateUtils";
 
@@ -10,9 +9,6 @@ export async function POST(request: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const { clientId, jobId, issueDate, dueDate, notes, lineItems } = await request.json();
 

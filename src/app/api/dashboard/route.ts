@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getLicense, isPlusActive } from "@/lib/license";
+import { getLicense } from "@/lib/license";
 
 export async function GET() {
   try {
-    // Plus-only data (client notes/follow-ups, quotes, invoices) is only fetched and
-    // returned when licensed, so a Base/expired install never leaks Plus data
-    // through the full-reload pattern.
     const license = await getLicense();
-    const plus = isPlusActive(license);
 
     const [
       clients,
@@ -27,12 +23,10 @@ export async function GET() {
     ] = await Promise.all([
       prisma.client.findMany({
         orderBy: { name: "asc" },
-        ...(plus && {
-          include: {
-            notes: { include: { author: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } },
-            followUps: { include: { assignedTo: true }, orderBy: { dueDate: "asc" } },
-          },
-        }),
+        include: {
+          notes: { include: { author: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } },
+          followUps: { include: { assignedTo: true }, orderBy: { dueDate: "asc" } },
+        },
       }),
       prisma.personnel.findMany({
         include: {
@@ -109,25 +103,21 @@ export async function GET() {
         },
         orderBy: { createdAt: "desc" },
       }),
-      plus
-        ? prisma.invoice.findMany({
-            include: {
-              client: true,
-              lineItems: { orderBy: { createdAt: "asc" } },
-              payments: { orderBy: { receivedDate: "asc" } },
-            },
-            orderBy: { createdAt: "desc" },
-          })
-        : Promise.resolve([]),
-      plus
-        ? prisma.quote.findMany({
-            include: {
-              client: true,
-              lineItems: { orderBy: { createdAt: "asc" } },
-            },
-            orderBy: { createdAt: "desc" },
-          })
-        : Promise.resolve([]),
+      prisma.invoice.findMany({
+        include: {
+          client: true,
+          lineItems: { orderBy: { createdAt: "asc" } },
+          payments: { orderBy: { receivedDate: "asc" } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.quote.findMany({
+        include: {
+          client: true,
+          lineItems: { orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
       prisma.syncReviewItem.findMany({
         where: { status: "Open" },
         include: { personnel: { select: { firstName: true, lastName: true } } },
@@ -137,9 +127,7 @@ export async function GET() {
 
     return NextResponse.json({
       license: {
-        tier: license.tier,
         expiresAt: license.expiresAt,
-        plus,
       },
       clients,
       personnel,

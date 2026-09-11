@@ -2,15 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const { id } = await params;
     const { dueDate, note, assignedToId, completed } = await request.json();
@@ -46,9 +42,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const { id } = await params;
     const existing = await prisma.clientFollowUp.findUnique({ where: { id } });

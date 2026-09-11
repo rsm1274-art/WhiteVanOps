@@ -2,7 +2,6 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- plain CommonJS module shared with scripts/license-manager.js
 const { mintLicense } = require("../../../shared/license-mint");
-import type { LicenseTier } from "./stripe";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -27,16 +26,12 @@ function getDb() {
 
 export interface MintedLicense {
   key: string;
-  tier: LicenseTier;
 }
 
-export async function mintLicenseForPurchase(params: {
-  tier: LicenseTier;
-  notes: string;
-}): Promise<MintedLicense> {
+export async function mintLicenseForPurchase(params: { notes: string }): Promise<MintedLicense> {
   const db = getDb();
-  const doc = await mintLicense(db, { tier: params.tier, notes: params.notes });
-  return { key: doc.key, tier: doc.tier };
+  const doc = await mintLicense(db, { notes: params.notes });
+  return { key: doc.key };
 }
 
 /**

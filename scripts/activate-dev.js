@@ -22,54 +22,21 @@ function activate() {
   }
 
   const machineId = machineIdSync();
-  const baseKey = "WVO-DEV-LOCAL-ACTIVATION";
+  const key = "WVO-DEV-LOCAL-ACTIVATION";
 
-  // 1. Generate Base License (license.json).
-  // The signature covers the tier — mirrors signBaseLicense() in
-  // src/lib/licenseCrypto.ts and signLicense() in electron/main.js. The dev
-  // activation is minted as tier "base"; the plus_license.json written below
-  // is what grants Plus locally, so dev exercises the same signed-upgrade path
-  // a real Base customer takes rather than a shortcut only dev has.
-  const baseTier = "base";
-  const baseSig = crypto
+  // Mirrors signBaseLicense() in src/lib/licenseCrypto.ts and signLicense() in
+  // electron/main.js — v2.0 has no tier, so the signature covers key:machineId only.
+  const sig = crypto
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${baseKey}:${machineId}:${baseTier}`)
+    .update(`${key}:${machineId}`)
     .digest("hex");
 
-  const baseLicense = {
-    key: baseKey,
-    machineId,
-    tier: baseTier,
-    sig: baseSig
-  };
+  const license = { key, machineId, sig };
 
-  const baseLicensePath = path.join(targetDir, "license.json");
-  fs.writeFileSync(baseLicensePath, JSON.stringify(baseLicense, null, 2), "utf8");
-  console.log(`✅ Base license successfully written to: ${baseLicensePath}`);
-
-  // 2. Generate Plus License (plus_license.json)
-  // Dev convenience only. This exercises the LEGACY plus_license.json path
-  // (see src/lib/license.ts) — customers never receive one any more. To mirror
-  // a real Plus customer instead, mint a Plus key:
-  //   node scripts/license-manager.js --tier plus
-  const plusSig = crypto
-    .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${baseKey}:plus:`)
-    .digest("hex");
-
-  const plusLicense = {
-    licenseKey: baseKey,
-    tier: "plus",
-    expiresAt: null,
-    notes: "Developer Local Activation",
-    sig: plusSig
-  };
-
-  const plusLicensePath = path.join(targetDir, "plus_license.json");
-  fs.writeFileSync(plusLicensePath, JSON.stringify(plusLicense, null, 2), "utf8");
-  console.log(`✅ Plus tier license successfully written to: ${plusLicensePath}`);
-
-  console.log("\n🚀 Development install has been fully activated with Base + Plus tier!");
+  const licensePath = path.join(targetDir, "license.json");
+  fs.writeFileSync(licensePath, JSON.stringify(license, null, 2), "utf8");
+  console.log(`✅ License successfully written to: ${licensePath}`);
+  console.log("\n🚀 Development install has been fully activated.");
 }
 
 activate();

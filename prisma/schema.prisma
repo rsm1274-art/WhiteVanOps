@@ -24,12 +24,12 @@ model Client {
 
 // ---------------------------------------------------------------------------
 // License — singleton row (fixed id "singleton", upserted on read by
-// src/lib/license.ts). Controls the Base vs Plus feature tier. The tables for
-// Plus features always exist; only the flag gates access.
+// src/lib/license.ts). v2.0: there is no Base/Plus tier any more — every
+// activated install runs the full feature set. This row now only tracks
+// activation status (key, when activated, when it expires).
 // ---------------------------------------------------------------------------
 model License {
   id          String    @id @default("singleton")
-  tier        String    @default("base") // "base" | "plus"
   licenseKey  String?
   notes       String?
   activatedAt DateTime?

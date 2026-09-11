@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { audit } from "@/lib/audit";
 import { validateDefinition } from "@/lib/reports/definition";
 import { canViewReport } from "@/lib/reports/permissions";
@@ -36,9 +35,6 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   let body: unknown;
   try {
     body = await req.json();

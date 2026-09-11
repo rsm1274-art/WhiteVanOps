@@ -10,24 +10,7 @@ function requireEnv(name: string): string {
 
 export const stripe = new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 
-export type LicenseTier = "base" | "plus";
-
-const PRICE_ID_BY_TIER: Record<LicenseTier, string> = {
-  base: requireEnv("STRIPE_PRICE_ID_BASE"),
-  plus: requireEnv("STRIPE_PRICE_ID_PLUS"),
-};
-
-export function priceIdForTier(tier: LicenseTier): string {
-  return PRICE_ID_BY_TIER[tier];
-}
-
-export function tierForPriceId(priceId: string): LicenseTier | null {
-  const entry = (Object.entries(PRICE_ID_BY_TIER) as [LicenseTier, string][]).find(
-    ([, id]) => id === priceId
-  );
-  return entry ? entry[0] : null;
-}
-
-export function isLicenseTier(value: unknown): value is LicenseTier {
-  return value === "base" || value === "plus";
+// v2.0: there is one product — no Base/Plus tier, so one price.
+export function priceId(): string {
+  return requireEnv("STRIPE_PRICE_ID");
 }

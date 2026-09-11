@@ -13,17 +13,13 @@ function generateLicenseKey() {
 /**
  * Writes a new license doc to Firestore under licenses/{key}. This shape is
  * load-bearing — electron/main.js's activation flow reads these exact fields
- * (key, machineId, tier, active) during activation.
+ * (key, machineId, active) during activation.
  *
  * @param {import('firebase-admin/firestore').Firestore} db
- * @param {{ tier: "base" | "plus", notes?: string | null }} opts
- * @returns {Promise<{ key: string, machineId: null, tier: string, active: true, notes: string | null }>}
+ * @param {{ notes?: string | null }} opts
+ * @returns {Promise<{ key: string, machineId: null, active: true, notes: string | null }>}
  */
-async function mintLicense(db, { tier, notes = null }) {
-  if (tier !== "base" && tier !== "plus") {
-    throw new Error(`mintLicense: tier must be 'base' or 'plus' (got '${tier}')`);
-  }
-
+async function mintLicense(db, { notes = null } = {}) {
   const { FieldValue } = require("firebase-admin/firestore");
   const key = generateLicenseKey();
   const licenseRef = db.collection("licenses").doc(key);
@@ -31,7 +27,6 @@ async function mintLicense(db, { tier, notes = null }) {
   const doc = {
     key,
     machineId: null,
-    tier,
     active: true,
     notes,
     createdAt: FieldValue.serverTimestamp(),

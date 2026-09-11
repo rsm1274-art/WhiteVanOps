@@ -12,10 +12,10 @@ import {
 } from "./licenseCrypto";
 
 // ---------------------------------------------------------------------------
-// Trial-lock for demo installers (WVO_IS_TRIAL=true builds only). Independent
-// of the Base/Plus tier gate in license.ts: a trial install runs on Plus for
-// 30 days from first launch, then locks the whole app regardless of tier,
-// until a signed unlock key (see verifyTrialUnlock) is applied.
+// Trial-lock for demo installers (WVO_IS_TRIAL=true builds only). A trial
+// install runs with the full feature set for 30 days from first launch, then
+// locks the whole app until a signed unlock key (see verifyTrialUnlock) is
+// applied.
 // ---------------------------------------------------------------------------
 
 export { signTrialUnlock, verifyTrialUnlock };

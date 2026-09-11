@@ -65,7 +65,6 @@ export default function CRMTab({
   const [statusFilter, setStatusFilter] = useState<JobStatus | "All">("All");
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
-  const plus = data.license.plus;
   const today = todayLocalStr();
 
   const filteredJobs =
@@ -127,8 +126,7 @@ export default function CRMTab({
                     <span className="font-semibold">{c.paymentTerms}</span>
                   </div>
 
-                  {/* Plus tier — notes & follow-ups panel */}
-                  {plus && (
+                  {/* Notes & follow-ups panel */}
                     <div className="mt-3 pt-2 border-t border-zinc-100">
                       <button
                         onClick={() => setExpandedClientId(expanded ? null : c.id)}
@@ -223,7 +221,6 @@ export default function CRMTab({
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
               );
             })}
