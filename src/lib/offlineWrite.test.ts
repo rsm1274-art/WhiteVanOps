@@ -29,6 +29,36 @@ describe("submitWrite", () => {
     expect(addToSyncQueue).not.toHaveBeenCalled();
   });
 
+  test("sends a stable X-WVO-Op-Id header on the inline attempt", async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Act
+    await submitWrite("/api/time", "POST", { duration: "01:00" });
+
+    // Assert
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(typeof headers["X-WVO-Op-Id"]).toBe("string");
+    expect(headers["X-WVO-Op-Id"].length).toBeGreaterThan(0);
+  });
+
+  test("queues the write with the same opId that was sent on the failed inline attempt", async () => {
+    // Arrange — a network failure means the id was generated but never
+    // reached the server; the queued row must carry that same id rather than
+    // minting a second one, so a later drain sends the identity the caller
+    // already committed to.
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Act
+    await submitWrite("/api/time", "POST", { duration: "01:00" });
+
+    // Assert
+    const sentOpId = (fetchMock.mock.calls[0][1].headers as Record<string, string>)["X-WVO-Op-Id"];
+    expect(addToSyncQueue).toHaveBeenCalledWith("/api/time", "POST", { duration: "01:00" }, sentOpId);
+  });
+
   test("queues the write when the server is unreachable even though the device is online", async () => {
     // Arrange — the office PC is shut down, but the phone has full signal.
     // This is the case navigator.onLine gating got wrong: it reports true, so
@@ -41,7 +71,12 @@ describe("submitWrite", () => {
 
     // Assert
     expect(result).toBe("queued");
-    expect(addToSyncQueue).toHaveBeenCalledWith("/api/time", "POST", { duration: "01:00" });
+    expect(addToSyncQueue).toHaveBeenCalledWith(
+      "/api/time",
+      "POST",
+      { duration: "01:00" },
+      expect.any(String)
+    );
   });
 
   test("queues the write when the device has no connectivity", async () => {
@@ -54,7 +89,12 @@ describe("submitWrite", () => {
 
     // Assert
     expect(result).toBe("queued");
-    expect(addToSyncQueue).toHaveBeenCalledWith("/api/jobs", "PUT", { status: "Complete" });
+    expect(addToSyncQueue).toHaveBeenCalledWith(
+      "/api/jobs",
+      "PUT",
+      { status: "Complete" },
+      expect.any(String)
+    );
   });
 
   test("throws the server's message without queueing when the server rejects the write", async () => {
@@ -117,6 +157,7 @@ describe("submitWrite", () => {
 describe("drainSyncQueue", () => {
   const op = (id: number, body: unknown) => ({
     id,
+    opId: `OP${id}`,
     url: "/api/jobs",
     method: "PUT",
     body,
@@ -156,6 +197,20 @@ describe("drainSyncQueue", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ status: "Complete" });
     expect(removeFromSyncQueue).toHaveBeenNthCalledWith(1, 1);
     expect(removeFromSyncQueue).toHaveBeenNthCalledWith(2, 2);
+  });
+
+  test("sends each queued op's own opId as the X-WVO-Op-Id header", async () => {
+    // Arrange
+    vi.mocked(getSyncQueue).mockResolvedValue([op(1, { a: 1 }), op(2, { b: 2 })]);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Act
+    await drainSyncQueue();
+
+    // Assert
+    expect(fetchMock.mock.calls[0][1].headers["X-WVO-Op-Id"]).toBe("OP1");
+    expect(fetchMock.mock.calls[1][1].headers["X-WVO-Op-Id"]).toBe("OP2");
   });
 
   test("drains queued ops even though the device never lost connectivity", async () => {

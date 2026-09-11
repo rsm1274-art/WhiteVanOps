@@ -511,3 +511,22 @@ model SavedReport {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 }
+
+// ---------------------------------------------------------------------------
+// v2.0 Phase 2 — idempotency foundation. Records every field-write op the
+// server has applied so a replayed op (queue re-drain after a lost response,
+// or an out-of-order retarget) can be recognized and not double-applied.
+// opId is the client-generated ULID (see src/lib/opId.ts); no route writes
+// to this table yet — that wiring is Phase 3's fieldOps.ts refactor.
+// ---------------------------------------------------------------------------
+model AppliedOp {
+  opId      String   @id
+  opType    String
+  targetKey String
+  resultId  String?
+  outcome   String // "applied" | "superseded" | "duplicate"
+  via       String // "lan" | "import" (import added in a later phase)
+  appliedAt DateTime @default(now())
+
+  @@index([targetKey])
+}

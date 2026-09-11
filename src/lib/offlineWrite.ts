@@ -1,4 +1,5 @@
 import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck } from "@/lib/idb";
+import { generateOpId } from "@/lib/opId";
 
 export type WriteResult = "synced" | "queued";
 
@@ -28,16 +29,25 @@ export async function submitWrite(
   method: string,
   body: unknown
 ): Promise<WriteResult> {
+  // Generated once, up front, and reused on both branches below: whether this
+  // write lands on the inline attempt or (on a network failure) gets queued,
+  // it must carry the SAME opId either way. Every call site in JobCard.tsx
+  // calls submitWrite exactly once per action rather than retrying it itself,
+  // so there is no caller-driven second call to worry about — but generating
+  // the id here, rather than letting addToSyncQueue mint its own, keeps the
+  // inline fetch's header and the queued row's identity from ever diverging
+  // within this one call.
+  const opId = generateOpId();
   let res: Response;
 
   try {
     res = await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-WVO-Op-Id": opId },
       body: JSON.stringify(body),
     });
   } catch {
-    await addToSyncQueue(url, method, body);
+    await addToSyncQueue(url, method, body, opId);
     return "queued";
   }
 
@@ -81,7 +91,7 @@ export async function drainSyncQueue(): Promise<DrainResult> {
     try {
       res = await fetch(op.url, {
         method: op.method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-WVO-Op-Id": op.opId },
         body: JSON.stringify(op.body),
       });
     } catch {

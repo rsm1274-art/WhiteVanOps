@@ -123,6 +123,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "exceljs": "^4.4.0",
+    "fake-indexeddb": "^6.2.5",
     "firebase-admin": "^14.1.0",
     "husky": "^9.1.7",
     "jose": "^6.2.3",
