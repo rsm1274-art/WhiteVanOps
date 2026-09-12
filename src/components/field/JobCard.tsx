@@ -17,8 +17,15 @@ import {
   FileText,
   Package,
 } from "lucide-react";
-import { submitWrite } from "@/lib/offlineWrite";
+import { submitWrite, type WriteResult } from "@/lib/offlineWrite";
 import type { FieldJob, InventoryItem } from "@/app/field/page";
+
+// A queued (not-yet-synced) write must never be followed by a server refetch —
+// the server doesn't have it yet, so the refetch would silently overwrite the
+// tech's just-made change with stale data. Callers apply `patch` to local
+// state immediately in both cases; only a "synced" result also triggers a
+// refresh, to reconcile server-derived fields (e.g. completionDate).
+type WriteResultHandler = (result: WriteResult, patch: Partial<FieldJob>) => void;
 
 type ActivePanel = "time" | "note" | "materials" | null;
 
@@ -78,12 +85,12 @@ function SectionButton({
 function LogTimePanel({
   job,
   techId,
-  onSuccess,
+  onWriteResult,
   onError,
 }: {
   job: FieldJob;
   techId: string;
-  onSuccess: () => void;
+  onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
   const [hours, setHours] = useState("");
@@ -101,8 +108,9 @@ function LogTimePanel({
     const date = dateRef.current?.value || todayStr();
     setSaving(true);
     try {
-      await submitWrite("/api/field/ops", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
-      onSuccess();
+      const result = await submitWrite("/api/field/ops", "POST", { jobId: job.id, personnelId: techId, date, duration, serviceItem, payrollItem: "Regular Pay" });
+      const newEntry = { id: `local-${Date.now()}`, date, duration, serviceItem };
+      onWriteResult(result, { timeEntries: [...job.timeEntries, newEntry] });
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to log time");
     } finally {
@@ -179,11 +187,11 @@ function LogTimePanel({
 // Notes panel
 function NotesPanel({
   job,
-  onSuccess,
+  onWriteResult,
   onError,
 }: {
   job: FieldJob;
-  onSuccess: () => void;
+  onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
   const [note, setNote] = useState(job.notes ?? "");
@@ -193,8 +201,8 @@ function NotesPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      await submitWrite("/api/field/ops", "POST", { jobId: job.id, notes: note });
-      onSuccess();
+      const result = await submitWrite("/api/field/ops", "POST", { jobId: job.id, notes: note });
+      onWriteResult(result, { notes: note });
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save notes");
     } finally {
@@ -228,12 +236,12 @@ function NotesPanel({
 function MaterialsPanel({
   job,
   inventoryItems,
-  onSuccess,
+  onWriteResult,
   onError,
 }: {
   job: FieldJob;
   inventoryItems: InventoryItem[];
-  onSuccess: () => void;
+  onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
   const [lines, setLines] = useState(
@@ -271,8 +279,19 @@ function MaterialsPanel({
     e.preventDefault();
     setSaving(true);
     try {
-      await submitWrite("/api/field/ops", "POST", { jobId: job.id, lineItems: lines });
-      onSuccess();
+      const result = await submitWrite("/api/field/ops", "POST", { jobId: job.id, lineItems: lines });
+      const newLineItems = lines.map((l, i) => {
+        const inventoryItem = inventoryItems.find((it) => it.id === l.inventoryItemId)!;
+        return {
+          id: `local-${i}`,
+          inventoryItemId: l.inventoryItemId,
+          inventoryItem,
+          quantity: parseInt(l.quantity) || 0,
+          rate: parseFloat(l.rate) || 0,
+          description: l.description,
+        };
+      });
+      onWriteResult(result, { lineItems: newLineItems });
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to save materials");
     } finally {
@@ -354,13 +373,13 @@ export default function JobCard({
   job,
   techId,
   inventoryItems,
-  onRefresh,
+  onWriteResult,
   onError,
 }: {
   job: FieldJob;
   techId: string;
   inventoryItems: InventoryItem[];
-  onRefresh: () => void;
+  onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -373,8 +392,8 @@ export default function JobCard({
   const changeStatus = async (status: string) => {
     setActioning(true);
     try {
-      await submitWrite("/api/field/ops", "POST", { jobId: job.id, status });
-      onRefresh();
+      const result = await submitWrite("/api/field/ops", "POST", { jobId: job.id, status });
+      onWriteResult(result, { status });
     } catch (err: unknown) {
       onError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
@@ -512,14 +531,14 @@ export default function JobCard({
             <LogTimePanel
               job={job}
               techId={techId}
-              onSuccess={() => { onRefresh(); setActivePanel(null); }}
+              onWriteResult={(result, patch) => { onWriteResult(result, patch); setActivePanel(null); }}
               onError={onError}
             />
           )}
           {activePanel === "note" && (
             <NotesPanel
               job={job}
-              onSuccess={() => { onRefresh(); setActivePanel(null); }}
+              onWriteResult={(result, patch) => { onWriteResult(result, patch); setActivePanel(null); }}
               onError={onError}
             />
           )}
@@ -527,7 +546,7 @@ export default function JobCard({
             <MaterialsPanel
               job={job}
               inventoryItems={inventoryItems}
-              onSuccess={() => { onRefresh(); setActivePanel(null); }}
+              onWriteResult={(result, patch) => { onWriteResult(result, patch); setActivePanel(null); }}
               onError={onError}
             />
           )}
