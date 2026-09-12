@@ -122,7 +122,7 @@ describe("logTime", () => {
       data: {
         jobId: "job1",
         personnelId: "per_1",
-        date: new Date("2026-09-01"),
+        date: new Date("2026-09-01T12:00:00"),
         duration: "01:00",
         serviceItem: "Field Labor",
         payrollItem: "Regular Pay",

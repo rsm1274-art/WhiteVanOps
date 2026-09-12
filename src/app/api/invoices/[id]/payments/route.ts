@@ -55,6 +55,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       alreadyPaid + parsedAmount
     );
 
+    // A Paid invoice with a linked job means that job's billing is settled,
+    // so it can drop off the QuickBooks "Pending Invoice Lines" export list.
+    // The two systems are otherwise independent (see the schema comment on
+    // Invoice) — this is the one point where a fully-paid invoice reflects
+    // back onto the job it billed.
+    const jobSyncUpdate =
+      newStatus === "Paid" && invoice.jobId
+        ? [prisma.job.update({ where: { id: invoice.jobId }, data: { qbInvoiceSyncStatus: "Exported" } })]
+        : [];
+
     const [payment] = await prisma.$transaction([
       prisma.payment.create({
         data: {
@@ -67,6 +77,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       }),
       prisma.invoice.update({ where: { id: invoiceId }, data: { status: newStatus } }),
+      ...jobSyncUpdate,
     ]);
 
     await audit(user!.userId, "CREATE", "Payment", payment.id, {
@@ -74,6 +85,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       invoiceNumber: invoice.invoiceNumber,
       amount: parsedAmount,
     });
+    if (jobSyncUpdate.length > 0) {
+      await audit(user!.userId, "UPDATE", "Job", invoice.jobId!, { qbInvoiceSyncStatus: "Exported" });
+    }
 
     return NextResponse.json({ payment, status: newStatus });
   } catch (error) {

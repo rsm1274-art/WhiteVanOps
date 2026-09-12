@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 export async function POST(request: Request) {
   const user = await getSessionUser();
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
       data: {
         jobId,
         personnelId,
-        date: new Date(date),
+        date: parseLocalDate(`${date}T12:00:00`),
         duration,
         serviceItem: serviceItem || "Field Labor",
         payrollItem: payrollItem || "Regular Pay",

@@ -35,7 +35,10 @@ export async function runReport(def: ReportDefinition, opts: RunReportOptions): 
   const countQuery = _executable.countQuery(def);
 
   return reportsDb.transaction().execute(async (trx) => {
-    await sql`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`.execute(trx);
+    // SET/SET LOCAL don't accept a bound parameter in Postgres (syntax error at
+    // or near "$1") — this constant must be inlined as a literal, not passed as
+    // ${STATEMENT_TIMEOUT_MS} through the sql tag.
+    await sql.raw(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`).execute(trx);
 
     const [rowsResult, countResult] = await Promise.all([
       rowQuery.execute(trx) as Promise<{ rows: Record<string, unknown>[] }>,
