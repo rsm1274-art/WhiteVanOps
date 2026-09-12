@@ -232,6 +232,8 @@ The Field Module saves your changes to your phone's local storage, so you can co
 
 "The server is unreachable" normally just means you're away from the office — the app only reaches the office server over the office WiFi, everywhere, always. That's expected, not an error: keep working, and your entries will save the next time you're back on-site.
 
+A note, status change, or logged time you just saved always stays visible on screen right away, whether it reached the office immediately or only got queued — the app never reloads your job over top of what you just entered. If it only got queued, you'll see the toast "Saved on this device — will sync automatically…" instead of a plain save confirmation.
+
 **Important limitation — read this once:** the Field Module **cannot reload itself from scratch while you're off the office WiFi.** Once the page is open it keeps working fully offline (logging time, notes, materials all still work), but if you force-close the browser tab/app or your phone reloads it for you (low memory, a long time in the background) while you're away from WiFi, you may not be able to get back into it until you're back in range. **Avoid force-closing or reloading the Field Module while you're away from the office.** If you do get stuck, nothing already saved is lost — use the **export button** (above) once you're back on WiFi, or hand your phone to the office so they can pull the file off it.
 
 ### Two different timestamps in the header — don't confuse them

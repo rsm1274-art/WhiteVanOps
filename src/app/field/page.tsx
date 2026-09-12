@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, getHistory, type StuckOp } from "@/lib/idb";
-import { submitWrite, drainSyncQueue, type DrainResult } from "@/lib/offlineWrite";
+import { drainSyncQueue, type DrainResult, type WriteResult } from "@/lib/offlineWrite";
 import { deriveSyncStatus } from "@/lib/syncStatus";
 import { shouldWarnAboutStorage } from "@/lib/storagePressure";
 import { formatTimeOnly } from "@/lib/dateUtils";
@@ -260,6 +260,23 @@ export default function FieldPage() {
     if (tech) loadJobs(tech.id);
   }, [tech, loadJobs]);
 
+  // Applies a write's effect to local state immediately, regardless of
+  // whether it synced or only queued. A "queued" write must NEVER be followed
+  // by a server refetch here — the server doesn't have it yet, so refetching
+  // would silently overwrite the tech's just-made change with stale data
+  // (the bug: notes/status changes appeared to vanish right after saving).
+  // A "synced" write is safe to reconcile against the server afterward, to
+  // pick up server-derived fields (e.g. completionDate).
+  const handleWriteResult = (jobId: string, result: WriteResult, patch: Partial<FieldJob>) => {
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...patch } : j)));
+    checkSyncStatus();
+    if (result === "queued") {
+      showToast("Saved on this device — will sync automatically once you're back on the office network.");
+    } else if (tech) {
+      loadJobs(tech.id);
+    }
+  };
+
   const selectTech = (p: Personnel) => {
     localStorage.setItem("fieldTechId", p.id);
     setTech(p);
@@ -505,7 +522,7 @@ export default function FieldPage() {
               job={j}
               techId={tech.id}
               inventoryItems={inventoryItems}
-              onRefresh={() => { checkSyncStatus(); loadJobs(tech.id); }}
+              onWriteResult={(result, patch) => handleWriteResult(j.id, result, patch)}
               onError={showToast}
             />
           ))}
