@@ -2,9 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 
-// Read-only Plus-tier aggregates over existing data. Revenue = sum of
-// JobLineItem quantity*rate on Completed jobs (labor cost is not tracked, so
-// this is revenue reporting, not profitability).
+// Read-only Plus-tier aggregates over existing data. Revenue recognition:
+// - A completed job that has never been invoiced still counts its
+//   JobLineItem quantity*rate as revenue (an estimate of work performed,
+//   bucketed by completionDate) — this is the original, pre-invoicing
+//   behavior and is the only figure available for jobs run outside the
+//   invoicing feature.
+// - A job that HAS at least one Invoice is excluded from that line-item
+//   estimate entirely, so its revenue instead comes from actual Payments
+//   recorded against its invoice(s) (bucketed by Payment.receivedDate) —
+//   this avoids double-counting invoiced work and reflects cash actually
+//   collected rather than billed.
+// - Standalone invoices (no linked job, e.g. ad-hoc or quote-converted)
+//   contribute via the same Payments pass.
+// Labor cost is not tracked, so this is revenue reporting, not profitability.
 
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -37,7 +48,7 @@ export async function GET() {
     windowStart.setDate(1);
     windowStart.setHours(0, 0, 0, 0);
 
-    const [completedJobs, timeEntries, maintenanceLogs] = await Promise.all([
+    const [completedJobs, timeEntries, maintenanceLogs, invoices] = await Promise.all([
       prisma.job.findMany({
         where: { status: "Completed", completionDate: { gte: windowStart } },
         include: { client: true, lineItems: true },
@@ -50,7 +61,16 @@ export async function GET() {
         where: { date: { gte: windowStart } },
         include: { vehicle: true },
       }),
+      prisma.invoice.findMany({
+        include: { client: true, payments: true },
+      }),
     ]);
+
+    // Jobs that have at least one invoice — their revenue comes from actual
+    // payments below, not the line-item estimate, so they're excluded there.
+    const invoicedJobIds = new Set(
+      invoices.map((inv) => inv.jobId).filter((id): id is string => id !== null)
+    );
 
     const months = lastMonths(12);
 
@@ -61,14 +81,37 @@ export async function GET() {
     let totalRevenue = 0;
 
     for (const job of completedJobs) {
+      // Completed jobs always count toward the jobs-completed-per-month series,
+      // regardless of whether they've since been invoiced.
+      const jobKey = monthKey(new Date(job.completionDate!));
+      if (jobsByMonthMap.has(jobKey)) {
+        jobsByMonthMap.set(jobKey, (jobsByMonthMap.get(jobKey) ?? 0) + 1);
+      }
+
+      if (invoicedJobIds.has(job.id)) continue;
+
       const jobRevenue = job.lineItems.reduce((sum, li) => sum + li.quantity * li.rate, 0);
       totalRevenue += jobRevenue;
-      const key = monthKey(new Date(job.completionDate!));
-      if (revenueByMonthMap.has(key)) {
-        revenueByMonthMap.set(key, revenueByMonthMap.get(key)! + jobRevenue);
-        jobsByMonthMap.set(key, (jobsByMonthMap.get(key) ?? 0) + 1);
+      if (revenueByMonthMap.has(jobKey)) {
+        revenueByMonthMap.set(jobKey, revenueByMonthMap.get(jobKey)! + jobRevenue);
       }
       clientRevenue.set(job.client.name, (clientRevenue.get(job.client.name) ?? 0) + jobRevenue);
+    }
+
+    // Actual cash collected against invoices (job-linked or standalone).
+    for (const invoice of invoices) {
+      for (const payment of invoice.payments) {
+        if (payment.receivedDate < windowStart) continue;
+        totalRevenue += payment.amount;
+        const key = monthKey(new Date(payment.receivedDate));
+        if (revenueByMonthMap.has(key)) {
+          revenueByMonthMap.set(key, revenueByMonthMap.get(key)! + payment.amount);
+        }
+        clientRevenue.set(
+          invoice.client.name,
+          (clientRevenue.get(invoice.client.name) ?? 0) + payment.amount
+        );
+      }
     }
 
     // Technician hours (total over the window, per tech)

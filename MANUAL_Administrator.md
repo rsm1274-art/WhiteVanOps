@@ -364,12 +364,12 @@ The yellow **Unsynced** badge in the top header shows the total count of pending
 A read-only reporting tab covering the **trailing 12 months**. Numbers are computed live from your operational data — there is nothing to configure.
 
 - **KPI tiles** — total revenue, jobs completed, average job value, and labor hours logged.
-- **Revenue by Month** — billed line-item totals on completed jobs, by completion month. Hover a bar to see the month's revenue and job count.
+- **Revenue by Month** — see "Note on revenue" below for how a month's figure is built. Hover a bar to see the month's revenue and job count. The job count always reflects every job completed that month, whether or not it has since been invoiced.
 - **Technician Hours** — total logged time per technician.
 - **Top Clients by Revenue** — your highest-billing clients.
 - **Fleet Maintenance Cost** — logged maintenance spend per month across all vehicles.
 
-**Note on "revenue":** revenue is the sum of quantity × rate on completed jobs' line items. Labor cost is not tracked in WhiteVanOps, so these figures are revenue, not profit.
+**Note on "revenue":** a completed job that has never been invoiced (Module 10) contributes the quantity × rate total of its line items, counted in the month it was completed — an estimate of work performed. A job that **has** been invoiced is excluded from that estimate entirely; instead, actual **payments** recorded against its invoice(s) count toward revenue, in the month each payment was received. Standalone invoices not linked to any job (ad-hoc or quote-converted) contribute the same way. This means revenue on an invoiced job only appears once it's actually been paid — not at completion — and a partially-paid invoice contributes only the amount collected so far. Labor cost is not tracked in WhiteVanOps, so these figures are revenue, not profit.
 
 ---
 
@@ -418,7 +418,7 @@ Three tiles at the top of the tab: how many quotes are **Awaiting Response**, th
 
 ## Module 10: Invoicing & Payments
 
-An internal accounts-receivable ledger with printable PDF invoices and payment tracking. It is **completely independent of the QuickBooks Export Sync tab** (Module 7) — creating an invoice here does not affect a job's QB sync status, and vice versa. Use whichever billing flow (or both) fits your business.
+An internal accounts-receivable ledger with printable PDF invoices and payment tracking. It is **mostly independent of the QuickBooks Export Sync tab** (Module 7) — creating an invoice does not by itself change a job's QB sync status. There is one link: when an invoice tied to a job is paid in full, that job's QB sync status is automatically set to **Exported**, since its billing is now settled and it no longer needs a manual QuickBooks export. A partially-paid invoice leaves the job's sync status untouched. Use whichever billing flow (or both) fits your business.
 
 ### Creating an invoice
 
@@ -571,7 +571,7 @@ The invoice export will include one generic placeholder line ("Operations:Servic
 No. The current export includes all pending records at once. Lock records only after a full successful import.
 
 **Does the Invoicing tab replace the QuickBooks export?**
-No. The Invoicing tab is an internal AR ledger with its own PDF invoices and payment tracking; the QuickBooks Export Sync tab is unchanged and works exactly as before. They do not affect each other.
+No. The Invoicing tab is an internal AR ledger with its own PDF invoices and payment tracking; the QuickBooks Export Sync tab works independently. The one exception: fully paying off an invoice tied to a job marks that job **Exported** in the QB sync list automatically, since it's already settled.
 
 **How does a customer accept or decline a quote?**
 By phone, email, or in person — you record their answer yourself with the **Accepted**/**Declined** buttons on the Quotes tab. There is no online approval link; the quote goes out as a PDF.
