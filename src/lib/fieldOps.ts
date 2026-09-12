@@ -40,6 +40,7 @@
 import { Prisma } from "@prisma/client";
 import { audit } from "@/lib/audit";
 import { targetKeyFor, shouldApply, type FieldOpType } from "@/lib/opOrdering";
+import { parseLocalDate } from "@/lib/dateUtils";
 
 export type PrismaTransactionClient = Prisma.TransactionClient;
 
@@ -169,7 +170,7 @@ export async function logTime(
     data: {
       jobId,
       personnelId,
-      date: new Date(date),
+      date: parseLocalDate(`${date}T12:00:00`),
       duration,
       serviceItem: serviceItem || "Field Labor",
       payrollItem: payrollItem || "Regular Pay",
