@@ -2,13 +2,16 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, type StuckOp } from "@/lib/idb";
+import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, getHistory, type StuckOp } from "@/lib/idb";
 import { submitWrite, drainSyncQueue, type DrainResult } from "@/lib/offlineWrite";
 import { deriveSyncStatus } from "@/lib/syncStatus";
+import { shouldWarnAboutStorage } from "@/lib/storagePressure";
+import { formatTimeOnly } from "@/lib/dateUtils";
+import { buildExport } from "@/lib/fieldExport";
 import StuckOpsPanel from "@/components/field/StuckOpsPanel";
 import SyncStatusBar from "@/components/field/SyncStatusBar";
 import JobCard from "@/components/field/JobCard";
-import { ArrowLeft, RotateCw, AlertTriangle } from "lucide-react";
+import { ArrowLeft, RotateCw, AlertTriangle, Download } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,6 +80,26 @@ export default function FieldPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [stuckOps, setStuckOps] = useState<StuckOp[]>([]);
   const [showStuckPanel, setShowStuckPanel] = useState(false);
+  const [jobsLastRefreshedAt, setJobsLastRefreshedAt] = useState<number | null>(null);
+  const [storagePressure, setStoragePressure] = useState(false);
+  const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
+
+  const checkStoragePressure = useCallback(async () => {
+    try {
+      const q = await getSyncQueue();
+      let estimate: { usage: number; quota: number } | null = null;
+      if ("storage" in navigator && typeof navigator.storage?.estimate === "function") {
+        const raw = await navigator.storage.estimate();
+        if (typeof raw.usage === "number" && typeof raw.quota === "number") {
+          estimate = { usage: raw.usage, quota: raw.quota };
+        }
+      }
+      setStoragePressure(shouldWarnAboutStorage(estimate, q.length));
+    } catch {
+      // Best effort — an estimate() failure or a getSyncQueue() failure just
+      // means the warning stays whatever it last was.
+    }
+  }, []);
 
   const checkSyncStatus = async () => {
     try {
@@ -107,6 +130,7 @@ export default function FieldPage() {
     try {
       const { synced, stuck, stopped } = await drainSyncQueue();
       setLastStop(stopped);
+      checkStoragePressure();
       if (synced > 0) {
         const now = Date.now();
         localStorage.setItem(LAST_SYNCED_KEY, String(now));
@@ -145,6 +169,7 @@ export default function FieldPage() {
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     checkSyncStatus();
+    checkStoragePressure();
 
     // Drain on mount, not just on an online event: if the server was down while
     // the device kept its connection, no online event ever fires and queued
@@ -211,11 +236,13 @@ export default function FieldPage() {
       setJobs(data.jobs ?? []);
       setInventoryItems(data.inventoryItems ?? []);
       await cacheApiResponse(url, data);
+      setJobsLastRefreshedAt(Date.now());
     } catch {
       const cached = await getCachedApiResponse(url);
       if (cached) {
         setJobs(cached.jobs ?? []);
         setInventoryItems(cached.inventoryItems ?? []);
+        setJobsLastRefreshedAt(Date.now());
         showToast("Loaded jobs from offline cache", false);
       } else {
         showToast("Failed to load assignments", true);
@@ -242,6 +269,47 @@ export default function FieldPage() {
     localStorage.removeItem("fieldTechId");
     setTech(null);
     setJobs([]);
+  };
+
+  /**
+   * The escape hatch: a snapshot of everything queued, stuck, and recently
+   * synced, written to a file the tech can hand to the office by any means
+   * (email, USB, AirDrop) independent of WiFi sync ever working again. Always
+   * available — never conditional on an error state — and read-only: it does
+   * not touch the queue, so normal draining still happens if the phone
+   * reaches the office WiFi later.
+   */
+  const exportWork = async () => {
+    if (!tech) return;
+    try {
+      const [queue, stuck, history] = await Promise.all([getSyncQueue(), getStuckOps(), getHistory()]);
+      const data = buildExport({
+        techId: tech.id,
+        techName: `${tech.firstName} ${tech.lastName}`,
+        queue,
+        stuck,
+        history,
+      });
+
+      const slug = data.techName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `whitevanops-field-${slug}-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${data.ops.length} item${data.ops.length === 1 ? "" : "s"} to your downloads.`);
+    } catch (err) {
+      console.error("Export failed", err);
+      showToast("Failed to export your work", true);
+    }
   };
 
   const filteredJobs = jobs.filter((j) => {
@@ -327,6 +395,13 @@ export default function FieldPage() {
             <RotateCw className="h-4 w-4" />
           </button>
           <button
+            onClick={exportWork}
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            title="Export my work to a file"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+          <button
             onClick={signOut}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold uppercase tracking-wide transition-colors"
           >
@@ -349,6 +424,20 @@ export default function FieldPage() {
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {stuckOps.length} {stuckOps.length === 1 ? "entry needs" : "entries need"} attention
         </button>
+      )}
+
+      {storagePressure && !storageBannerDismissed && (
+        <div className="w-full flex items-center justify-between gap-2 bg-amber-500/15 border border-amber-500/40 text-amber-700 text-xs font-medium rounded-lg px-4 py-3 mx-0">
+          <span>
+            {pendingCount} item{pendingCount === 1 ? "" : "s"} waiting to sync — try to reach the office WiFi soon.
+          </span>
+          <button
+            onClick={() => setStorageBannerDismissed(true)}
+            className="text-[10px] font-bold uppercase tracking-widest opacity-70 hover:opacity-100 shrink-0"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
 
       {/* Admin link */}
@@ -375,6 +464,9 @@ export default function FieldPage() {
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Your Assignments</p>
             <p className="text-2xl font-bold text-zinc-900">{filteredJobs.length} job{filteredJobs.length !== 1 ? "s" : ""}</p>
+            {jobsLastRefreshedAt !== null && (
+              <p className="text-[10px] text-zinc-400">Assignments as of {formatTimeOnly(jobsLastRefreshedAt)}</p>
+            )}
           </div>
           <div className="flex gap-1.5 bg-white border border-zinc-200 rounded-lg p-1">
             {[

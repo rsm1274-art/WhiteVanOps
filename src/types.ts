@@ -8,7 +8,6 @@ export interface Client {
   contactName: string;
   locationAddress: string;
   paymentTerms: string;
-  // Plus tier only — present in the dashboard payload only when licensed
   notes?: ClientNote[];
   followUps?: ClientFollowUp[];
   createdAt: string;
@@ -16,16 +15,11 @@ export interface Client {
 }
 
 // ---------------------------------------------------------------------------
-// Plus tier — license, CRM notes & follow-ups, invoicing
+// License — activation status only. There is no tier/plan any more (v2.0).
 // ---------------------------------------------------------------------------
 
-export type LicenseTier = "base" | "plus";
-
 export interface LicenseInfo {
-  tier: LicenseTier;
   expiresAt: string | null;
-  /** True only when tier is "plus" and unexpired. */
-  plus: boolean;
 }
 
 export interface ClientNote {
@@ -105,12 +99,6 @@ export interface Quote {
   issueDate: string;
   expiryDate: string;
   notes: string | null;
-  /**
-   * The secret in the customer's approval link, null until the quote is issued.
-   * Reaches the dashboard so the operator can re-copy the link after a reload —
-   * never render it as text.
-   */
-  publicToken: string | null;
   sentAt: string | null;
   respondedAt: string | null;
   respondedName: string | null;
@@ -362,9 +350,7 @@ export interface TimeEntry {
 
 export interface DashboardData {
   license: LicenseInfo;
-  /** Empty for Base-tier installs. */
   invoices: Invoice[];
-  /** Empty for Base-tier installs. */
   quotes: Quote[];
   clients: Client[];
   personnel: Personnel[];

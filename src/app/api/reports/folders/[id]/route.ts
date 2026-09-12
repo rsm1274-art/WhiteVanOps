@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { audit } from "@/lib/audit";
 
 // Every caller reaching this route is already admin/superuser (requireRole
@@ -15,9 +14,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const existing = await prisma.reportFolder.findUnique({ where: { id } });
   if (!existing) return notFound();
@@ -51,9 +47,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const existing = await prisma.reportFolder.findUnique({ where: { id } });
   if (!existing) return notFound();

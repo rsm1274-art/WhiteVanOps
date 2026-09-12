@@ -2,26 +2,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
-import { buildQuoteApprovalUrl } from "@/lib/quote";
-import { generateQuoteToken } from "@/lib/quoteToken";
-
-const FIELD_ACCESS_SETTING_KEY = "field_access_url";
 
 /**
- * Marks a Draft quote as Sent and mints its public approval token.
- *
- * Minting here rather than at create time means a quote that never leaves the
- * office never has a live public link at all — the unauthenticated surface only
- * exists for quotes deliberately issued to a customer.
+ * Marks a Draft quote as Sent. Quotes go out as a PDF (see the pdf route) —
+ * there is no public approval link to mint. The operator records the
+ * customer's decision manually once they reply.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const { id } = await params;
     const existing = await prisma.quote.findUnique({ where: { id } });
@@ -37,24 +27,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: {
         status: "Sent",
         sentAt: new Date(),
-        // Re-sending is not possible (Draft-only), so this token is written once
-        // and stays valid for the life of the quote.
-        publicToken: generateQuoteToken(),
       },
       include: { lineItems: true, client: true },
     });
 
-    const fieldAccess = await prisma.systemSetting.findUnique({ where: { key: FIELD_ACCESS_SETTING_KEY } });
-    const approvalUrl = buildQuoteApprovalUrl(fieldAccess?.value, new URL(request.url).origin, quote.publicToken!);
-
-    // The token is the secret in that URL, so it is never written to the audit
-    // log — only the fact that the quote was issued.
     await audit(user!.userId, "UPDATE", "Quote", quote.id, {
       status: "Sent",
       quoteNumber: quote.quoteNumber,
     });
 
-    return NextResponse.json({ quote, approvalUrl });
+    return NextResponse.json({ quote });
   } catch (error) {
     console.error("Send Quote API Error:", error);
     return NextResponse.json({ error: "Failed to send quote" }, { status: 500 });

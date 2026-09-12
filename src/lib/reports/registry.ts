@@ -7,8 +7,6 @@
 // Deliberate v1 exclusions (do not add without re-reading the plan's rationale —
 // docs/superpowers/plans/2026-09-09-report-builder-plus.md, Phase 0 step 2):
 //   - User.passwordHash, User.failedLoginAttempts, User.lockedUntil
-//   - Quote.publicToken — the entire credential for the unauthenticated public
-//     quote-approval route; must never be reportable.
 //   - AuditLog.* — audit trail, not report data.
 //   - SyncReviewItem.body — raw queued request payloads.
 //   - License.* — licensing internals.

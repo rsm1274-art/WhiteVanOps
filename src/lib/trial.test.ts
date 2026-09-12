@@ -129,7 +129,7 @@ describe("markTrialUnlocked", () => {
   it("writes trial-unlock.json with the given payload", () => {
     vi.spyOn(fs, "existsSync").mockReturnValue(true);
     const writeSpy = vi.spyOn(fs, "writeFileSync").mockImplementation(() => {});
-    const payload = { machineId: "test-machine-id", tier: "base" as const, expiresAt: null, notes: "test", sig: "x" };
+    const payload = { machineId: "test-machine-id", expiresAt: null, notes: "test", sig: "x" };
 
     markTrialUnlocked(payload);
 

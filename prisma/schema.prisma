@@ -24,12 +24,12 @@ model Client {
 
 // ---------------------------------------------------------------------------
 // License — singleton row (fixed id "singleton", upserted on read by
-// src/lib/license.ts). Controls the Base vs Plus feature tier. The tables for
-// Plus features always exist; only the flag gates access.
+// src/lib/license.ts). v2.0: there is no Base/Plus tier any more — every
+// activated install runs the full feature set. This row now only tracks
+// activation status (key, when activated, when it expires).
 // ---------------------------------------------------------------------------
 model License {
   id          String    @id @default("singleton")
-  tier        String    @default("base") // "base" | "plus"
   licenseKey  String?
   notes       String?
   activatedAt DateTime?
@@ -434,10 +434,12 @@ model SystemSetting {
 }
 
 // ---------------------------------------------------------------------------
-// Quoting (Plus tier). A Quote is the pre-sale half of the money loop:
+// Quoting. A Quote is the pre-sale half of the money loop:
 // Draft -> Sent -> Approved -> Converted (into an Invoice). Declined and
 // Expired are the dead ends. Line items mirror InvoiceLineItem exactly so the
-// conversion is a straight copy.
+// conversion is a straight copy. Quotes go out as a PDF — there is no
+// customer-facing public approval link; the operator records the customer's
+// decision by hand.
 // ---------------------------------------------------------------------------
 
 model Quote {
@@ -452,15 +454,9 @@ model Quote {
   expiryDate  DateTime
   notes       String?
 
-  // Customer-facing approval link. Null until the quote is marked Sent, when a
-  // 32-byte random token is minted. GET/POST /api/public/quotes/[token] is the
-  // ONLY unauthenticated data surface in the app — see that route for what it
-  // is allowed to expose.
-  publicToken String?   @unique
-  sentAt      DateTime?
+  sentAt DateTime?
 
-  // The customer's decision, whether taken through the public link or recorded
-  // by hand in the dashboard.
+  // The customer's decision, recorded by hand in the dashboard.
   respondedAt   DateTime?
   respondedName String? // Name the customer typed when approving
   declineReason String?
@@ -510,4 +506,23 @@ model SavedReport {
   createdBy   User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// v2.0 Phase 2 — idempotency foundation. Records every field-write op the
+// server has applied so a replayed op (queue re-drain after a lost response,
+// or an out-of-order retarget) can be recognized and not double-applied.
+// opId is the client-generated ULID (see src/lib/opId.ts); no route writes
+// to this table yet — that wiring is Phase 3's fieldOps.ts refactor.
+// ---------------------------------------------------------------------------
+model AppliedOp {
+  opId      String   @id
+  opType    String
+  targetKey String
+  resultId  String?
+  outcome   String // "applied" | "superseded" | "duplicate"
+  via       String // "lan" | "import" (import added in a later phase)
+  appliedAt DateTime @default(now())
+
+  @@index([targetKey])
 }

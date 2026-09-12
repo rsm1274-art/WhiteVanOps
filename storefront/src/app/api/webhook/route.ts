@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { claimStripeSession, mintLicenseForPurchase, recordStripeSessionResult } from "@/lib/licenses";
-import { downloadUrlForTier } from "@/lib/releases";
+import { downloadUrl } from "@/lib/releases";
 import { sendLicenseEmail } from "@/lib/resend";
-import { isLicenseTier, stripe, tierForPriceId } from "@/lib/stripe";
+import { stripe } from "@/lib/stripe";
 import type Stripe from "stripe";
 
 function requireEnv(name: string): string {
@@ -17,18 +17,6 @@ const HANDLED_EVENT_TYPES = new Set([
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
 ]);
-
-async function resolveTier(session: Stripe.Checkout.Session): Promise<string | null> {
-  const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
-    expand: ["data.price"],
-  });
-  const priceId = lineItems.data[0]?.price?.id;
-  const tierFromPrice = priceId ? tierForPriceId(priceId) : null;
-  if (tierFromPrice) return tierFromPrice;
-
-  const tierFromMetadata = session.metadata?.tier;
-  return isLicenseTier(tierFromMetadata) ? tierFromMetadata : null;
-}
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -55,16 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, duplicate: true });
   }
 
-  const tier = await resolveTier(session);
-  if (!tier || !isLicenseTier(tier)) {
-    console.error(`Stripe webhook: could not resolve a tier for session ${session.id}`);
-    // The claim above already prevents a retry from double-processing; return
-    // 200 so Stripe stops retrying, but this needs a human to look at it.
-    return NextResponse.json({ received: true, error: "unresolved tier" });
-  }
-
   const { key } = await mintLicenseForPurchase({
-    tier,
     notes: `Stripe checkout session ${session.id}`,
   });
 
@@ -75,9 +54,8 @@ export async function POST(req: NextRequest) {
     try {
       await sendLicenseEmail({
         to: customerEmail,
-        tier,
         licenseKey: key,
-        downloadUrl: downloadUrlForTier(tier),
+        downloadUrl: downloadUrl(),
       });
       emailedAt = new Date().toISOString();
     } catch (error) {

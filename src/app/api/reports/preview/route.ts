@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { validateDefinition } from "@/lib/reports/definition";
 import { runReport } from "@/lib/reports/run";
 
@@ -15,9 +14,6 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   let body: unknown;
   try {
     body = await req.json();

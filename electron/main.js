@@ -262,21 +262,22 @@ let connectionTarget = { host: 'localhost', port: PORT };
 // unbreakable DRM, but it raises the bar from "trivial" to "meaningful".
 const LICENSE_SIGNING_SECRET = 'wvo.lic.v1.6b2f9d4c8a1e7035f2c9b0d4e6a8135790acdef1234567890fedcba098765';
 
-// The tier is part of the signed payload, so an activated install's plan is
-// bound to its key and machine and cannot be edited on disk. These two
-// functions MUST stay byte-identical to signBaseLicense/signLegacyBaseLicense
-// in src/lib/licenseCrypto.ts — main.js runs before the Next.js bundle loads
+// v2.0: there is no tier concept any more — a signed license.json only
+// proves "this key is activated on this machine". These two functions MUST
+// stay byte-identical to signBaseLicense/signLegacyBaseLicense in
+// src/lib/licenseCrypto.ts — main.js runs before the Next.js bundle loads
 // and cannot import TypeScript, so the duplication is deliberate. If the
 // formats drift, activation writes a file the running app then rejects.
-function signLicense(key, machineId, tier) {
+function signLicense(key, machineId) {
   return crypto
     .createHmac('sha256', LICENSE_SIGNING_SECRET)
-    .update(`${key}:${machineId}:${tier}`)
+    .update(`${key}:${machineId}`)
     .digest('hex');
 }
 
-// Pre-tier format, kept so installs activated before tiered licenses keep
-// launching without re-activation. Such installs read back as tier "base".
+// Pre-v2.0 ("legacy") format. Now functionally identical to signLicense
+// above — kept as a separate name only so "legacy" stays a truthful
+// historical marker alongside src/lib/licenseCrypto.ts.
 function signLegacyLicense(key, machineId) {
   return crypto
     .createHmac('sha256', LICENSE_SIGNING_SECRET)
@@ -284,9 +285,9 @@ function signLegacyLicense(key, machineId) {
     .digest('hex');
 }
 
-function writeLicense(key, machineId, tier) {
-  const sig = signLicense(key, machineId, tier);
-  fs.writeFileSync(getLicensePath(), JSON.stringify({ key, machineId, tier, sig }));
+function writeLicense(key, machineId) {
+  const sig = signLicense(key, machineId);
+  fs.writeFileSync(getLicensePath(), JSON.stringify({ key, machineId, sig }));
 }
 
 async function verifyLicenseSilent() {
@@ -300,17 +301,15 @@ async function verifyLicenseSilent() {
     const hwid = machineIdSync();
     if (data.machineId !== hwid) return false;
 
-    // Reject any file whose signature doesn't match — i.e. hand-crafted ones,
-    // including one whose tier was edited after activation.
-    const isTiered = typeof data.tier === 'string';
-    const tier = data.tier === 'plus' ? 'plus' : 'base';
-    const expected = isTiered
-      ? signLicense(data.key, data.machineId, tier)
-      : signLegacyLicense(data.key, data.machineId);
+    // Reject any file whose signature doesn't match — i.e. hand-crafted ones.
+    const expectedCurrent = signLicense(data.key, data.machineId);
+    const expectedLegacy = signLegacyLicense(data.key, data.machineId);
     const actual = Buffer.from(String(data.sig));
-    const expectedBuf = Buffer.from(expected);
-    if (actual.length !== expectedBuf.length) return false;
-    if (!crypto.timingSafeEqual(actual, expectedBuf)) return false;
+    const matches = (expectedBuf) => {
+      const buf = Buffer.from(expectedBuf);
+      return actual.length === buf.length && crypto.timingSafeEqual(actual, buf);
+    };
+    if (!matches(expectedCurrent) && !matches(expectedLegacy)) return false;
 
     return true;
   } catch (e) {
@@ -387,12 +386,7 @@ function showActivationWindow() {
           await updateDoc(docRef, { machineId: hwid });
         }
 
-        // The tier travels with the key: scripts/license-manager.js stamps it
-        // onto the Firestore record at mint time (`--tier base|plus`), and it
-        // is baked into the signed local license here. Keys minted before the
-        // tier field existed have no `tier` and correctly resolve to base.
-        const tier = data.tier === 'plus' ? 'plus' : 'base';
-        writeLicense(key, hwid, tier);
+        writeLicense(key, hwid);
         settled = true;
 
         event.reply('license-result', { success: true });

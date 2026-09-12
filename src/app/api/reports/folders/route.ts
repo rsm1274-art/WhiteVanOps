@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { audit } from "@/lib/audit";
 
 export async function GET() {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const folders = await prisma.reportFolder.findMany({ orderBy: { name: "asc" } });
   return NextResponse.json(folders);
 }
@@ -19,9 +15,6 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const body = await req.json();
     if (typeof body !== "object" || body === null) {

@@ -15,7 +15,7 @@ Each entry follows the same shape: **Symptom → What's actually happening → F
 Before diving in, these four answers eliminate most of the search space. Ask them every time.
 
 1. **Is it broken for everyone, or one person?** Everyone → server/PC/database. One person → that phone, that login, that browser.
-2. **Is it broken in the office, or only outside it?** Only outside → networking (Part 2). Both → the app itself (Part 3).
+2. **Is it broken for a phone on the office WiFi, or for the desktop app itself?** Phone-only → networking/field access (Part 2). Desktop too → the app itself (Part 3). (There is no "outside the office" case to consider — field access never reaches beyond the office WiFi.)
 3. **What changed?** Windows update, new router, ISP visit, power cut, someone "cleaned up" the PC. Nothing breaks at random. Something changed.
 4. **Is the office PC actually on and awake?** Sounds insulting. Ask anyway. It's the answer more often than any other single item.
 
@@ -70,67 +70,11 @@ Before diving in, these four answers eliminate most of the search space. Ask the
 
 **Symptom:** Activation window rejects the key with a network/connection error. The key is definitely correct.
 
-**What's actually happening:** **Base activation is the one step in the whole system that requires working internet.** It has to reach Firestore to look the key up. If the office internet is down, or a firewall blocks it, activation cannot complete.
+**What's actually happening:** **Activation is the one step in the whole system that requires working internet.** It has to reach Firestore to look the key up. If the office internet is down, or a firewall blocks it, activation cannot complete.
 
 **Fix:** get internet working, then activate. If you're installing at a site with no internet yet (new construction, ISP not hooked up), **you cannot complete activation that day.** Plan around it — activate before you leave your own shop if the machine is one you're delivering.
 
-**Worth knowing:** this is a one-time requirement. Once activated, the app writes its signed local file and never needs the internet to launch again. An office can lose internet for a month and the software still opens (the field techs won't be able to reach it remotely, but that's Part 2).
-
----
-
-### 1.3b ✅ "They paid for Plus but the install came up as Base"
-
-**Symptom:** A new Plus customer activates and only sees the Base tabs.
-
-**What's actually happening:** you minted their key without `--tier plus`. The tier lives inside the activation key — one installer serves both plans and the key decides — so a key minted as Base produces a Base install no matter which `.exe` they ran. (Before 2026-07-15 this was a *build*-time choice, so an old habit of "send them the Plus installer" no longer does anything.)
-
-**Fix — don't reissue the key.** Mint a signed Plus upgrade against the key they already activated:
-
-```bash
-node scripts/license-manager.js --plus --key <their key>
-```
-
-They paste the JSON into Settings → License & Plan and Plus turns on, no reinstall. This is the same path a genuine Base→Plus upgrade takes.
-
-**Prevention:** get `--tier` right at mint time. It's the single flag that decides what the customer bought.
-
----
-
-### 1.4 ✅ "I pasted the Plus license and nothing happened"
-
-**Symptom:** Customer buys the Plus upgrade, pastes the JSON block into Settings → License & Plan, and the CRM/Analytics/Invoicing tabs don't appear.
-
-**What's actually happening:** most likely one of these, in order of frequency:
-
-1. **The JSON got mangled in transit.** Email clients and chat apps love to "helpfully" convert straight quotes into curly quotes, add line breaks, or strip characters. Curly quotes make the JSON invalid and the whole block is rejected.
-2. **The Plus license was minted against the wrong Base key.** A Plus license is mathematically bound to one specific Base key — `verifyPlusLicense()` compares them and refuses if they don't match. If you minted it against a typo'd key, or against a *different customer's* key, it will never work on this install.
-3. **They only pasted part of it** — missed the leading `{` or trailing `}`.
-4. **It's expired**, if you issued it with `--expires`.
-
-**Fix:** send the JSON as a **`.txt` file attachment**, not as pasted body text. That defeats the curly-quote problem entirely. Then re-verify you minted it against their exact Base key:
-
-```bash
-node scripts/license-manager.js --plus --key <THEIR EXACT BASE KEY>
-```
-
-**Prevention:** copy the Base key from your spreadsheet, never retype it. And always send Plus licenses as attachments.
-
----
-
-### 1.5 ✅ "The Plus features were working and now they're gone"
-
-**Symptom:** Plus tabs vanished. Nothing was intentionally changed.
-
-**What's actually happening:** `getLicense()` re-verifies Plus on every read and **actively reverts the database to Base** when it can't cryptographically confirm the upgrade. This is anti-tamper behavior working as intended. Triggers:
-
-- **`%APPDATA%\whitevanops\plus_license.json` was deleted** — cleanup tool, profile change, drive restore. (Applies to customers upgraded from Base; a customer whose *key* is Plus doesn't have this file at all.)
-- **The Base license became invalid** (§1.2), which invalidates Plus with it — Plus is verified *against* the activated key, so if that's gone, Plus can't be checked and drops.
-- **`license.json` was edited.** Since 2026-07-15 the tier is part of the signed payload, so anyone who opened it and changed `"tier": "base"` to `"plus"` broke the signature — the file is rejected wholesale and the app asks for activation. If a customer admits to "having a look at the settings files," this is what they did. Re-activating with their real key fixes it.
-- **The Plus license expired**, if you issued one with `--expires`.
-
-**Fix:** resolve the Base activation first (§1.2) — Plus often comes back on its own once Base is valid again, since the file is still sitting there. If `plus_license.json` is genuinely gone, re-send it. You can re-mint it any time from their Base key; it's deterministic, so the same inputs produce the same license.
-
-**Prevention:** keep the minted Plus JSON in your own records alongside the key. Re-minting is free and instant, but only if you know their Base key.
+**Worth knowing:** this is a one-time requirement. Once activated, the app writes its signed local file and never needs the internet to launch again. An office can lose internet for a month and the software still opens.
 
 ---
 
@@ -138,132 +82,48 @@ node scripts/license-manager.js --plus --key <THEIR EXACT BASE KEY>
 
 **Symptom:** Prospect converted to a paying customer, but the install is showing the trial-expired lock screen.
 
-**What's actually happening:** the trial lock is stamped into the login session and enforced independently of the license tier. Paying you doesn't unlock it — the conversion key does.
+**What's actually happening:** the trial lock is stamped into the login session and enforced independently of activation. Paying you doesn't unlock it — the conversion key does.
 
 **Fix:**
 
 1. Get the **machine ID** from the trial-expired screen (they can read it to you or send a photo).
-2. Mint the unlock key with **the tier they actually bought:**
+2. Mint the unlock key:
    ```bash
-   node scripts/license-manager.js --unlock-trial --machine <machineId> --tier base
-   # or --tier plus
+   node scripts/license-manager.js --unlock-trial --machine <machineId>
    ```
 3. They paste it into Settings → License & Plan or the trial-expired screen.
-
-**Get the tier right.** The unlock key's tier is what they get — `--tier base` correctly switches *off* the Plus features they've been enjoying for 30 days. If you mint `--tier plus` for a customer who paid for Base, you've given away the upgrade permanently and you'll have to walk it back, which is an awkward call.
 
 **The good news to lead with:** all the data they entered during the trial stays. No reinstall, no migration, no re-entry. Say this out loud on the conversion call — it's the reason they're not hesitating.
 
 ---
 
-## Part 2: Network & Remote Field Access
+## Part 2: Network & Field Access
 
-> This is where most of your install time goes and where most of the failures live. The app is the easy part; other people's routers are not.
+> Field access is office-WiFi-only, permanently — there is no remote/tunnel access to
+> troubleshoot, no CGNAT to check, no port forwarding or DDNS to configure. (An earlier version
+> of this app built a Cloudflare-tunnel remote-access path and then removed it entirely in v2.0 —
+> if you're reading old notes that mention CGNAT, DuckDNS, or a Plus-only tunnel, they describe a
+> design that no longer exists. Do not act on them.) Everything in this Part is now about the
+> office LAN itself.
 
-**As of 2026-07-24, remote field access (this Part's CGNAT/DDNS/port-forward material below) is a Plus-only concern.** Base doesn't do any of that — it serves the field module over the office WiFi only, and there is nothing to forward or resolve. If the customer is on Base, start with 2.0.
+### 2.0 ✅ "A tech's work isn't reaching the office"
 
-### 2.0 ✅ "A tech's work isn't reaching the office" (Base)
-
-**Symptom:** a Base-plan tech's phone shows entries "waiting" in the sync status strip and they aren't clearing, or the field URL won't load at all.
+**Symptom:** a tech's phone shows entries "waiting" in the sync status strip and they aren't clearing, or the field URL won't load at all.
 
 Check in this order — most likely first:
 
-1. **The phone isn't on the office WiFi.** Base only reaches the office server over the office network. This is normal, not a bug — the app queues the work locally and the status strip says so ("N waiting · office network not found"). Have the tech confirm which WiFi network they're on; nothing else in this list matters until that's ruled out.
+1. **The phone isn't on the office WiFi.** The field module only reaches the office server over the office network — there is no other way, by design. This is normal, not a bug — the app queues the work locally and the status strip says so ("N waiting · office network not found"). Have the tech confirm which WiFi network they're on; nothing else in this list matters until that's ruled out.
 2. **The office PC's LAN address changed after a router reboot.** The giveaway: *it worked yesterday and now fails for every tech at once* — one address change breaks every phone's saved home-screen URL simultaneously, since they all point at the same bare IP. Fix: confirm (or set, if it was never done) a **DHCP reservation or static IP** for the office PC (see `MANUAL_Setup_Installation.md` §7), then open **Field Access QR → Use detected address** on the dashboard to pick up the current address, and have every tech re-scan and re-save the home-screen icon.
 3. **The office PC is off.** No server, no sync, for anyone. Check it's powered on and the app is running (§3.1).
 4. **The tech's session expired.** They'll see a prompt to sign in again before their work can save — this is expected after 7 days and isn't a sync failure. Have them sign back in; queued work sends once they're authenticated again.
 5. **An entry needs attention.** If the office deleted or reassigned the job an offline entry was for, that entry surfaces in the tech's stuck-record panel ("N entries need attention") rather than blocking everything else — see `MANUAL_Field_Tech.md`, "Entries that need attention."
+6. **A Windows update reset the firewall**, or a new antivirus/security suite got installed with its own firewall — re-check inbound TCP 3000. On a Mac, re-run `scripts/recovery/allow-field-access.sh` — a macOS update can reset the Application Firewall's allowed-apps list the same way.
 
-**Nothing is lost while any of the above is true.** Queued work sits on the tech's phone (IndexedDB) until it can reach the office; it survives closing the app and does not need to be re-entered once the underlying cause is fixed.
-
-### 2.1 ✅ CGNAT — Check This Before You Sell, Not On Install Day
-
-**This is the most important entry in this manual.** It is the one problem that can make the sale undeliverable through no fault of yours, and it is trivially checkable in advance.
-
-**What CGNAT is, in plain English:** the internet is out of addresses. Many ISPs — especially cellular home internet, satellite, and a lot of budget and rural providers — no longer give each customer their own public address. Instead they put hundreds of customers behind one shared address, like a huge apartment building with a single street number and no unit numbers. **Mail can go out, but nothing can be delivered in.** Port forwarding is delivery-in. So under CGNAT, port forwarding cannot work — not because you configured it wrong, but because there's no address to forward to. No amount of router fiddling fixes it.
-
-**Why it matters here:** the entire field-tech remote access design (DuckDNS + port forward) depends on inbound connections reaching the office PC. Under CGNAT, **techs will never reach the app from outside the office.** The office desktop still works fine — but you've sold half a product.
-
-**The check — do this during the sales conversation:**
-
-1. On the customer's office PC, visit **whatismyip.com**. Write down the number.
-2. Log into their router (usually `http://192.168.1.1` or `http://192.168.0.1`). Find the status page — look for **WAN IP**, **Internet IP**, or **Internet Status**. Write down that number.
-3. **Compare them.**
-   - **They match** → real public IP. Port forwarding will work. Proceed.
-   - **They don't match** → **CGNAT. Stop.** Do not sell remote field access until this is resolved.
-
-**Extra signal:** if the router's WAN IP starts with **`100.64.`** through **`100.127.`**, that's the address range reserved specifically for CGNAT. Dead giveaway.
-
-**If they're behind CGNAT, the options are:**
-
-- **Call the ISP and ask for a public/static IP.** Most business plans include one, often for a small monthly fee. This is the clean fix and usually the right answer — they're a business, they should be on a business plan.
-- **Switch ISPs.** Sometimes the only real option in rural areas.
-- **Sell without remote field access.** The office dashboard works perfectly; techs use it on office WiFi only. This is a legitimate reduced deployment — but **price and describe it honestly up front**, because "my guys can't use it from the truck," discovered after the money clears, is a refund conversation.
-- **A relay/VPN service** would technically solve it — which is exactly what Tailscale would have done, and it was rejected for its per-seat subscription cost (see `docs/launch-checklist.md` Phase 4). That tradeoff was deliberate. CGNAT is the bill coming due for it. If you hit CGNAT often, revisit that decision rather than fighting each case individually.
-
-**Put this on your pre-sale checklist, not your install checklist.** Discovering CGNAT with the customer's money already in your account and you standing in their office is the worst version of this problem.
+**Nothing is lost while any of the above is true.** Queued work sits on the tech's phone (IndexedDB) until it can reach the office; it survives closing the app and does not need to be re-entered once the underlying cause is fixed. If a phone genuinely can't reach the office for an extended stretch (lost, reset, replaced), the tech can **export their work** as a backup file before that happens — see `MANUAL_Field_Tech.md`, "Exporting Your Work," and `MANUAL_Administrator.md`, "Settings: Recover Field Work" for the office-side import.
 
 ---
 
-### 2.2 🔮 Double NAT — CGNAT's Sneaky Cousin
-
-**Symptom:** the CGNAT check passes (public IP matches), you configure port forwarding correctly, and it still doesn't work from outside.
-
-**What's actually happening:** there are **two routers** in the chain. Very common setup: the ISP's modem/gateway is itself a router, and the customer plugged their own WiFi router into it. Now there are two layers of address translation. You forwarded the port on the *inner* router, but the *outer* one still isn't passing traffic through — it doesn't know where to send it.
-
-**How to spot it:** the office PC's local IP is something like `192.168.1.50`, but the router you logged into shows *its own* WAN IP as another private address (`192.168.0.2`, `10.0.0.2`) rather than a real public one. Private ranges are `192.168.x.x`, `10.x.x.x`, and `172.16–31.x.x`. A router whose WAN IP is private means there's another router above it.
-
-**Fix, in order of preference:**
-
-1. **Put the ISP box in "bridge mode"** so it stops routing and hands the public IP straight to the customer's router. Best fix, but some ISP boxes hide this or need an ISP tech to enable it.
-2. **Set up "DMZ" or a matching port forward on the outer box** pointing at the inner router, completing the chain. Forward 3000 twice, essentially.
-3. **Remove one router.** If the ISP box does WiFi acceptably, the second router may be unnecessary.
-
-**Prevention:** while you're doing the CGNAT check, glance at the router's WAN IP. If it's private, you've found double NAT before it costs you an afternoon.
-
----
-
-### 2.3 ✅ "It worked when you left, now techs can't connect from outside"
-
-**Symptom:** field access worked at handoff. Days or weeks later it stops. Nothing changed as far as anyone knows.
-
-**What's actually happening — check in this order:**
-
-1. **The office PC's local IP changed.** By far the most common cause. If you set a static IP *on the PC* instead of a **DHCP Reservation on the router**, the router doesn't know about it and can hand that address to somebody's laptop. Now your port forward points at a printer. Fix: `ipconfig /all` on the PC, compare to the forward rule, and set a proper DHCP reservation by MAC address.
-2. **The DDNS hostname is stale.** The customer's public IP changes periodically — that's the whole reason DuckDNS exists. If the updater stopped, the hostname points at an address that isn't theirs anymore. Check with `nslookup your-client.duckdns.org` and compare to whatismyip.com on their PC. Also confirm the Windows Task Scheduler entry actually ran — a Windows update or a password change can silently disable a scheduled task.
-3. **A Windows update reset the firewall**, or a new antivirus/security suite got installed with its own firewall. Re-check inbound TCP 3000. On a Mac, re-run `scripts/recovery/allow-field-access.sh` — a macOS update can reset the Application Firewall's allowed-apps list the same way.
-4. **The router rebooted and lost its config**, or the ISP swapped the hardware during a service call. ISP techs replace routers and don't restore custom rules. If they had a service visit, this is almost certainly it.
-5. **The PC is asleep or off.** See §3.1.
-
-**Prevention:** at install, take **photos of the router config screens** — the port forward rule and the DHCP reservation. When you're diagnosing this remotely six months later, being able to say "it should look like this" is worth a lot. Store them with the customer record.
-
----
-
-### 2.4 ✅ "It works on my phone but not off WiFi"
-
-**Symptom:** the customer tests the field URL, says it works, then techs report it doesn't.
-
-**What's actually happening:** they tested while connected to the office WiFi. **That test proves nothing** — that traffic never left the building and never touched the port forward, the DDNS, or the ISP. It only proved the app is running.
-
-**Fix:** the only valid test is: **turn WiFi off on the phone, use cellular data, load `http://<client>.duckdns.org:3000/field`.** Nothing else counts. Make the customer do it in front of you before you leave.
-
-**Prevention:** it's in the install manual as Phase D for a reason. Do not skip it, and do not accept "yeah, it worked when I tried it."
-
----
-
-### 2.5 🔮 "It's blocked at some sites but works at others"
-
-**Symptom:** techs can reach the app on cellular but not from a particular customer site's guest WiFi, or vice versa.
-
-**What's actually happening:** port **3000 is unusual**, and some networks (corporate guest WiFi, hospitals, schools, government sites) only permit standard ports out — 80 and 443. Your traffic is on 3000, so it's dropped. Some cellular carriers filter similarly. This isn't your app; it's the network they're standing on.
-
-**Fix:** the tech uses cellular instead of that site's WiFi. Solves it in nearly every case.
-
-**The real fix, if it keeps happening:** move the external port to 443 in the port forward rule (external 443 → internal 3000). Almost nothing blocks 443. This doesn't make it HTTPS — it's still plain `http://` on a port that *usually* carries HTTPS — but it dodges the filtering, and it drops the `:3000` from the URL, which is a small usability win. Be aware some ISPs block inbound 443 on residential plans.
-
----
-
-### 2.6 ✅ "The PWA won't install on the iPhone"
+### 2.1 ✅ "The PWA won't install on the iPhone"
 
 **Symptom:** no "Add to Home Screen" option, or the app opens with browser bars.
 
@@ -316,7 +176,7 @@ Check in this order — most likely first:
 
 **Fix:** make sure they're on a current build. Find what's holding 3000 with `netstat -ano | findstr :3000`, then match the PID in Task Manager.
 
-**Important consequence for field access:** if the app self-boots on **3001** because 3000 was occupied, **your port forward pointing at 3000 is now wrong** and field techs can't connect. Check the actual port before assuming the router config is broken.
+**Important consequence for field access:** if the app self-boots on **3001** because 3000 was occupied, **the Field Access QR needs to be re-generated for the new port** and field techs' saved home-screen URLs are now wrong. Check the actual port before assuming a firewall or WiFi issue.
 
 ---
 
@@ -480,12 +340,12 @@ Everything else — the printed temporary password, the forced password change, 
 
 **Causes:**
 
-- **No internet.** Base key minting writes to Firestore. Offline, it can't.
+- **No internet.** Activation key minting writes to Firestore. Offline, it can't.
 - **The Firebase service-account file is missing**, or `WVO_FIREBASE_SERVICE_ACCOUNT` isn't set. The error message tells you the path it looked at.
 
 **⚠️ The one that ends the business:** **if you lose the Firebase service-account key file, you cannot mint license keys at all.** Not for new customers, not for anyone. It lives outside the repo on purpose — so a stray `git add .` can't publish it — which also means it is **not in version control and not in whatever backs up your repo.** See §4.3 for how to protect it.
 
-Plus and trial-unlock minting are offline math and don't need Firebase — but they *do* need the repo and the signing secret, which need their own backup.
+Trial-unlock minting is offline math and doesn't need Firebase — but it *does* need the repo and the signing secret, which need their own backup.
 
 ---
 
@@ -547,16 +407,9 @@ When you hit something not in this manual, write it down here. The entry costs t
 |---|---|
 | "Already in use on another machine" | §1.1 — clear `machineId` in Firestore |
 | Activation can't reach server | §1.3 — needs internet, one time only |
-| Paid for Plus, got Base | §1.3b — key minted without `--tier plus` |
-| Plus license pasted, nothing happened | §1.4 — curly quotes; send as `.txt` |
-| Plus features vanished | §1.5 — licence invalid, file deleted, or `license.json` edited |
-| Trial locked but they paid | §1.6 — mint unlock key, **right tier** |
-| Techs can't connect from outside, ever | §2.1 — **CGNAT.** Check before selling |
-| Correct config, still no outside access | §2.2 — double NAT |
-| Worked, then stopped weeks later | §2.3 — DHCP/DDNS/firewall/ISP visit |
-| "Works on my phone" | §2.4 — they tested on office WiFi |
-| Blocked at one site only | §2.5 — port 3000 filtered |
-| No Add to Home Screen | §2.6 — must be Safari on iOS |
+| Trial locked but they paid | §1.6 — mint the unlock key |
+| Tech's work isn't reaching the office | §2.0 — check office WiFi, LAN address, firewall, session |
+| No Add to Home Screen | §2.1 — must be Safari on iOS |
 | Everything stopped this afternoon | §3.1 — **PC went to sleep** |
 | "Failed to load dashboard data" | §3.2 — database not answering |
 | Wrong app in the window / wrong port | §3.3 — port 3000 conflict |
@@ -571,4 +424,4 @@ When you hit something not in this manual, write it down here. The entry costs t
 **Related reading:**
 - `docs/MANUAL_White_Glove_Installation.md` — the install procedure
 - `docs/BUSINESS_Purchase_to_Install_Playbook.md` — purchase, keys, payments
-- `MANUAL_Setup_Installation.md` §7 and §11 — port forwarding and DDNS in depth
+- `MANUAL_Setup_Installation.md` §7 — office WiFi setup for field access

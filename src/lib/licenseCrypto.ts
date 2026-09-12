@@ -6,7 +6,7 @@ import crypto from "crypto";
 // Shared low-level crypto/paths for the license system. This is a leaf module —
 // it must never import from license.ts or trial.ts, both of which import from
 // here. (license.ts needs to verify trial-unlock.json to honor the unlocked
-// tier; trial.ts already needed these; a license.ts <-> trial.ts import would
+// state; trial.ts already needed these; a license.ts <-> trial.ts import would
 // cycle.)
 // ---------------------------------------------------------------------------
 
@@ -29,34 +29,33 @@ export function timingSafeEqualStrings(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-export type LicenseTier = "base" | "plus";
-
 // ---------------------------------------------------------------------------
 // Base activation license (license.json) signing.
 //
-// The tier is part of the signed payload, so an activated install's plan is
-// cryptographically bound to its key and machine. This replaced the old
-// WVO_DEFAULT_TIER env var, which granted Plus from a plain-text line in
-// resources/nextjs/.env.local that anyone could edit in Notepad.
-//
+// v2.0: there is no tier concept any more — the app is one product, and a
+// signed license.json only proves "this key is activated on this machine".
 // electron/main.js duplicates these two functions in plain JS (it runs before
 // the Next.js bundle loads and cannot import TypeScript). Any change to the
 // signature format MUST be mirrored there, or activation and runtime disagree.
 // ---------------------------------------------------------------------------
 
-/** Signs a tiered base activation license. Mirrored in electron/main.js. */
-export function signBaseLicense(key: string, machineId: string, tier: LicenseTier): string {
+/** Signs a base activation license. Mirrored in electron/main.js. */
+export function signBaseLicense(key: string, machineId: string): string {
   return crypto
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${key}:${machineId}:${tier}`)
+    .update(`${key}:${machineId}`)
     .digest("hex");
 }
 
 /**
- * Signs a pre-tier ("legacy") base activation license, whose payload was just
- * `key:machineId`. Kept so installs activated before the tiered format keep
- * working without a forced re-activation — they read back as tier "base",
- * which is what they were. Remove once no legacy installs remain in the field.
+ * Signs a pre-v2.0 ("legacy") base activation license. Pre-v2.0 tiered
+ * licenses signed `key:machineId:tier`, but the truly old, pre-tier format
+ * signed just `key:machineId` — identical to `signBaseLicense` above now
+ * that tiers are gone entirely. Both functions are kept as distinct named
+ * exports so "legacy" stays a truthful historical marker here and in
+ * electron/main.js, and so `getBaseLicense()` can document why checking
+ * either is sufficient, without implying a behavioral difference remains.
+ * Remove once no legacy installs remain in the field.
  */
 export function signLegacyBaseLicense(key: string, machineId: string): string {
   return crypto
@@ -67,17 +66,16 @@ export function signLegacyBaseLicense(key: string, machineId: string): string {
 
 export interface TrialUnlockPayload {
   machineId: string;
-  tier: LicenseTier;
   expiresAt: string | null;
   notes: string | null;
   sig: string;
 }
 
 /** Signs a trial-unlock payload. Used by tests and mirrored in scripts/license-manager.js for CLI key generation. */
-export function signTrialUnlock(machineId: string, tier: "base" | "plus", expiresAt: string | null): string {
+export function signTrialUnlock(machineId: string, expiresAt: string | null): string {
   return crypto
     .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`${machineId}:${tier}:${expiresAt || ""}`)
+    .update(`${machineId}:${expiresAt || ""}`)
     .digest("hex");
 }
 
@@ -86,47 +84,8 @@ export function verifyTrialUnlock(payload: unknown, machineId: string): payload 
   if (!payload || typeof payload !== "object") return false;
   const p = payload as Record<string, unknown>;
   if (p.machineId !== machineId) return false;
-  if (p.tier !== "base" && p.tier !== "plus") return false;
   if (typeof p.sig !== "string") return false;
   const expiresAt = typeof p.expiresAt === "string" ? p.expiresAt : null;
-  const expected = signTrialUnlock(machineId, p.tier, expiresAt);
+  const expected = signTrialUnlock(machineId, expiresAt);
   return timingSafeEqualStrings(p.sig, expected);
-}
-
-// ---------------------------------------------------------------------------
-// Trial plan stamp (WVO_TRIAL_PLAN / WVO_TRIAL_PLAN_SIG in the bundled
-// .env.local, written by scripts/electron-build.js).
-//
-// Trial builds are pre-activated — they skip the activation key entirely — so
-// the plan a trial demonstrates has to come from the build. That makes it
-// configuration, which is exactly what WVO_DEFAULT_TIER was, and exactly why
-// this is signed: the stamp ships as plain text on the prospect's disk, so
-// editing "base" to "plus" must grant nothing.
-//
-// verifyTrialPlan returns a tier rather than a boolean on purpose. Every
-// unverifiable input resolves to "base", so there is no failure branch a
-// caller can forget and default the other way.
-// ---------------------------------------------------------------------------
-
-/** Signs a trial build's plan stamp. Mirrored in scripts/electron-build.js. */
-export function signTrialPlan(plan: LicenseTier): string {
-  return crypto
-    .createHmac("sha256", LICENSE_SIGNING_SECRET)
-    .update(`trial-plan:${plan}`)
-    .digest("hex");
-}
-
-/**
- * Resolves a trial build's plan from its stamp. Fails closed to "base" for
- * anything absent, malformed, or unsigned — tampering can only ever cost
- * features, never grant them.
- */
-export function verifyTrialPlan(
-  plan: string | undefined,
-  sig: string | undefined
-): LicenseTier {
-  if (plan !== "base" && plan !== "plus") return "base";
-  if (typeof sig !== "string") return "base";
-  if (!timingSafeEqualStrings(sig, signTrialPlan(plan))) return "base";
-  return plan;
 }

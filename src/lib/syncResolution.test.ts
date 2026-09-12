@@ -9,6 +9,7 @@ vi.mock("@/lib/idb", () => ({
 
 const stuckOp: StuckOp = {
   id: 7,
+  opId: "01H8XJZ0000000000000000AA",
   url: "/api/time",
   method: "POST",
   body: { jobId: "job_dead", personnelId: "per_1", date: "2026-07-15", duration: "01:30" },

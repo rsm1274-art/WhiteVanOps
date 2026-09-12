@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { isLicenseTier, priceIdForTier, stripe } from "@/lib/stripe";
+import { NextResponse } from "next/server";
+import { priceId, stripe } from "@/lib/stripe";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -21,32 +21,16 @@ export function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   const headers = corsHeaders();
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers });
-  }
-
-  const tier = (body as { tier?: unknown })?.tier;
-  if (!isLicenseTier(tier)) {
-    return NextResponse.json(
-      { error: "tier must be 'base' or 'plus'" },
-      { status: 400, headers }
-    );
-  }
 
   const siteUrl = requireEnv("NEXT_PUBLIC_SITE_URL");
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    line_items: [{ price: priceIdForTier(tier), quantity: 1 }],
+    line_items: [{ price: priceId(), quantity: 1 }],
     success_url: `${siteUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/cancel`,
-    metadata: { tier },
   });
 
   if (!session.url) {

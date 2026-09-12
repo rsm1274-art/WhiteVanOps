@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { validateDefinition } from "@/lib/reports/definition";
 import { canViewReport } from "@/lib/reports/permissions";
 import { runReport } from "@/lib/reports/run";
@@ -27,9 +26,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const report = await prisma.savedReport.findUnique({
     where: { id },

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { audit } from "@/lib/audit";
 import { validateDefinition } from "@/lib/reports/definition";
 import { canViewReport } from "@/lib/reports/permissions";
@@ -17,9 +16,6 @@ export async function GET() {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const reports = await prisma.savedReport.findMany({
     include: REPORT_INCLUDE,
     orderBy: { updatedAt: "desc" },
@@ -32,9 +28,6 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const body = await req.json();
     if (typeof body !== "object" || body === null) {

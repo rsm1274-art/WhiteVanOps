@@ -7,7 +7,6 @@ import {
   canDeleteQuote,
   canConvertQuote,
   canRespondToQuote,
-  buildQuoteApprovalUrl,
   QuoteStatus,
 } from "./quote";
 
@@ -124,29 +123,5 @@ describe("canRespondToQuote", () => {
       expect(reason!.toLowerCase()).not.toContain("draft");
       expect(reason!.toLowerCase()).not.toContain("converted");
     }
-  });
-});
-
-describe("buildQuoteApprovalUrl", () => {
-  const TOKEN = "abc123";
-
-  it("borrows the origin of the configured field-access URL, dropping its path", () => {
-    expect(buildQuoteApprovalUrl("https://vans.example.com/field", "http://localhost:3000", TOKEN)).toBe(
-      "https://vans.example.com/quote/abc123"
-    );
-  });
-
-  it("falls back to the request origin when field access is unconfigured", () => {
-    expect(buildQuoteApprovalUrl(null, "http://localhost:3000", TOKEN)).toBe("http://localhost:3000/quote/abc123");
-  });
-
-  it("falls back to the request origin rather than emitting a broken link for a malformed setting", () => {
-    expect(buildQuoteApprovalUrl("not a url", "http://localhost:3000", TOKEN)).toBe(
-      "http://localhost:3000/quote/abc123"
-    );
-  });
-
-  it("does not double the slash when the origin has a trailing one", () => {
-    expect(buildQuoteApprovalUrl(null, "http://localhost:3000/", TOKEN)).toBe("http://localhost:3000/quote/abc123");
   });
 });

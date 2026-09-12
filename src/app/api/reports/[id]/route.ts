@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 import { audit } from "@/lib/audit";
 import { validateDefinition } from "@/lib/reports/definition";
 import { canEditReport, canViewReport } from "@/lib/reports/permissions";
@@ -19,9 +18,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const report = await prisma.savedReport.findUnique({ where: { id }, include: REPORT_INCLUDE });
   if (!report || !canViewReport({ userId: user!.userId, role: user!.role }, report)) return notFound();
@@ -33,9 +29,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const existing = await prisma.savedReport.findUnique({ where: { id }, include: REPORT_INCLUDE });
   if (!existing || !canViewReport({ userId: user!.userId, role: user!.role }, existing)) return notFound();
@@ -90,9 +83,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   const { id } = await params;
   const existing = await prisma.savedReport.findUnique({ where: { id }, include: REPORT_INCLUDE });
   if (!existing || !canViewReport({ userId: user!.userId, role: user!.role }, existing)) return notFound();

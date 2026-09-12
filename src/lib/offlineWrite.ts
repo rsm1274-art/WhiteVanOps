@@ -1,4 +1,5 @@
-import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck } from "@/lib/idb";
+import { addToSyncQueue, getSyncQueue, removeFromSyncQueue, moveToStuck, recordHistory, pruneHistory } from "@/lib/idb";
+import { generateOpId } from "@/lib/opId";
 
 export type WriteResult = "synced" | "queued";
 
@@ -28,16 +29,25 @@ export async function submitWrite(
   method: string,
   body: unknown
 ): Promise<WriteResult> {
+  // Generated once, up front, and reused on both branches below: whether this
+  // write lands on the inline attempt or (on a network failure) gets queued,
+  // it must carry the SAME opId either way. Every call site in JobCard.tsx
+  // calls submitWrite exactly once per action rather than retrying it itself,
+  // so there is no caller-driven second call to worry about — but generating
+  // the id here, rather than letting addToSyncQueue mint its own, keeps the
+  // inline fetch's header and the queued row's identity from ever diverging
+  // within this one call.
+  const opId = generateOpId();
   let res: Response;
 
   try {
     res = await fetch(url, {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-WVO-Op-Id": opId },
       body: JSON.stringify(body),
     });
   } catch {
-    await addToSyncQueue(url, method, body);
+    await addToSyncQueue(url, method, body, opId);
     return "queued";
   }
 
@@ -81,7 +91,7 @@ export async function drainSyncQueue(): Promise<DrainResult> {
     try {
       res = await fetch(op.url, {
         method: op.method,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-WVO-Op-Id": op.opId },
         body: JSON.stringify(op.body),
       });
     } catch {
@@ -105,9 +115,20 @@ export async function drainSyncQueue(): Promise<DrainResult> {
       continue;
     }
 
+    // Record the history entry before removing the op from the queue: if the
+    // device crashes between the two, the write is still recorded as having
+    // happened rather than vanishing without a trace (the same crash-safety
+    // standard moveToStuck follows above — never leave a gap where the op's
+    // only record can disappear).
+    await recordHistory(op);
     await removeFromSyncQueue(op.id!);
     synced++;
   }
+
+  // Cheap cursor sweep over a bounded 30-day window — inline and awaited
+  // rather than fire-and-forget, since it can't meaningfully slow the drain
+  // and awaiting keeps the behavior deterministic for tests.
+  await pruneHistory();
 
   return { synced, stuck, remaining: 0, stopped: "complete" };
 }
@@ -117,9 +138,19 @@ export async function drainSyncQueue(): Promise<DrainResult> {
  * transient on purpose: the safe response to "I don't know what happened"
  * is to keep the data and not interrupt the tech. Never quarantine
  * something we cannot explain.
+ *
+ * 403 is bucketed with the other permanent rejections, not with 401. Every
+ * field-write 403 now originates from fieldOps.ts (Phase 3) — "not assigned
+ * to this job" / "not linked to a personnel record" — a genuine, permanent
+ * business rejection that re-logging in can never fix. Treating it as "auth"
+ * would stop the ENTIRE drain and tell the tech to sign in again for a
+ * problem sign-in can't solve, freezing every other tech's queued writes
+ * behind one misdirected op. 401 alone means the cookie is bad; that one
+ * really is transient in the sense that a fresh login fixes it, so it keeps
+ * halting the drain rather than quarantining real work.
  */
 export function classifyRejection(status: number): RejectionClass {
-  if (status === 400 || status === 404 || status === 409 || status === 422) return "permanent";
-  if (status === 401 || status === 403) return "auth";
+  if (status === 400 || status === 403 || status === 404 || status === 409 || status === 422) return "permanent";
+  if (status === 401) return "auth";
   return "transient";
 }

@@ -1,16 +1,17 @@
 # WhiteVanOps — Setup & Installation Manual
 
 **Audience:** System administrator / owner performing first-time setup
-**Last updated:** July 2026
+**Last updated:** September 2026
 
 ---
 
 ## Overview
 
-WhiteVanOps ships as two deployables:
+WhiteVanOps is one product — every activated install runs the full feature set (CRM, Analytics,
+Invoicing, Quoting, Custom Reports). It ships as two deployables:
 
-1. **Desktop installer** (`WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe`, renamed 2026-07-24 from the earlier single `WhiteVanOps Setup x.x.x.exe`) — for office staff (admin, superuser). Bundles the full application server **and a portable PostgreSQL 17 server**; no browser, Node.js, or separate database install required. Creates a desktop shortcut and Start Menu entry.
-2. **Browser access** — for field technicians on phones/tablets, who connect to the same server via a URL (scan the **Field Access QR** code from the dashboard sidebar) and can install the field module as a home-screen app (PWA). **Base** reaches the office over the office WiFi only; **Plus** adds a secure tunnel for access from anywhere (§7).
+1. **Desktop installer** (`WhiteVanOps-Setup.exe` on Windows, `WhiteVanOps-Setup-{arm64,x64}.dmg` on macOS) — for office staff (admin, superuser). Bundles the full application server **and a portable PostgreSQL 17 server**; no browser, Node.js, or separate database install required. Creates a desktop shortcut/Start Menu entry (Windows) or lives in `/Applications` (macOS).
+2. **Browser access** — for field technicians on phones/tablets, who connect to the same server via a URL (scan the **Field Access QR** code from the dashboard sidebar) and can install the field module as a home-screen app (PWA). The field module is reachable **only over the office WiFi** — this is the permanent transport, not a limited tier; there is no remote/tunnel access at all (§7).
 
 Both surfaces share one PostgreSQL database.
 
@@ -76,33 +77,7 @@ The mac build bundles portable PostgreSQL binaries from `pgsql-mac/` (~160 MB, g
 
 Verify the payload works in isolation before trusting it in a full build — from the project root: `pgsql-mac/bin/initdb -D /tmp/pgtest -U wvo_user -E UTF8 --locale=C -A scram-sha-256 --pwfile=<(echo somepassword)`, then `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -l /tmp/pg.log -o "-p 5544" start`, then `pgsql-mac/bin/pg_dump -h 127.0.0.1 -p 5544 -U wvo_user postgres > /dev/null` should all succeed, followed by `pgsql-mac/bin/pg_ctl -D /tmp/pgtest -m fast stop` and `rm -rf /tmp/pgtest`.
 
-`npm run electron:build:mac` fails the same way `electron:build` does if `pgsql-mac/bin/pg_ctl` is missing, and re-verifies both the `mac-arm64` and `mac` (x64) packaged outputs after building — mac produces two separate installers (`WhiteVanOps-Base-Setup-arm64.dmg` and `WhiteVanOps-Base-Setup-x64.dmg`) from one electron-builder invocation, and both are checked independently.
-
-### `cloudflared` binary for the build (`cloudflared/` directory)
-
-Required only for the two **Plus** artifacts (`electron:build:plus`, `electron:build:trial:plus`) — Base builds don't need it and must not have it. Gitignored, not committed to git, exactly like `pgsql/`. To (re)create it:
-
-1. Download `cloudflared.exe` (Windows amd64) from the official releases: `https://github.com/cloudflare/cloudflared/releases/latest`.
-2. Place it at `cloudflared/cloudflared.exe` in the project root.
-
-A Plus build **fails** before packaging if `cloudflared/cloudflared.exe` is missing, mirroring the `pgsql/bin/pg_ctl.exe` check. After packaging, step 7b also asserts the reverse: `win-unpacked/resources/cloudflared/cloudflared.exe` must **not** exist in a Base artifact — a Base install that quietly shipped the tunnel binary would erase the product boundary being sold.
-
-### `cloudflared` binary for the macOS build (`cloudflared-mac/` directory)
-
-Required only for the two mac Plus artifacts (`electron:build:mac:plus`, `electron:build:mac:trial:plus`). Gitignored, not committed to git, exactly like `pgsql-mac/`. Cloudflare does not publish a universal darwin binary — arm64 and amd64 ship as separate archives — so this one is assembled with `lipo` into a single universal binary that serves both the arm64 and x64 `.dmg` targets `electron:build:mac` already produces from one electron-builder invocation, the same way `pgsql-mac/` is one payload for both arches. To (re)create it:
-
-1. Download both darwin archives from the official releases (`https://github.com/cloudflare/cloudflared/releases/latest`):
-   - `cloudflared-darwin-arm64.tgz`
-   - `cloudflared-darwin-amd64.tgz`
-2. Extract each (`tar -xzf`) — both contain a single `cloudflared` binary.
-3. Merge them into one universal binary:
-   ```bash
-   lipo -create cloudflared-arm64/cloudflared cloudflared-amd64/cloudflared -output cloudflared-mac/cloudflared
-   chmod +x cloudflared-mac/cloudflared
-   ```
-4. Verify it's genuinely fat and runs: `file cloudflared-mac/cloudflared` should report both `arm64` and `x86_64`, and `cloudflared-mac/cloudflared --version` should run without needing Rosetta on an Apple Silicon Mac.
-
-`npm run electron:build:mac:plus` fails before packaging if `cloudflared-mac/cloudflared` is missing, and after packaging step 7b asserts it exists (and actually executes) inside both the `mac-arm64` and `mac` (x64) packaged `.app` bundles — mirroring the Windows Plus/Base present/absent checks above.
+`npm run electron:build:mac` fails the same way `electron:build` does if `pgsql-mac/bin/pg_ctl` is missing, and re-verifies both the `mac-arm64` and `mac` (x64) packaged outputs after building — mac produces two separate installers (`WhiteVanOps-Setup-arm64.dmg` and `WhiteVanOps-Setup-x64.dmg`) from one electron-builder invocation, and both are checked independently.
 
 ---
 
@@ -172,66 +147,62 @@ npx tsx prisma/bootstrap.ts
 
 This creates a superuser with username **admin** and password **admin**, flagged to require a password change on first login. All other accounts are created from within the app by a superuser after first login.
 
-### License tier (Base vs Plus)
+### Activation (one product, no tier)
 
-Every install starts on its purchased plan — the `License` table's singleton row is created automatically on first use, with `tier` matching the activation key. Plus tables exist on both plans but stay empty until licensed.
-
-**There is no in-place Plus upgrade** (changed 2026-07-24 — the `--upgrade` patch installer, `upgrade_installer.cs`, and the `electron:build:upgrade` script are gone). Base and Plus are separate installers with different bundled payloads (Plus ships `cloudflared`, Base does not), so a licence-only patch can no longer grant a feature the binary isn't there to support. **Moving a customer from Base to Plus means purchasing Plus (25% off for an existing Base customer) and installing `WhiteVanOps-Plus-Setup.exe`.** The database in `%APPDATA%\whitevanops\` is untouched by installing a different WhiteVanOps installer over an existing one — reinstalling only replaces the application, never the customer's data.
-
-**Legacy patched installs keep working.** `verifyPlusLicense()` and the `plus_license.json` reader in `src/lib/license.ts` are kept as read-only legacy — an install that was patched to Plus before 2026-07-24 continues to read as Plus. No new `plus_license.json` files are minted going forward.
-
-**Downgrade:** click **Downgrade to Base Plan** under **Settings → License & Plan**. This resets the database tier; it does not remove `cloudflared` from a Plus install, since the binary's presence is a build-time property, not a runtime one.
+Every install runs the same feature set — the `License` table's singleton row is created
+automatically on first use and no longer carries a `tier` field. There is no "which plan did they
+buy" decision anywhere in setup: the activation key proves the install is a legitimate paid (or
+trial) copy, and that's the whole job it does now.
 
 ---
 
 ## 6. Build the Desktop Installers
 
-Four installer variants, one per plan × trial-or-not (changed 2026-07-24 — Base and Plus are separate artifacts now, not one installer decided by the key alone):
+Two installer variants — build vs. trial-or-not — per platform. There is no plan axis; every
+build runs the full feature set:
 
 ```bash
-npm run electron:build            # Base installer      → dist-electron/WhiteVanOps-Base-Setup.exe
-npm run electron:build:plus       # Plus installer      → dist-electron/WhiteVanOps-Plus-Setup.exe (bundles cloudflared)
-npm run electron:build:trial      # Base 30-day trial   → dist-electron/WhiteVanOps-Base-Trial-Setup.exe
-npm run electron:build:trial:plus # Plus 30-day trial   → dist-electron/WhiteVanOps-Plus-Trial-Setup.exe
+npm run electron:build            # Windows installer   → dist-electron/WhiteVanOps-Setup.exe
+npm run electron:build:trial      # Windows 30-day trial → dist-electron/WhiteVanOps-Trial-Setup.exe
+npm run electron:build:mac        # macOS installer      → dist-electron/WhiteVanOps-Setup-{arm64,x64}.dmg
+npm run electron:build:mac:trial  # macOS 30-day trial   → dist-electron/WhiteVanOps-Trial-Setup-{arm64,x64}.dmg
 ```
 
-**The activation key still decides entitlement — the build only decides payload.** No build flag grants a feature; `node scripts/license-manager.js --tier base|plus` is still how keys are minted, unchanged:
+**The activation key proves a legitimate install — it no longer selects a plan.** Keys are minted with:
 ```bash
-node scripts/license-manager.js --tier base     # Base customer
-node scripts/license-manager.js --tier plus     # Plus customer
+node scripts/license-manager.js
 ```
-The tier is stamped onto the key's Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC. What differs between `electron:build` and `electron:build:plus` is that the Plus artifact also bundles `cloudflared/cloudflared.exe` via `extraResources` (see §1) — a Base install cannot open a tunnel for two independent reasons, no entitlement and no binary. `scripts/electron-build.js` step 7b asserts the binary's presence in Plus artifacts **and its absence in Base artifacts**.
+The key is stamped onto its Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC.
 
 ### Trial/Demo Installers (Sales Demos)
 
-`electron:build:trial` and `electron:build:trial:plus` build time-limited demo installers for prospect evaluations, locked to 30 days after first launch regardless of `License.tier`.
+`electron:build:trial` and `electron:build:mac:trial` build time-limited demo installers for prospect evaluations, locked to 30 days after first launch.
 
-* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs on its stamped plan for 30 days. (This differs from a standard Base/Plus customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
-* **Plan comes from a signed build-time stamp, not the installer name alone.** `electron-build.js --trial --plan base|plus` writes `WVO_TRIAL_PLAN` plus an HMAC `WVO_TRIAL_PLAN_SIG` into the bundled `.env.local`; the app fails closed to Base if that stamp is missing or edited. A Base trial demos WiFi sync only and ships no `cloudflared`; a Plus trial demos the tunnel too.
-* **What the prospect sees:** during the trial, **Settings → License & Plan** shows the stamped plan with license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
-* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen. A key generated for either `--tier base` or `--tier plus` unlocks the app running at that tier — a base key drops Plus features, a plus key keeps them.
+* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs the full feature set for 30 days. (This differs from a standard customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
+* **What the prospect sees:** during the trial, **Settings → License & Plan** shows license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
+* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen.
 * **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
   ```bash
-  node scripts/license-manager.js --unlock-trial --machine <theirMachineId> --tier base|plus [--notes "Order #1234"]
+  node scripts/license-manager.js --unlock-trial --machine <theirMachineId> [--notes "Order #1234"]
   ```
-  Use `--tier base` if they purchased Base only (this also correctly drops the Plus features they were trialing), or `--tier plus` if they purchased Base+Plus. Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control. If the trial was a Base trial and the customer instead wants Plus, they need the Plus artifact — the unlock key does not add the `cloudflared` binary to an already-installed Base trial.
+  Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control. **The good news to lead with:** all the data they entered during the trial stays — no reinstall, no migration, no re-entry.
 
 ---
 
 ### What the build commands do
 
 1. Compile the Next.js production build
-2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"`, `WVO_TRIAL_PLAN`, and `WVO_TRIAL_PLAN_SIG` for trial builds only — the trial plan is signed; a normal customer build's tier still comes only from the activation key)
+2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only)
 3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
-4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), `cloudflared/` (Plus variants only), and Electron shell into a single NSIS installer
+4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single installer (NSIS on Windows, `.dmg` on macOS)
 5. Output the resulting executable, named per the table above, in `dist-electron/`
 6. Write a build stamp so a leftover file from a previous run can't be mistaken for the one you just built (see below)
 
-Distribute the generated setup `.exe` matching the customer's plan to office staff. The installers upgrade any existing installation of the **same plan** in-place; moving plans means installing the other plan's artifact (see §5).
+Distribute the generated installer to office staff. The installer upgrades an existing installation in-place.
 
 ### Telling a current build apart from a stale one
 
-The four artifact names above are fixed — rebuilding never renames the file, so an old `WhiteVanOps-Plus-Setup.exe` left over from a month ago looks identical to one built five minutes ago. Every successful build now writes:
+The artifact names above are fixed — rebuilding never renames the file, so an old `WhiteVanOps-Setup.exe` left over from a month ago looks identical to one built five minutes ago. Every successful build now writes:
 
 - **`<artifact-name>.buildinfo.txt`** next to that installer — its app version, git commit, build timestamp, and whether it was built with uncommitted changes (never ship one that says so).
 - **`dist-electron/BUILD-MANIFEST.txt`** — the same information for all four variants side by side, so you can tell at a glance if one of the other three is from an older commit and needs rebuilding before you ship a matched set.
@@ -242,11 +213,11 @@ Before handing an installer to a customer, open its `.buildinfo.txt` and confirm
 
 ## 7. Field Tech Browser Access
 
-Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets. Transport is per-plan (2026-07-24): **Base** reaches the office over the office WiFi only; **Plus** adds a Cloudflare tunnel for access from anywhere. A Base install has no way to open a tunnel — it ships without the `cloudflared` binary and the activation key doesn't license it.
-
-### Base: office WiFi only
-
-The Next.js server runs locally in the customer's office; nothing about field access on Base ever leaves the building. There is no port forwarding, no DDNS, and no public-internet exposure to configure or worry about — the traffic never reaches the internet at all.
+Field technicians access the app via a Progressive Web App (PWA) on their phones or tablets, reached
+**only over the office WiFi.** This is the app's one and only transport — there is no remote/tunnel
+access, no port forwarding, no DDNS, and no public-internet exposure to configure or worry about.
+The Next.js server runs locally in the customer's office; nothing about field access ever leaves the
+building.
 
 **Step 1 — Set a DHCP reservation or static IP for the office PC. This is required, not advisory.** The field module's URL is a bare LAN address (e.g. `http://192.168.1.20:3000/field`), and every tech's phone saves it as a home-screen app. If the router hands the office PC a different address after a reboot, every tech's saved URL breaks silently, at once — a symptom that reads to a customer as "the app just stopped working."
 1. Log into the router's admin page — usually `http://192.168.1.1` or `http://192.168.0.1` in a browser (check a label on the router itself, or run `ipconfig` on the office PC and use the "Default Gateway" address).
@@ -256,7 +227,7 @@ The Next.js server runs locally in the customer's office; nothing about field ac
 
 **Step 2 — Find the office PC's LAN address and generate the QR.**
 1. In the dashboard sidebar, click **Field Access QR**.
-2. Click **Use detected address** — this calls `GET /api/field-access/lan-address` and fills in the office PC's actual LAN IP, so nobody has to type it (and can't typo it). A private address (`192.168.x`, `10.x`, `172.16–31.x`) is the correct, expected shape on Base and shows a green confirmation, not a warning.
+2. Click **Use detected address** — this calls `GET /api/field-access/lan-address` and fills in the office PC's actual LAN IP, so nobody has to type it (and can't typo it). A private address (`192.168.x`, `10.x`, `172.16–31.x`) is the **only correct** shape and shows a green confirmation, not a warning. Anything else (a public hostname, a raw IP that isn't a private-LAN address) cannot reach the field module at all and is flagged.
 3. The modal generates a QR code for that address's `/field` path.
 
 **Step 3 — Allow the app through Windows Firewall. This is required, not advisory.** Windows blocks inbound connections by default, and it blocks them by *dropping* the packet rather than refusing it — so a tech's phone shows a white screen that never finishes loading instead of an error message. Meanwhile the dashboard on the office PC keeps working perfectly (it only ever talks to itself), which makes a closed port look like a broken app. The installer runs per-user and cannot create firewall rules, so this step is manual.
@@ -286,20 +257,12 @@ To do it by hand instead: Windows Defender Firewall with Advanced Security → I
 2. After signing in, they can use the browser's **Add to Home Screen** feature to install the field module as an app. The app ships a PWA manifest, meaning it will launch full-screen with its own icon and operate natively.
 3. **Offline support:** the PWA uses an offline-first architecture via IndexedDB. If a technician leaves the building or loses signal, they can continue logging time, viewing job details, and saving materials — their changes queue locally, the status strip shows how many entries are waiting, and everything flushes back to the office server automatically once the phone rejoins the office WiFi. Closing the app does not lose queued work. See `MANUAL_Field_Tech.md` for what the status strip tells a tech, and `MANUAL_Troubleshooting.md` if work isn't reaching the office.
 
-### Plus: the secure tunnel
+### Quotes are sent as PDF, not a link
 
-Plus installs bundle `cloudflared` and can open a Cloudflare tunnel so techs reach the field module from anywhere — cellular data, a job site, home — over `https://`, not the office WiFi. This is still provisioned by a manual runbook, not an in-app wizard: see `docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md` for the setup steps. Once the tunnel is up, generate the Field Access QR the same way as Base (§ above) but pointed at the tunnel's `https://` hostname — the modal recognizes a public host as the correct shape when the install is licensed for Plus and generates the QR without a warning. Offline queueing and **Add to Home Screen** work identically to Base.
-
-### The Field Access address also drives customer quote links (Plus)
-
-The **Quotes** tab (Plus) sends customers a link to accept a quote online. That link is built from the **same address you saved in Field Access QR**, because it is the one address you have already told the app is reachable from outside. There is no separate setting and no extra port — the quote page is served by the same server on the same port as the field module, so anything that already lets a tech's phone in also lets the customer's browser in.
-
-The practical consequence is the plan difference:
-
-- **Plus with the tunnel up** — the address is a public `https://` hostname, so a customer can open the quote from anywhere. This is the intended setup.
-- **A bare office-LAN address** — only someone on the office WiFi can open the link. Customers will see nothing. Quotes still work; the operator just records the acceptance by hand from the Quotes tab instead.
-
-**Set the Field Access address before issuing the first quote.** With none saved, the app falls back to whatever address the dashboard itself was opened on — normally `localhost` — and the generated link works only on the office PC. Fixing it later means re-sending the link to any customer who already had one.
+The **Quotes** tab does not send customers an online approval link — that feature depended on
+remote access, which does not exist in this app. A quote is printed/emailed as a PDF, and the
+operator records **Accepted**/**Declined** by hand on the Quotes tab once the customer answers
+(phone, email reply, in person). Nothing about the Field Access address affects quoting.
 
 ---
 
@@ -334,9 +297,8 @@ error rather than silently saved.
   every client shows "Cannot reach the office server" and will not fall back to running its
   own local copy — that is deliberate, so two machines never silently diverge. Retry once
   the host is back, or use **Reconfigure** to point at a different address.
-- A client install never asks for its own license key — its Base/Plus features follow
-  whatever the host is licensed for, the same as anyone opening the dashboard in a plain
-  browser.
+- A client install never asks for its own license key — it simply opens whatever the host is
+  serving, the same as anyone opening the dashboard in a plain browser.
 - A client is not backed up separately (§8) — only the host holds the data, so only the host
   needs a backup destination configured.
 
@@ -393,9 +355,8 @@ Field technicians need a **tech** account linked to their Personnel record so th
 | "Invalid credentials" on login | bootstrap not run, or wrong credentials | Run `npx tsx prisma/bootstrap.ts` on the build machine against the target database |
 | "Account temporarily locked" on login | 5 consecutive failed attempts trip a 15-minute lockout on that account (brute-force protection) | Wait out the 15-minute window, or confirm the correct password/username. There is no manual unlock — it always clears on its own. |
 | "Too many login attempts" (HTTP 429) | More than 20 login attempts from the same IP within 5 minutes | This is a rate limit, not an account lockout — it resets automatically a few minutes after attempts stop. If several techs share one NAT/VPN egress IP, this can trigger from combined traffic; space out retries. |
-| Field techs can't reach the server (Base) | Firewall, wrong LAN IP, phone not on office WiFi, or AP/client isolation on the WiFi network | Check Windows Firewall allows port 3000; confirm techs are using **Field Access QR → Use detected address**, not a typed/stale IP; confirm the phone is on the office WiFi. If the WiFi network isolates devices from each other (common on managed/corporate networks), Base field access cannot work around that — remote access requires Plus (§7). See also `MANUAL_Troubleshooting.md`, "A tech's work isn't reaching the office (Base)". |
-| A tech's saved home-screen URL stopped working, for every tech at once (Base) | The router rebooted and handed the office PC a different LAN IP | Set a DHCP reservation or static IP for the office PC (§7, Step 1) if this wasn't already done, then re-issue the QR from **Use detected address** and have techs re-scan. |
-| Field techs on Plus can't reach the tunnel hostname | Tunnel not running, or `cloudflared` misconfigured | See the tunnel runbook (`docs/superpowers/plans/2026-07-20-phase-1-tunnel-runbook.md`) — this is a manual-provisioning concern, not an in-app setting. |
+| Field techs can't reach the server | Firewall, wrong LAN IP, phone not on office WiFi, or AP/client isolation on the WiFi network | Check Windows Firewall allows port 3000; confirm techs are using **Field Access QR → Use detected address**, not a typed/stale IP; confirm the phone is on the office WiFi. If the WiFi network isolates devices from each other (common on managed/corporate networks), field access cannot work around that — there is no remote-access alternative in this app. See also `MANUAL_Troubleshooting.md`, "A tech's work isn't reaching the office". |
+| A tech's saved home-screen URL stopped working, for every tech at once | The router rebooted and handed the office PC a different LAN IP | Set a DHCP reservation or static IP for the office PC (§7, Step 1) if this wasn't already done, then re-issue the QR from **Use detected address** and have techs re-scan. |
 | Database connection refused | Port mismatch | Verify PostgreSQL is on port 5433 (or update DATABASE_URL to match your actual port) |
 | App unreachable from any device (laptop or phone) after a reboot | PM2's login-triggered startup means nothing restarts until someone logs into the server machine | Log into `MearHPLaptop`. PM2 should auto-resurrect both processes. If not, run `pm2 resurrect` manually, then `pm2 list` to confirm `whitevanops` and `whitevanops-db` both show `online`. |
 | Prisma errors with `code: 'ECONNREFUSED'` in PM2 logs (`pm2 logs whitevanops`) | The `whitevanops-db` PM2 process (the real Postgres instance) isn't running — do not assume it's the app itself that's broken | Run `pm2 list`. If `whitevanops-db` is missing or stopped, start it: `pm2 start "C:\Program Files\PostgreSQL\9.5\bin\postgres.exe" --name whitevanops-db -- -D "C:\Users\rober\Desktop\WhiteVanOps\pg_data" -p 5433` then `pm2 save`. Do **not** start either of the unrelated Windows PostgreSQL services (`postgresql-x64-9.5` on port 5432 is a separate legacy install) to "fix" this — they use different data directories and will not have the app's tables. |
@@ -440,7 +401,7 @@ Choose the option that fits your situation:
   2. Copy this file to your USB drive.
 
 ### Step 3: Install on the New Machine
-1. Run the `WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe` installer (whichever matches the customer's plan) on the new machine.
+1. Run the `WhiteVanOps-Setup.exe` installer on the new machine.
 2. **IMPORTANT:** Do NOT launch the application yet. If it launches automatically, completely quit the application before proceeding.
 
 ### Step 4: Restore Key and Data

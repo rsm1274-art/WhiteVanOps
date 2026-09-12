@@ -1,25 +1,18 @@
 export interface FieldUrlClassification {
   /** Host is localhost / 127.0.0.1 — unreachable from a phone. */
   isLocalhost: boolean;
-  /** Plain http:// on any non-localhost host — includes private-LAN addresses, which are fine on Base; use fieldUrlVerdict for advice. */
-  isPlainHttp: boolean;
-  /** https:// — the shape the Plus tunnel produces. */
-  isHttps: boolean;
-  /** RFC1918 address or *.local name — the office LAN, i.e. Base's transport. */
+  /** RFC1918 address or *.local name — the office LAN, the only transport the field module uses. */
   isPrivateLan: boolean;
 }
 
 /**
- * The five ways a Field Module URL can relate to the licensed transport.
- * A code, not a sentence: the decision table stays unit-testable here and the
- * user-facing copy stays in FieldAccessModal.
+ * The three ways a Field Module URL can relate to the (only) transport
+ * WhiteVanOps v2.0 supports: the office LAN. There is no tier and no tunnel —
+ * every install syncs the field module over WiFi only. A code, not a
+ * sentence: the decision table stays unit-testable here and the user-facing
+ * copy stays in FieldAccessModal.
  */
-export type FieldUrlVerdict =
-  | "ok-lan"
-  | "ok-tunnel"
-  | "localhost"
-  | "remote-needs-plus"
-  | "public-plain-http";
+export type FieldUrlVerdict = "localhost" | "ok-lan" | "not-lan";
 
 function hostOf(url: string): string {
   // Hand-rolled rather than `new URL()`: this runs against a half-typed value
@@ -47,27 +40,24 @@ function isPrivateLanHost(host: string): boolean {
 
 /**
  * Classifies a Field Module URL by transport shape so the QR flow can guide
- * the admin. Base serves the field module over the office LAN, so a private
- * address is the correct configuration there; Plus adds an HTTPS tunnel
- * hostname. localhost is never phone-reachable on either plan.
+ * the admin. The field module is served over the office LAN only, so a
+ * private address is the correct configuration; localhost is never
+ * phone-reachable.
  */
 export function classifyFieldUrl(url: string): FieldUrlClassification {
   const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(url);
-  const isHttps = /^https:\/\//i.test(url);
-  const isPlainHttp = /^http:\/\//i.test(url) && !isLocalhost;
   const isPrivateLan = !isLocalhost && isPrivateLanHost(hostOf(url));
-  return { isLocalhost, isPlainHttp, isHttps, isPrivateLan };
+  return { isLocalhost, isPrivateLan };
 }
 
 /**
- * Maps a URL plus the remote-access entitlement onto the advice the admin
- * needs. `remoteLicensed` is Plus: only Plus installs ship cloudflared, so a
- * public hostname on Base cannot reach the office server at all.
+ * Maps a URL onto the advice the admin needs. There is no remote transport in
+ * v2.0 — sync is office WiFi only — so anything that isn't localhost or a
+ * private-LAN address simply cannot reach the field module.
  */
-export function fieldUrlVerdict(url: string, remoteLicensed: boolean): FieldUrlVerdict {
-  const { isLocalhost, isPrivateLan, isHttps } = classifyFieldUrl(url);
+export function fieldUrlVerdict(url: string): FieldUrlVerdict {
+  const { isLocalhost, isPrivateLan } = classifyFieldUrl(url);
   if (isLocalhost) return "localhost";
   if (isPrivateLan) return "ok-lan";
-  if (!remoteLicensed) return "remote-needs-plus";
-  return isHttps ? "ok-tunnel" : "public-plain-http";
+  return "not-lan";
 }

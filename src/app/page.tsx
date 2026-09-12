@@ -90,19 +90,17 @@ const TAB_LABELS: Record<TabId, string> = {
   settings: "System Settings",
 };
 
-// plusOnly tabs are hidden without an active Plus license (the API routes
-// behind them are also gated server-side — hiding here is convenience only).
-const NAV: { id: TabId; label: string; icon: React.ReactNode; plusOnly?: boolean }[] = [
+const NAV: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "overview", label: "Overview", icon: <TrendingUp className="h-4 w-4" /> },
   { id: "crm", label: "Clients & Jobs", icon: <Briefcase className="h-4 w-4" /> },
   { id: "scheduling", label: "Scheduling", icon: <Clock className="h-4 w-4" /> },
   { id: "personnel", label: "Personnel & Time", icon: <Users className="h-4 w-4" /> },
   { id: "fleet", label: "Fleet & Service", icon: <Truck className="h-4 w-4" /> },
   { id: "inventory", label: "Inventory Control", icon: <Package className="h-4 w-4" /> },
-  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" />, plusOnly: true },
-  { id: "quotes", label: "Quotes", icon: <FileCheck className="h-4 w-4" />, plusOnly: true },
-  { id: "invoicing", label: "Invoicing", icon: <Receipt className="h-4 w-4" />, plusOnly: true },
-  { id: "reports", label: "Reports", icon: <FileBarChart className="h-4 w-4" />, plusOnly: true },
+  { id: "analytics", label: "Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "quotes", label: "Quotes", icon: <FileCheck className="h-4 w-4" /> },
+  { id: "invoicing", label: "Invoicing", icon: <Receipt className="h-4 w-4" /> },
+  { id: "reports", label: "Reports", icon: <FileBarChart className="h-4 w-4" /> },
   { id: "accounting", label: "QuickBooks Sync", icon: <FileSpreadsheet className="h-4 w-4" /> },
   { id: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
 ];
@@ -162,13 +160,7 @@ export default function Dashboard() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [invoiceMode, setInvoiceMode] = useState<"scratch" | "job">("scratch");
 
-  // If the license is downgraded/expires, render Overview instead of a
-  // now-hidden Plus tab (derived during render — no effect needed).
-  const plus = data?.license.plus ?? false;
-  const effectiveTab: TabId =
-    !plus && (activeTab === "analytics" || activeTab === "invoicing" || activeTab === "quotes" || activeTab === "reports")
-      ? "overview"
-      : activeTab;
+  const effectiveTab: TabId = activeTab;
 
   // Confirmation dialog state
   const [confirm, setConfirm] = useState<{
@@ -208,31 +200,15 @@ export default function Dashboard() {
   };
 
   // ---------------------------------------------------------------------------
-  // Plus tier — quote actions
+  // Quote actions
   // ---------------------------------------------------------------------------
-
-  /**
-   * Puts a URL on the clipboard. The Clipboard API needs a secure context, and
-   * the dashboard is normally plain http on the LAN, so failure is expected
-   * rather than exceptional — say where else to find the link instead of
-   * reporting a dead end.
-   */
-  const copyQuoteLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Approval link copied to the clipboard.");
-    } catch {
-      handleError(`Could not copy automatically. The link is also printed on the quote PDF: ${url}`);
-    }
-  };
 
   const sendQuote = async (quote: Quote) => {
     try {
       const res = await fetch(`/api/quotes/${quote.id}/send`, { method: "POST" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Failed to send quote");
-      handleSuccess(`${quote.quoteNumber} issued. Send the customer their approval link.`);
-      await copyQuoteLink(result.approvalUrl);
+      handleSuccess(`${quote.quoteNumber} issued. Send the customer the PDF, then record their decision here.`);
     } catch (err: unknown) {
       handleError(err instanceof Error ? err.message : "Failed to send quote");
     }
@@ -850,7 +826,6 @@ export default function Dashboard() {
         </div>
         <nav className="flex-1 px-4 py-6 space-y-1">
           {NAV.filter(navItem => navItem.id !== "settings" || (currentUser && (currentUser.role === "superuser" || currentUser.role === "admin")))
-            .filter(navItem => !navItem.plusOnly || plus)
             .map(({ id, label, icon }) => (
             <button
               key={id}
@@ -1031,9 +1006,9 @@ export default function Dashboard() {
             />
           )}
 
-          {effectiveTab === "analytics" && plus && <AnalyticsTab />}
+          {effectiveTab === "analytics" && <AnalyticsTab />}
 
-          {effectiveTab === "quotes" && plus && (
+          {effectiveTab === "quotes" && (
             <QuotesTab
               data={data}
               onAddQuote={() => setActiveModal("addQuote")}
@@ -1041,11 +1016,10 @@ export default function Dashboard() {
               onRecordDecision={recordQuoteDecision}
               onConvertQuote={requestConvertQuote}
               onDeleteQuote={requestDeleteQuote}
-              onCopyLink={copyQuoteLink}
             />
           )}
 
-          {effectiveTab === "invoicing" && plus && (
+          {effectiveTab === "invoicing" && (
             <InvoicingTab
               data={data}
               onAddInvoice={(mode) => { setInvoiceMode(mode); setActiveModal("addInvoice"); }}
@@ -1056,7 +1030,7 @@ export default function Dashboard() {
             />
           )}
 
-          {effectiveTab === "reports" && plus && <ReportsTab onShowToast={showToast} />}
+          {effectiveTab === "reports" && <ReportsTab onShowToast={showToast} />}
 
           {effectiveTab === "accounting" && (
             <AccountingTab
@@ -1071,7 +1045,6 @@ export default function Dashboard() {
             <SettingsTab
               onShowToast={showToast}
               isSuperuser={currentUser?.role === "superuser"}
-              onLicenseChanged={reload}
               onDataImported={refresh}
             />
           )}
@@ -1226,7 +1199,10 @@ export default function Dashboard() {
       )}
 
       {activeModal === "fieldAccess" && (
-        <FieldAccessModal onClose={closeModal} isPlusLicensed={plus} />
+        // Out of scope for the tier collapse (field-sync/tunnel transport is a
+        // later phase — see fieldAccessUrl.ts) — every install now runs what
+        // was previously the Plus feature set, so this stays true unconditionally.
+        <FieldAccessModal onClose={closeModal} />
       )}
 
       {activeModal === "addClientNote" && selectedClient && (

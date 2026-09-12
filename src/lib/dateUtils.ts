@@ -25,3 +25,8 @@ export function dateToLocalStr(dateStr: string): string {
     .toISOString()
     .split("T")[0];
 }
+
+/** Time-only formatting (e.g. "2:45 PM") shared by field-module status lines. */
+export function formatTimeOnly(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}

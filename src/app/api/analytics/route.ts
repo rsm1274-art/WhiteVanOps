@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
-import { hasPlusLicense, requirePlus } from "@/lib/license";
 
 // Read-only Plus-tier aggregates over existing data. Revenue = sum of
 // JobLineItem quantity*rate on Completed jobs (labor cost is not tracked, so
@@ -32,9 +31,6 @@ export async function GET() {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
-  const licErr = requirePlus(await hasPlusLicense());
-  if (licErr) return licErr;
-
   try {
     const windowStart = new Date();
     windowStart.setMonth(windowStart.getMonth() - 11);

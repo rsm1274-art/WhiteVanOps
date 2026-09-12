@@ -8,26 +8,29 @@ This document assumes zero prior knowledge of licensing, payments, or installers
 
 ## Part 1: The Big Picture in One Paragraph
 
-A customer agrees to buy. You take their money. You then run a small command on your own computer that mints a **license key** — a short code like `WVO-4A2F-91BC-D7E3-0518`. You email them that code along with the installer file, or (more likely, for white glove) you show up at their office with both. You install the software on their dedicated office PC, type the key into the activation window that appears on first launch, and the key permanently locks itself to that one machine. Then you spend a couple of hours setting up their network, backups, technicians' phones, and training. They're live. The whole thing is manual on your end, on purpose — there's no automated storefront, and at your current volume there doesn't need to be.
+**WhiteVanOps is one product — there is no Base/Plus split anymore.** A customer agrees to buy. You take their money. You then run a small command on your own computer that mints a **license key** — a short code like `WVO-4A2F-91BC-D7E3-0518`. You email them that code along with the installer file, or (more likely, for white glove) you show up at their office with both. You install the software on their dedicated office PC, type the key into the activation window that appears on first launch, and the key permanently locks itself to that one machine. Then you spend a couple of hours setting up their office WiFi for field access, backups, technicians' phones, and training. They're live. The whole thing is manual on your end, on purpose — there's no automated storefront, and at your current volume there doesn't need to be.
+
+**Field access is office-WiFi-only, always — there is no remote/tunnel product to sell.** This removed an entire category of installation risk: no port forwarding, no CGNAT, no Dynamic DNS. If you remember an earlier version of this playbook describing CGNAT as "the single biggest risk in the whole job," that risk no longer exists — the app never needs an inbound connection from outside the office.
 
 ---
 
-## Part 2: The Three Kinds of Keys (This Is the Part That Confuses People)
+## Part 2: The Keys (This Is the Part That Used to Confuse People)
 
-Your system has **three different key types**. They look different, they're made differently, and they do different jobs. Mixing them up is the most likely way for a sale to go sideways, so here they are side by side.
+Your system has **two** key types now (a third, the Plus Upgrade License, was retired along with
+the Base/Plus tier — there is nothing left to upgrade a customer into).
 
-| | **Base Activation Key** | **Plus Upgrade License** | **Trial Unlock Key** |
-|---|---|---|---|
-| **Looks like** | `WVO-4A2F-91BC-D7E3-0518` | A block of JSON text | A block of JSON text |
-| **Its job** | Proves this install is a legitimate paid copy **and carries the tier they bought**. Every non-trial install needs one. | Upgrades an install *already sold as Base* to Plus. Not needed for new Plus sales. | Converts a 30-day sales demo into a permanent install. |
-| **Made by** | `node scripts/license-manager.js --tier base\|plus` | `node scripts/license-manager.js --plus --key <their Base key>` | `node scripts/license-manager.js --unlock-trial --machine <their machine ID> --tier base\|plus` |
-| **Needs internet?** | **Yes** — writes the key to your Firebase/Firestore database in the cloud, and the customer's PC checks it there when they activate. | No. It's math, done offline. | No. It's math, done offline. |
-| **Where it gets typed** | The activation window that pops up on first launch, before the app opens. | Inside the app: **Settings → License & Plan**. | Same place, or the trial-expired screen. |
-| **Locked to** | One physical machine, forever (see below). | The Base key it was generated against. | One physical machine. |
+| | **Activation Key** | **Trial Unlock Key** |
+|---|---|---|
+| **Looks like** | `WVO-4A2F-91BC-D7E3-0518` | A block of JSON text |
+| **Its job** | Proves this install is a legitimate paid copy. Every non-trial install needs one. | Converts a 30-day sales demo into a permanent install. |
+| **Made by** | `node scripts/license-manager.js` | `node scripts/license-manager.js --unlock-trial --machine <their machine ID>` |
+| **Needs internet?** | **Yes** — writes the key to your Firebase/Firestore database in the cloud, and the customer's PC checks it there when they activate. | No. It's math, done offline. |
+| **Where it gets typed** | The activation window that pops up on first launch, before the app opens. | Settings → License & Plan, or the trial-expired screen. |
+| **Locked to** | One physical machine, forever (see below). | One physical machine. |
 
 ### What "locked to a machine" actually means
 
-When a customer types their Base key into the activation window, the app reads a **hardware fingerprint** from that PC — a unique ID derived from the machine itself. It sends that fingerprint up to your Firestore database and stamps it onto the key's record. The key now belongs to that PC and nothing else.
+When a customer types their activation key into the activation window, the app reads a **hardware fingerprint** from that PC — a unique ID derived from the machine itself. It sends that fingerprint up to your Firestore database and stamps it onto the key's record. The key now belongs to that PC and nothing else.
 
 The practical consequences you need to understand before you sell anything:
 
@@ -40,12 +43,9 @@ The practical consequences you need to understand before you sell anything:
 
 ## Part 3: The Purchase Flow, Step by Step
 
-### Step 1 — Agree on the price and the plan
+### Step 1 — Agree on the price
 
-Before money moves, you need two answers from the customer:
-
-1. **Base or Plus?** Base is scheduling, jobs, inventory, techs, QuickBooks export. Plus adds CRM notes/follow-ups, the Analytics tab, and Invoicing. This decision determines which installer you build and which keys you mint.
-2. **Is white glove included, or billed separately?** This matters more than it sounds — see the pricing note in Part 6.
+Before money moves, you need one answer from the customer: **is white glove included, or billed separately?** This matters more than it sounds — see the pricing note in Part 6. There is no plan decision anymore — every customer gets the full feature set.
 
 ### Step 2 — Take the money
 
@@ -53,16 +53,13 @@ Full detail is in Part 5. The short version: send a **PayPal invoice**, and let 
 
 ### Step 3 — Mint the activation key
 
-On your own machine, in the project folder — **with the tier they paid for:**
+On your own machine, in the project folder:
 
 ```bash
-node scripts/license-manager.js --tier base     # Base customer
-node scripts/license-manager.js --tier plus     # Plus customer
+node scripts/license-manager.js
 ```
 
-(Omitting `--tier` gives you Base. `--notes "Order #1234"` is optional and gets stored on the record.)
-
-**This flag is the whole plan.** The tier is stamped onto the key's record in your Firestore database, read during activation, and locked into a signed file on their PC. It's not something you set at build time or configure on-site — one installer serves both plans and *this key* is what decides which one the customer gets. Mint `--tier plus` for a Base customer and you've given away the upgrade.
+(`--notes "Order #1234"` is optional and gets stored on the record.)
 
 It prints something like:
 
@@ -80,25 +77,9 @@ That key now exists in your cloud database with `machineId: null` — meaning "s
 
 **Write the key down against the customer's name.** There is no CRM here. If you don't keep your own record of which key went to whom, you will not be able to answer "which of these forty keys is Dave's?" when Dave's PC dies. A spreadsheet is fine. Not keeping one is not fine.
 
-### Step 4 — Only if you're upgrading an EXISTING Base install
+### Step 4 — Get them the installer
 
-Skip this for new sales — a `--tier plus` key already delivers Plus on its own.
-
-This step is for a customer who bought Base months ago and is upgrading now. You don't reissue their activation key; you mint a signed upgrade bound to the key they already have:
-
-```bash
-node scripts/license-manager.js --plus --key WVO-4A2F-91BC-D7E3-0518
-```
-
-It takes **their existing Base key** as input — the Plus license is mathematically tied to it, so it only works on their install. It prints a JSON block they paste into Settings → License & Plan.
-
-Add `--expires 2027-07-15` if you ever sell Plus as an annual subscription. Leave it off and Plus never expires.
-
-### Step 5 — Get them the installer
-
-**Superseded 2026-07-24:** Base and Plus are now separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; trials `WhiteVanOps-{Base,Plus}-Trial-Setup.exe`); the in-place Plus upgrade is gone — see `MANUAL_Setup_Installation.md` §6. The paragraph below describes the earlier single-installer model and is kept for historical context only.
-
-`dist-electron/WhiteVanOps-Base-Setup.exe` or `WhiteVanOps-Plus-Setup.exe`, roughly 156 MB. Bring the installer matching the tier the customer purchased — the key you minted in Step 3 must match. (`WhiteVanOps-{Base,Plus}-Trial-Setup.exe` are the separate 30-day demos.) Options, in order of preference:
+`dist-electron/WhiteVanOps-Setup.exe` (Windows) or `WhiteVanOps-Setup-{arm64,x64}.dmg` (macOS), roughly 156 MB. There is only one installer per platform — no plan to match against the key. (`WhiteVanOps-Trial-Setup.exe` / `-Trial-Setup-{arm64,x64}.dmg` are the separate 30-day demos.) Options, in order of preference:
 
 - **Bring it on a USB drive** to the white glove appointment. Simplest, fastest, no upload, no "it says the file is corrupted."
 - **A download link** (Dropbox / Google Drive / your own site) if you're doing this remotely.
@@ -106,35 +87,33 @@ Add `--expires 2027-07-15` if you ever sell Plus as an annual subscription. Leav
 
 ⚠️ **The one thing you must get right here:** each installer bundles a `.env.local` file containing that build's `SESSION_SECRET`. **Never hand the same build to two different customers.** Build a fresh installer per customer with a freshly generated secret, or have a generic build and place a per-customer `.env.local` on-site after installation. `MANUAL_Setup_Installation.md` §3 has the exact steps. Shipping one shared secret to multiple companies means that, in principle, one customer holds the key that signs another customer's login sessions.
 
-### Step 6 — Do the white glove install
+### Step 5 — Do the white glove install
 
 This is fully documented in `docs/MANUAL_White_Glove_Installation.md` and I won't duplicate it here. The shape of it:
 
-- **Phase A** — install the software, first launch, **type in the Base key at the activation window**, log in as `admin`/`admin`, immediately change the password.
-- **Phase B** — router port forwarding + DuckDNS, so field techs can reach the app from outside the office. This is the phase that eats time and the phase that can fail for reasons outside your control (see the CGNAT warning below).
+- **Phase A** — install the software, first launch, **type in the activation key at the activation window**, log in as `admin`/`admin`, immediately change the password.
+- **Phase B** — set a DHCP reservation or static IP for the office PC, and open the office firewall for the field module's port. That's the entire networking phase — there is no port forwarding, no DDNS, and no public-internet exposure to configure, because field access never leaves the building.
 - **Phase C** — set up the backup folder, run a manual backup, confirm the file appears.
-- **Phase D** — field techs scan the QR code, add the app to their phone home screens, sign in.
+- **Phase D** — field techs scan the QR code (while on the office WiFi), add the app to their phone home screens, sign in.
 - Then data migration and training.
 
-**The single biggest risk in the whole job is CGNAT.** Some internet providers don't give a customer a real public address, which makes port forwarding impossible — meaning field techs can never reach the app from outside the office. **Check this before the sale, not on install day**: compare what `whatismyip.com` shows on their office PC against the "WAN IP" on their router's status page. If those two numbers don't match, remote field access cannot work until they change ISP plans. You do not want to discover this after you've been paid and you're standing in their office.
+There is no CGNAT risk to check before the sale — the app never needs an inbound connection from outside the office, so the customer's ISP and router configuration are irrelevant to whether field access works.
 
-### Step 7 — Hand off
+### Step 6 — Hand off
 
-Give them: their admin password, the manuals, the license key on paper (for their records), and your phone number. Confirm one tech has successfully logged a job from their phone **on cellular data with office WiFi off** — that's the only test that proves the remote access actually works.
+Give them: their admin password, the manuals, the license key on paper (for their records), and your phone number. Confirm one tech has successfully logged a job from their phone **while on the office WiFi** — that's the environment field access is designed for, and the only one it needs to work in.
 
 ---
 
 ## Part 4: The Demo Path (Worth Knowing, Because It Changes the Sale)
 
-**Superseded 2026-07-24:** trial installers are now split by tier — `WhiteVanOps-Base-Trial-Setup.exe` and `WhiteVanOps-Plus-Trial-Setup.exe` — see `MANUAL_Setup_Installation.md` §6.
-
-You have trial installers too, e.g. `WhiteVanOps-Plus-Trial-Setup.exe` for a 30-day, fully-loaded-with-Plus demo. Its important property for sales purposes is that **it needs no key at all** — a prospect can install it themselves and it boots straight to the login screen. No activation window, no phone call to you.
+You have a trial installer too — `WhiteVanOps-Trial-Setup.exe` (Windows) / `WhiteVanOps-Trial-Setup-{arm64,x64}.dmg` (macOS) — for a 30-day, fully-loaded demo. Its important property for sales purposes is that **it needs no key at all** — a prospect can install it themselves and it boots straight to the login screen. No activation window, no phone call to you.
 
 That makes it your ideal "let me leave this with you" artifact. When they're ready to buy, the conversion is:
 
 1. They give you their machine ID (shown on the trial-expired screen).
-2. You run `node scripts/license-manager.js --unlock-trial --machine <that ID> --tier base` (or `--tier plus`).
-3. They paste the resulting JSON in. The 30-day lock is permanently defeated, and **the tier of the key you minted is what they get** — a `base` unlock correctly switches off the Plus features they'd been trying.
+2. You run `node scripts/license-manager.js --unlock-trial --machine <that ID>`.
+3. They paste the resulting JSON in. The 30-day lock is permanently defeated.
 
 The elegance here: **they keep all the data they entered during the trial.** No reinstall, no migration, no lost work. That is a genuinely strong closing argument and you should use it deliberately — a prospect who has spent 30 days entering their real jobs and real clients has already done the switching cost that would otherwise stop them from buying.
 
@@ -186,58 +165,34 @@ Payment processors report your business income to the IRS on a **Form 1099-K**, 
 
 ## Part 6: Things That Will Bite You (Ranked by How Much They'll Hurt)
 
-1. **CGNAT discovered on install day.** Check before the sale. This is the one that can turn a paid job into a refund.
-2. **You didn't record which key went to which customer.** Start the spreadsheet now, before key #2 exists.
-3. **You lost the Firebase service-account file.** You can't mint keys. Back it up today.
-4. **You shipped the same installer to two customers**, sharing a `SESSION_SECRET`. Build per customer, or place `.env.local` on-site.
-5. **The customer's PC dies and you forgot you have to free their key in Firestore.** Write yourself a note on how to do this while you still remember. Better: do it once now on a throwaway key so you've practiced.
-6. **You quoted a flat price and the white glove took nine hours** because their router was a locked-down ISP unit and nobody had the admin password. Price the software and the installation as separate lines, or quote installation as a range and be honest about what expands it.
-7. **A chargeback four months after a successful install.** Get the signature.
+1. **You didn't record which key went to which customer.** Start the spreadsheet now, before key #2 exists.
+2. **You lost the Firebase service-account file.** You can't mint keys. Back it up today.
+3. **You shipped the same installer to two customers**, sharing a `SESSION_SECRET`. Build per customer, or place `.env.local` on-site.
+4. **The customer's PC dies and you forgot you have to free their key in Firestore.** Write yourself a note on how to do this while you still remember. Better: do it once now on a throwaway key so you've practiced.
+5. **You quoted a flat price and the white glove took longer than expected** because nobody had the admin password to the office WiFi router, or the office network needed more setup than planned. Price the software and the installation as separate lines, or quote installation as a range and be honest about what expands it.
+6. **A chargeback four months after a successful install.** Get the signature.
 
 ---
 
-## Part 7: Protecting the Plus Tier
+## Part 7: Protecting the Activation Key (Historical: This Used to Be About Protecting the Plus Tier)
 
-There were **two** ways to turn on Plus without paying. The easy one is **fixed** (2026-07-15). The hard one is a known, accepted limit. Both are recorded here so the reasoning survives.
+Before v2.0, this section documented two ways someone could turn on the paid **Plus tier** without
+paying — a text-file edit (fixed 2026-07-15) and extracting the signing secret (an accepted, open
+limit). **Both are moot now: there is no tier to steal.** Every activated install already gets the
+full feature set, so there's nothing left for a hand-edited config file to unlock.
 
-### Hole #1: The one-word text edit — FIXED
+What's still worth protecting is **activation itself** — an unactivated copy shouldn't be usable at
+all, trial or not. The one open item that survives from the old writeup:
 
-**Difficulty was: trivial. No technical skill required.**
-
-Every install used to ship a plain text file at `<install dir>\resources\nextjs\.env.local` containing a line the build script put there:
-
-```
-WVO_DEFAULT_TIER="base"
-```
-
-Change that word to `"plus"`, restart, and Plus turned on. That was the whole attack. Notepad. One word.
-
-It worked because `getLicense()` treated the env var as proof of tier, which made `verifiedPlus` true — and the anti-tamper self-heal only fires when `verifiedPlus` is *false*. So the env var didn't defeat the protection by overpowering it; it satisfied it. The check saw a legitimately-verified Plus install and helpfully synced the database up to match.
-
-**The fix that shipped: the tier now travels inside the activation key.**
-
-- `scripts/license-manager.js --tier base|plus` stamps the tier onto the key's record in Firestore when you mint it.
-- `electron/main.js` reads that tier during activation and bakes it into `license.json`, which was already machine-bound and HMAC-signed.
-- `getBaseLicense()` returns the tier from that signed file. Editing `"tier": "base"` to `"plus"` breaks the signature, so the file is rejected outright — no Plus, and the app asks for activation rather than honouring the edit.
-- `WVO_DEFAULT_TIER` is **gone.** Nothing on the customer's disk declares the tier anymore.
-
-The rule this establishes, and the one to hold onto: **configuration never grants Plus — only a signature does.** Every branch in `getLicense()` that can set `verifiedPlus` is now gated on a machine-bound HMAC over the payload it's claiming.
-
-**Superseded 2026-07-24:** Base and Plus are now separate installers (`WhiteVanOps-Base-Setup.exe` / `WhiteVanOps-Plus-Setup.exe`; trials `WhiteVanOps-{Base,Plus}-Trial-Setup.exe`); the in-place Plus upgrade is gone — see `MANUAL_Setup_Installation.md` §6. The paragraph below describes the earlier single-installer model and is kept for historical context only.
-
-**Consequence worth knowing at the time: Base and Plus were the same installer.** `WhiteVanOps-Setup.exe` served both, and the key decided. `npm run electron:build:plus` and a separate `WhiteVanOps-Plus-Setup.exe` didn't exist — which also restored what the architecture always claimed to be ("gated at runtime by a DB flag, not separate builds"). One less artifact to build, name, and accidentally hand to the wrong customer.
-
-A regression test (`"ignores WVO_DEFAULT_TIER=plus and self-heals a plus DB row back to base"`) exists specifically to stop this returning.
-
-### Hole #2: Extracting the signing secret — open, accepted
+### Extracting the signing secret — still an open, accepted limit
 
 **Difficulty: high. Needs a motivated, technical person.**
 
-The licenses are signed with a **symmetric secret** — `LICENSE_SIGNING_SECRET` in `src/lib/licenseCrypto.ts`. With symmetric crypto (HMAC), the key that *checks* a signature is the same key that *makes* one. The app must hold it to verify licenses, so it ships inside every installer. Someone who unpacked the app and found that string could mint themselves a valid Plus license.
+Licenses are signed with a **symmetric secret** — `LICENSE_SIGNING_SECRET` in `src/lib/licenseCrypto.ts`. With symmetric crypto (HMAC), the key that *checks* a signature is the same key that *makes* one. The app must hold it to verify licenses, so it ships inside every installer. Someone who unpacked the app and found that string could mint themselves a valid activation key, skipping payment entirely.
 
-**This is accepted for now, deliberately.** Your customers are trade businesses, not reverse engineers, and the effort exceeds the price of the upgrade. It was always a distant second to Hole #1 — unpacking an Electron archive and reverse-engineering a license format, versus typing one word in Notepad.
+**This is accepted for now, deliberately.** Your customers are trade businesses, not reverse engineers, and the effort exceeds the price of the software.
 
-**The fix, when Plus revenue justifies it: Ed25519**, built into Node's `crypto`, no new dependencies:
+**The fix, if it's ever worth doing: Ed25519**, built into Node's `crypto`, no new dependencies:
 
 - Generate a keypair **once** (`crypto.generateKeyPairSync('ed25519')`).
 - The **private key never leaves your machine**; `license-manager.js` signs with it.
@@ -246,13 +201,9 @@ The licenses are signed with a **symmetric secret** — `LICENSE_SIGNING_SECRET`
 
 Contained change: the sign calls in `license-manager.js`, the verify calls in `licenseCrypto.ts`/`license.ts`, and a migration story for licenses already in the field (accept both formats for a release, then drop HMAC).
 
-**Do it before Plus becomes the bulk of your income.** The cost of the change is fixed; the cost of not having done it scales with revenue.
-
 ### The honest ceiling
 
-**None of this is bulletproof, and that's fine.** Any offline-verifiable license can eventually be defeated by someone determined enough, because the software runs on hardware they control. The realistic goal was never "impossible" — it's "harder than paying you." Closing Hole #1 got you there; Ed25519 keeps you there as the stakes rise.
-
-**Worth noting:** the Base activation key never had either weakness, because it's checked against your Firestore database rather than by local math. The fix above was essentially extending that existing strength to cover the tier too.
+**None of this is bulletproof, and that's fine.** Any offline-verifiable license can eventually be defeated by someone determined enough, because the software runs on hardware they control. The realistic goal was never "impossible" — it's "harder than paying you." The activation key was never vulnerable to a local text-edit the way the old tier flag was, because it's checked against your Firestore database rather than by local math.
 
 ---
 
@@ -260,24 +211,17 @@ Contained change: the sign calls in `license-manager.js`, the verify calls in `l
 
 ```bash
 # Mint an activation key for a new customer (needs internet + Firebase key file).
-# The --tier flag is what sells them Base vs Plus — one installer serves both.
-node scripts/license-manager.js --tier base
-node scripts/license-manager.js --tier plus
-node scripts/license-manager.js --tier plus --notes "Order #1234"
+node scripts/license-manager.js
+node scripts/license-manager.js --notes "Order #1234"
 
-# Upgrade a customer who ALREADY has a Base install (not needed for new Plus sales)
-node scripts/license-manager.js --plus --key WVO-XXXX-XXXX-XXXX-XXXX
+# Convert a 30-day trial install into a permanent one
+node scripts/license-manager.js --unlock-trial --machine <machineId>
 
-# ...as an annual subscription rather than perpetual
-node scripts/license-manager.js --plus --key WVO-XXXX-XXXX-XXXX-XXXX --expires 2027-07-15
-
-# Convert a 30-day trial install into a permanent one (tier = what they paid for)
-node scripts/license-manager.js --unlock-trial --machine <machineId> --tier base
-node scripts/license-manager.js --unlock-trial --machine <machineId> --tier plus
-
-# Build installers (superseded 2026-07-24 — see MANUAL_Setup_Installation.md §6 for the current Base/Plus-split commands)
-npm run electron:build          # WhiteVanOps-Setup.exe — serves Base AND Plus (historical, pre-split)
-npm run electron:build:trial    # WhiteVanOps-Trial-Setup.exe — 30-day demo (historical, pre-split)
+# Build installers — one per platform, no plan axis
+npm run electron:build            # Windows installer   → WhiteVanOps-Setup.exe
+npm run electron:build:trial      # Windows 30-day trial → WhiteVanOps-Trial-Setup.exe
+npm run electron:build:mac        # macOS installer      → WhiteVanOps-Setup-{arm64,x64}.dmg
+npm run electron:build:mac:trial  # macOS 30-day trial   → WhiteVanOps-Trial-Setup-{arm64,x64}.dmg
 
 # Emergency: reset a locked-out admin password on a customer's PC
 # (copy both files from scripts/recovery/; the app must be running)
@@ -289,4 +233,4 @@ npm run electron:build:trial    # WhiteVanOps-Trial-Setup.exe — 30-day demo (h
 - `docs/MANUAL_White_Glove_Installation.md` — the on-site procedure
 - `MANUAL_Setup_Installation.md` §3 — per-customer secrets and builds
 - `MANUAL_Setup_Installation.md` §6.4 — trial build and conversion
-- `MANUAL_Setup_Installation.md` §7 — port forwarding and DDNS in depth
+- `MANUAL_Setup_Installation.md` §7 — office WiFi setup for field access

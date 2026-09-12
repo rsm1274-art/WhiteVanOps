@@ -2,14 +2,11 @@
 
 import { AlertTriangle, CloudOff, RefreshCw } from "lucide-react";
 import type { SyncStatus } from "@/lib/syncStatus";
+import { formatTimeOnly as formatTime } from "@/lib/dateUtils";
 
 interface Props {
   status: SyncStatus;
   onSyncNow: () => void;
-}
-
-function formatTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 /**
