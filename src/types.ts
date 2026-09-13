@@ -228,6 +228,7 @@ export interface InventoryItem {
   category: string;
   subCategory: string;
   defaultRate: number;
+  isService: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -448,6 +449,7 @@ export interface NewItemForm {
   category: string;
   subCategory: string;
   defaultRate: string;
+  isService: boolean;
 }
 
 export interface AdjustedStockForm {

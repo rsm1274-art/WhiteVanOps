@@ -139,7 +139,7 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
         {/* Materials section */}
         <div>
           <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-2">
-            Materials & Catalog Parts
+            Materials & Services
           </label>
           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
             {parts.map((item, i) => (
@@ -151,10 +151,10 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
                     onChange={(e) => updateLine(i, "inventoryItemId", e.target.value)}
                     className="w-full p-1.5 border border-zinc-300 text-xs bg-white rounded"
                   >
-                    <option value="">-- Choose Part --</option>
+                    <option value="">-- Choose Item --</option>
                     {data.inventoryItems.map((it) => (
                       <option key={it.id} value={it.id}>
-                        {it.name} (${it.defaultRate})
+                        {it.name}{it.isService ? " (Service)" : ""} (${it.defaultRate})
                       </option>
                     ))}
                   </select>
@@ -205,7 +205,7 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
             onClick={addLine}
             className="mt-2 text-xs uppercase tracking-wider font-bold text-zinc-600 hover:text-zinc-900"
           >
-            + Add Material Line
+            + Add Line Item
           </button>
         </div>
 

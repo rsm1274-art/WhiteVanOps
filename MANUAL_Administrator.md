@@ -285,6 +285,12 @@ Click **Add Item** to create a catalog entry. Fields:
 | Sub-Category | Second-level QB category (e.g., "Electrical", "Plumbing") |
 | Default Rate | The billing rate per unit. Auto-fills when this item is added to a job. |
 
+**This is a service, not a physical part** — check this box for labor-only billables that have nothing to
+pull off a shelf: an inspection, a diagnostic fee, a service call charge, a thermostat reset. A service
+item shows up on the job's line-item picker exactly like a material does and bills the same way, but it
+is never mapped to a stock location and completing a job never deducts it from van inventory. Services
+are marked with a blue **Service** badge in the catalog table and show `—` instead of a stock count.
+
 To permanently delete an item from the catalog, click **Delete Item**. Items that have been used on completed jobs (and thus appear on invoice exports) cannot be deleted.
 
 ### Stock Locations
@@ -559,7 +565,7 @@ Exports run against the full result (up to 50,000 rows), not just the 200-row on
 You can still view a completed job and its cost summary. The status cannot be changed back to In Progress. If an error was made, contact the system administrator to make a direct database correction.
 
 **What happens to inventory when I complete a job?**
-The system deducts the quantities from the job's line items from the assigned van's stock location automatically. Review the Inventory tab if stock levels look incorrect after completion.
+The system deducts the quantities from the job's line items from the assigned van's stock location automatically. Review the Inventory tab if stock levels look incorrect after completion. Line items marked as a **Service** in the catalog are the exception — labor-only billables like an inspection or a service call fee are never deducted from any stock location.
 
 **Can two technicians be assigned to the same job?**
 Yes. When creating or editing a job, select multiple names from the crew checklist.

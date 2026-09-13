@@ -324,7 +324,7 @@ export async function setJobStatus(
 
   const currentJob = await tx.job.findUnique({
     where: { id: jobId },
-    include: { lineItems: true },
+    include: { lineItems: { include: { inventoryItem: true } } },
   });
   if (!currentJob) return { outcome: "rejected", status: 404, error: "Job not found" };
 
@@ -351,6 +351,8 @@ export async function setJobStatus(
 
       if (vehicleStockLocation) {
         for (const item of currentJob.lineItems) {
+          if (item.inventoryItem.isService) continue;
+
           const stockLevel = await tx.stockLevel.findUnique({
             where: {
               inventoryItemId_stockLocationId: {
@@ -385,6 +387,8 @@ export async function setJobStatus(
 
       if (vehicleStockLocation) {
         for (const item of currentJob.lineItems) {
+          if (item.inventoryItem.isService) continue;
+
           const stockLevel = await tx.stockLevel.findUnique({
             where: {
               inventoryItemId_stockLocationId: {

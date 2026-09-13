@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const { action, ...payload } = await request.json();
 
     if (action === "create_item") {
-      const { name, category, subCategory, defaultRate } = payload;
+      const { name, category, subCategory, defaultRate, isService } = payload;
 
       if (!name || !category || !subCategory || defaultRate === undefined) {
         return NextResponse.json({ error: "Missing required item fields" }, { status: 400 });
@@ -31,19 +31,22 @@ export async function POST(request: Request) {
 
       const newItem = await prisma.$transaction(async (tx) => {
         const item = await tx.inventoryItem.create({
-          data: { name, category, subCategory, defaultRate: parseFloat(defaultRate) || 0 },
+          data: { name, category, subCategory, defaultRate: parseFloat(defaultRate) || 0, isService: !!isService },
         });
 
-        const locations = await tx.stockLocation.findMany();
-        if (locations.length > 0) {
-          await tx.stockLevel.createMany({
-            data: locations.map((loc) => ({
-              inventoryItemId: item.id,
-              stockLocationId: loc.id,
-              quantity: 0,
-              minThreshold: 0,
-            })),
-          });
+        // Services have nothing to stock — skip mapping them to every location.
+        if (!isService) {
+          const locations = await tx.stockLocation.findMany();
+          if (locations.length > 0) {
+            await tx.stockLevel.createMany({
+              data: locations.map((loc) => ({
+                inventoryItemId: item.id,
+                stockLocationId: loc.id,
+                quantity: 0,
+                minThreshold: 0,
+              })),
+            });
+          }
         }
 
         return item;
@@ -66,7 +69,7 @@ export async function POST(request: Request) {
           data: { name: name.trim(), type: "Warehouse" },
         });
 
-        const items = await tx.inventoryItem.findMany({ select: { id: true } });
+        const items = await tx.inventoryItem.findMany({ where: { isService: false }, select: { id: true } });
         if (items.length > 0) {
           await tx.stockLevel.createMany({
             data: items.map((item) => ({

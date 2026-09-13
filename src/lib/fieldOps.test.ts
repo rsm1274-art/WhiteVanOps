@@ -257,7 +257,7 @@ describe("setJobStatus — stock deduction and idempotency", () => {
       id: "job1",
       status: "In Progress",
       assignedVehicleId: "veh1",
-      lineItems: [{ inventoryItemId: "item1", quantity: 5 }],
+      lineItems: [{ inventoryItemId: "item1", quantity: 5, inventoryItem: { isService: false } }],
     });
     tx.job.update.mockResolvedValue({ id: "job1" });
     tx.stockLocation.findUnique.mockResolvedValue({ id: "loc1" });
@@ -298,6 +298,26 @@ describe("setJobStatus — stock deduction and idempotency", () => {
     });
   });
 
+  it("never touches stock for a service line item (labor-only billing)", async () => {
+    const tx = makeTx();
+    tx.appliedOp.findFirst.mockResolvedValue(null);
+    tx.job.findUnique.mockResolvedValue({
+      id: "job1",
+      status: "In Progress",
+      assignedVehicleId: "veh1",
+      lineItems: [{ inventoryItemId: "svc1", quantity: 1, inventoryItem: { isService: true } }],
+    });
+    tx.job.update.mockResolvedValue({ id: "job1" });
+    tx.stockLocation.findUnique.mockResolvedValue({ id: "loc1" });
+
+    const res = await setJobStatus(tx as unknown as Prisma.TransactionClient, adminActor, "op1", { jobId: "job1", status: "Completed" });
+
+    expect(res.outcome).toBe("applied");
+    expect(tx.stockLevel.findUnique).not.toHaveBeenCalled();
+    expect(tx.stockLevel.update).not.toHaveBeenCalled();
+    expect(tx.stockLevel.create).not.toHaveBeenCalled();
+  });
+
   it("restores stock when reopening a Completed job", async () => {
     const tx = makeTx();
     tx.appliedOp.findFirst.mockResolvedValue(null);
@@ -305,7 +325,7 @@ describe("setJobStatus — stock deduction and idempotency", () => {
       id: "job1",
       status: "Completed",
       assignedVehicleId: "veh1",
-      lineItems: [{ inventoryItemId: "item1", quantity: 5 }],
+      lineItems: [{ inventoryItemId: "item1", quantity: 5, inventoryItem: { isService: false } }],
     });
     tx.job.update.mockResolvedValue({ id: "job1" });
     tx.stockLocation.findUnique.mockResolvedValue({ id: "loc1" });

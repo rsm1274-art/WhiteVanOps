@@ -111,20 +111,40 @@ export default function InventoryTab({ data, onAddItem, onAddWarehouse, onTransf
                       key={item.id}
                       className={`border-b border-zinc-100 ${i % 2 === 0 ? "bg-white" : "bg-zinc-50"}`}
                     >
-                      <td className="px-3 py-2.5 font-medium text-zinc-800">{item.name}</td>
+                      <td className="px-3 py-2.5 font-medium text-zinc-800">
+                        {item.name}
+                        {item.isService && (
+                          <span className="ml-1.5 text-[9px] font-bold uppercase text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                            Service
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-zinc-500">
                         {item.category}
                         {item.subCategory ? <span className="text-zinc-400"> / {item.subCategory}</span> : null}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <span className={`font-mono font-bold ${anyLow ? "text-red-600" : "text-zinc-900"}`}>
-                          {total}
-                        </span>
-                        {anyLow && (
-                          <span className="ml-1.5 text-[9px] font-bold uppercase text-red-500">Low</span>
+                        {item.isService ? (
+                          <span className="text-zinc-300">—</span>
+                        ) : (
+                          <>
+                            <span className={`font-mono font-bold ${anyLow ? "text-red-600" : "text-zinc-900"}`}>
+                              {total}
+                            </span>
+                            {anyLow && (
+                              <span className="ml-1.5 text-[9px] font-bold uppercase text-red-500">Low</span>
+                            )}
+                          </>
                         )}
                       </td>
                       {stockLocations.map((loc) => {
+                        if (item.isService) {
+                          return (
+                            <td key={loc.id} className="px-3 py-2.5 text-center text-zinc-300">
+                              —
+                            </td>
+                          );
+                        }
                         const level = locMap?.get(loc.id);
                         if (!level) {
                           return (

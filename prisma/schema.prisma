@@ -203,6 +203,7 @@ model InventoryItem {
   category     String
   subCategory  String
   defaultRate  Float
+  isService    Boolean       @default(false) // Billable labor/service (e.g. "Diagnostic Fee") — never stock-tracked.
   stockLevels  StockLevel[]
   jobLineItems JobLineItem[]
   createdAt    DateTime      @default(now())

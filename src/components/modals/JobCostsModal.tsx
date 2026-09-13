@@ -58,15 +58,15 @@ export default function JobCostsModal({ job, timeEntries, onClose }: Props) {
         {/* Materials */}
         <div className="border border-zinc-200 rounded p-4">
           <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-3 border-b border-zinc-100 pb-2">
-            Materials & Parts Credited
+            Materials & Services Credited
           </h4>
           {job.lineItems.length === 0 ? (
-            <p className="text-xs text-zinc-500 py-1">No materials billed to this job.</p>
+            <p className="text-xs text-zinc-500 py-1">No materials or services billed to this job.</p>
           ) : (
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="text-[9px] font-bold uppercase text-zinc-400 border-b border-zinc-100">
-                  <th className="pb-2">Material Item</th>
+                  <th className="pb-2">Item</th>
                   <th className="pb-2">Qty</th>
                   <th className="pb-2">Rate</th>
                   <th className="pb-2 text-right">Subtotal</th>
@@ -169,7 +169,7 @@ export default function JobCostsModal({ job, timeEntries, onClose }: Props) {
       </div>
 
       <div className="pt-4 border-t border-zinc-200 flex justify-between items-center text-sm font-bold">
-        <span>Materials Billing Total:</span>
+        <span>Materials & Services Total:</span>
         <span className="text-lg font-bold text-zinc-800">${materialsTotal.toFixed(2)}</span>
       </div>
     </Modal>
