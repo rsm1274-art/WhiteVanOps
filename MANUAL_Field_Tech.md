@@ -86,7 +86,7 @@ Tap the **down arrow (v)** on the right side of any job card to expand it. The e
 
 - Any equipment assigned to the job
 - Action buttons (Start Job / Mark Complete)
-- Buttons to open the Log Time, Notes, and Materials panels
+- Buttons to open the Log Time, Notes, and Materials & Services panels
 
 Tap the **up arrow (^)** to collapse the card again.
 
@@ -160,30 +160,33 @@ Notes are visible to the office and to other technicians who open the same job. 
 
 ---
 
-## Recording Materials Used
+## Recording Materials & Services
 
-Use the Materials panel to list what was taken from the van and used on the job. These entries become the line items on the client's invoice and are deducted from your van's inventory when the job is marked Complete.
+Use the Materials & Services panel to list what was used on the job — parts taken from the van, and
+labor-only billables that have no part attached to them (an inspection, a diagnostic fee, a service
+call charge). These entries become the line items on the client's invoice. Parts are deducted from
+your van's inventory when the job is marked Complete; services never are — there is nothing to deduct.
 
 1. Expand the job card.
-2. Tap **Materials**.
-3. Any materials already added to the job will appear here.
+2. Tap **Materials & Services**.
+3. Anything already added to the job will appear here.
 
-**To add a material:**
+**To add a line item:**
 
-4. Tap **Add Material** (the dashed button at the bottom).
+4. Tap **Add Line Item** (the dashed button at the bottom).
 5. A new item row appears. Fill it in:
 
 | Field | What to enter |
 |---|---|
-| Item | Select from the dropdown list of catalog items |
-| Qty | How many units were used |
+| Item | Select from the dropdown list of catalog items. Anything labeled **(Service)** is labor-only and won't touch van stock. |
+| Qty | How many units were used (for a service, usually just `1`) |
 | Rate ($) | Price per unit — auto-fills from the catalog, but can be changed |
-| Description | Optional note about this specific material use |
+| Description | Optional note about this specific line |
 
-6. Repeat for each material used.
-7. Tap **Save Materials** when done.
+6. Repeat for each part or service used.
+7. Tap **Save** when done.
 
-**To remove a material:**
+**To remove a line:**
 Tap the red trash icon on the right side of any item row before saving.
 
 **Note:** When you select an item from the dropdown, the Rate field fills in automatically from the catalog default. You can override this rate if needed.
@@ -322,7 +325,7 @@ Make sure your phone's browser zoom is set to 100%. On most phones, you can rese
 | Complete a job | Expand card → tap **Mark Complete** |
 | Log time | Expand card → tap **Log Time** → fill form → Submit |
 | Add a note | Expand card → tap **Notes** → type → Save |
-| Record materials | Expand card → tap **Materials** → Add Material → Save |
+| Record materials/services | Expand card → tap **Materials & Services** → Add Line Item → Save |
 | Refresh job list | Tap the circular arrow in the header |
 | Export a backup of your work | Tap the export button next to the refresh icon |
 | Switch to another tech | Tap **Switch** in the header |

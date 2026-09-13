@@ -99,7 +99,7 @@ export async function PUT(request: Request) {
 
     const currentJob = await prisma.job.findUnique({
       where: { id: jobId },
-      include: { lineItems: true, assignments: true, equipment: true },
+      include: { lineItems: { include: { inventoryItem: true } }, assignments: true, equipment: true },
     });
 
     if (!currentJob) {
@@ -148,6 +148,8 @@ export async function PUT(request: Request) {
 
           if (vehicleStockLocation) {
             for (const item of currentJob.lineItems) {
+              if (item.inventoryItem.isService) continue;
+
               const stockLevel = await tx.stockLevel.findUnique({
                 where: {
                   inventoryItemId_stockLocationId: {
@@ -188,6 +190,8 @@ export async function PUT(request: Request) {
 
           if (vehicleStockLocation) {
             for (const item of currentJob.lineItems) {
+              if (item.inventoryItem.isService) continue;
+
               const stockLevel = await tx.stockLevel.findUnique({
                 where: {
                   inventoryItemId_stockLocationId: {

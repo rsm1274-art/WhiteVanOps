@@ -301,10 +301,10 @@ function MaterialsPanel({
 
   return (
     <div className="mt-3 p-4 bg-zinc-50 border border-zinc-200 rounded-lg">
-      <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Materials Used</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-3">Materials & Services</p>
       <form onSubmit={handleSubmit} className="space-y-3">
         {lines.length === 0 && (
-          <p className="text-xs text-zinc-400 text-center py-2">No materials listed yet.</p>
+          <p className="text-xs text-zinc-400 text-center py-2">Nothing billed yet. Add a part or a service (e.g. a service call fee).</p>
         )}
         {lines.map((line, i) => (
           <div key={i} className="bg-white border border-zinc-200 rounded p-3 space-y-2">
@@ -323,7 +323,7 @@ function MaterialsPanel({
               className="w-full border border-zinc-300 rounded px-2 py-1.5 text-xs text-zinc-900 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900"
             >
               {inventoryItems.map((it) => (
-                <option key={it.id} value={it.id}>{it.name}</option>
+                <option key={it.id} value={it.id}>{it.name}{it.isService ? " (Service)" : ""}</option>
               ))}
             </select>
             <div className="grid grid-cols-2 gap-2">
@@ -355,13 +355,13 @@ function MaterialsPanel({
           type="button" onClick={addLine}
           className="w-full py-2 border border-dashed border-zinc-300 text-zinc-500 text-xs font-bold uppercase tracking-wide rounded hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5"
         >
-          <Plus className="h-3.5 w-3.5" /> Add Material
+          <Plus className="h-3.5 w-3.5" /> Add Line Item
         </button>
         <button
           type="submit" disabled={saving}
           className="w-full py-2.5 bg-zinc-900 text-white text-xs font-bold uppercase tracking-wider rounded hover:bg-zinc-700 disabled:opacity-50 transition-colors"
         >
-          {saving ? "Saving…" : "Save Materials"}
+          {saving ? "Saving…" : "Save"}
         </button>
       </form>
     </div>

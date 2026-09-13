@@ -6,9 +6,11 @@ vi.mock("@/lib/db", () => ({
     stockLocation: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
       delete: vi.fn(),
     },
     inventoryItem: {
+      create: vi.fn(),
       findMany: vi.fn(),
     },
     stockLevel: {
@@ -57,6 +59,20 @@ function wireTransaction() {
   );
 }
 
+// create_item runs inside prisma.$transaction(cb). Forward the tx double to
+// the same mocked inventoryItem/stockLocation/stockLevel delegates.
+function wireCreateItemTransaction() {
+  const tx = {
+    inventoryItem: { create: prisma.inventoryItem.create },
+    stockLocation: { findMany: prisma.stockLocation.findMany },
+    stockLevel: { createMany: prisma.stockLevel.createMany },
+  };
+  vi.mocked(prisma.$transaction).mockImplementation(
+    // @ts-expect-error — the test tx is a structural subset of Prisma's TransactionClient
+    async (cb: (t: typeof tx) => unknown) => cb(tx)
+  );
+}
+
 // transfer_stock runs its reads/writes inside prisma.$transaction(cb). Forward
 // the tx double to the same mocked stockLevel delegates.
 function wireTransferTransaction() {
@@ -83,6 +99,45 @@ function postInventory(body: Record<string, unknown>): Request {
 beforeEach(() => {
   vi.resetAllMocks();
   process.env.SESSION_SECRET = "test-secret-at-least-32-bytes-long";
+});
+
+describe("POST /api/inventory — create_item", () => {
+  it("creates a stocked catalog item and maps zero stock to every location", async () => {
+    wireCreateItemTransaction();
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: "item1", isService: false } as never);
+    vi.mocked(prisma.stockLocation.findMany).mockResolvedValue([{ id: "loc1" }, { id: "loc2" }] as never);
+
+    const res = await POST(
+      postInventory({ action: "create_item", name: "Copper Pipe", category: "Plumbing", subCategory: "Pipes", defaultRate: "12.5" })
+    );
+
+    expect(res.status).toBe(200);
+    expect(prisma.inventoryItem.create).toHaveBeenCalledWith({
+      data: { name: "Copper Pipe", category: "Plumbing", subCategory: "Pipes", defaultRate: 12.5, isService: false },
+    });
+    expect(prisma.stockLevel.createMany).toHaveBeenCalledWith({
+      data: [
+        { inventoryItemId: "item1", stockLocationId: "loc1", quantity: 0, minThreshold: 0 },
+        { inventoryItemId: "item1", stockLocationId: "loc2", quantity: 0, minThreshold: 0 },
+      ],
+    });
+  });
+
+  it("creates a service item without mapping any stock levels (labor-only billing)", async () => {
+    wireCreateItemTransaction();
+    vi.mocked(prisma.inventoryItem.create).mockResolvedValue({ id: "svc1", isService: true } as never);
+
+    const res = await POST(
+      postInventory({ action: "create_item", name: "CCTV Inspection", category: "Labor", subCategory: "Service Call", defaultRate: "150", isService: true })
+    );
+
+    expect(res.status).toBe(200);
+    expect(prisma.inventoryItem.create).toHaveBeenCalledWith({
+      data: { name: "CCTV Inspection", category: "Labor", subCategory: "Service Call", defaultRate: 150, isService: true },
+    });
+    expect(prisma.stockLocation.findMany).not.toHaveBeenCalled();
+    expect(prisma.stockLevel.createMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/inventory — create_location", () => {

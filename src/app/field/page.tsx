@@ -28,6 +28,7 @@ export interface InventoryItem {
   name: string;
   category: string;
   defaultRate: number;
+  isService: boolean;
 }
 
 interface LineItem {

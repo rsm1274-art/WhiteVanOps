@@ -21,11 +21,11 @@ function uniqueConstraintError() {
 // ---------------------------------------------------------------------------
 function makeStatefulPrisma() {
   const appliedOps = new Map<string, { opId: string; opType: string; targetKey: string; outcome: string; resultId?: string }>();
-  const jobs = new Map<string, { id: string; status: string; notes: string | null; assignedVehicleId: string | null; lineItems: Array<{ inventoryItemId: string; quantity: number }> }>();
+  const jobs = new Map<string, { id: string; status: string; notes: string | null; assignedVehicleId: string | null; lineItems: Array<{ inventoryItemId: string; quantity: number; inventoryItem: { isService: boolean } }> }>();
   const stockLevels = new Map<string, { id: string; quantity: number }>();
   const timeEntries: Array<Record<string, unknown>> = [];
 
-  jobs.set("job1", { id: "job1", status: "In Progress", notes: null, assignedVehicleId: "veh1", lineItems: [{ inventoryItemId: "item1", quantity: 2 }] });
+  jobs.set("job1", { id: "job1", status: "In Progress", notes: null, assignedVehicleId: "veh1", lineItems: [{ inventoryItemId: "item1", quantity: 2, inventoryItem: { isService: false } }] });
   stockLevels.set("loc1:item1", { id: "sl1", quantity: 10 });
 
   const client: any = {
