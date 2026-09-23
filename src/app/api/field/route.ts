@@ -1,15 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export async function GET(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
-  const personnelId = searchParams.get("personnelId");
+  // A tech only ever sees their own record and jobs, whatever the query
+  // string says — same authorization model as fieldOps.ts. Admin/superuser
+  // may view any technician.
+  const isTech = user.role === "tech";
+  const requested = searchParams.get("personnelId");
 
   try {
+    if (isTech && requested && !user.personnelId) {
+      return NextResponse.json({ error: "Your account is not linked to a personnel record" }, { status: 403 });
+    }
+    const personnelId = requested ? (isTech ? user.personnelId! : requested) : null;
+
     // No personnelId = return personnel list for the technician picker
+    // (a tech's list is just their own linked record)
     if (!personnelId) {
       const personnel = await prisma.personnel.findMany({
-        where: { role: "Technician" },
+        where: isTech ? { id: user.personnelId ?? "" } : { role: "Technician" },
         orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
       });
       return NextResponse.json({ personnel });
@@ -32,7 +46,7 @@ export async function GET(request: Request) {
           orderBy: { date: "desc" },
         },
       },
-      orderBy: { scheduledDate: "asc" },
+      orderBy: [{ scheduledDate: "asc" }, { arrivalTime: { sort: "asc", nulls: "last" } }],
     });
 
     const inventoryItems = await prisma.inventoryItem.findMany({

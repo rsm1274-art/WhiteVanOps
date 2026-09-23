@@ -2,23 +2,36 @@
 
 import { useState } from "react";
 import Modal, { ModalHeader, Field, inputCls, selectCls, SubmitButton } from "@/components/shared/Modal";
-import { NewClientForm } from "@/types";
+import { Client, NewClientForm } from "@/types";
 
 const BLANK: NewClientForm = {
   name: "",
   contactName: "",
+  contactPhone: "",
   locationAddress: "",
   paymentTerms: "Net 30",
 };
 
 interface Props {
+  /** When set, the modal edits this client instead of creating one. */
+  client?: Client;
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
 }
 
-export default function AddClientModal({ onClose, onSuccess, onError }: Props) {
-  const [form, setForm] = useState<NewClientForm>(BLANK);
+export default function AddClientModal({ client, onClose, onSuccess, onError }: Props) {
+  const [form, setForm] = useState<NewClientForm>(
+    client
+      ? {
+          name: client.name,
+          contactName: client.contactName,
+          contactPhone: client.contactPhone ?? "",
+          locationAddress: client.locationAddress,
+          paymentTerms: client.paymentTerms,
+        }
+      : BLANK
+  );
 
   const set = (k: keyof NewClientForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -27,28 +40,31 @@ export default function AddClientModal({ onClose, onSuccess, onError }: Props) {
     e.preventDefault();
     try {
       const res = await fetch("/api/clients", {
-        method: "POST",
+        method: client ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(client ? { id: client.id, ...form } : form),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to create client");
-      onSuccess("Client registered successfully!");
+      if (!res.ok) throw new Error(result.error || (client ? "Failed to update client" : "Failed to create client"));
+      onSuccess(client ? "Client updated." : "Client registered successfully!");
       onClose();
     } catch (err: unknown) {
-      onError(err instanceof Error ? err.message : "Failed to create client");
+      onError(err instanceof Error ? err.message : client ? "Failed to update client" : "Failed to create client");
     }
   };
 
   return (
     <Modal onClose={onClose}>
-      <ModalHeader title="Add New Client Account" onClose={onClose} />
+      <ModalHeader title={client ? "Edit Client Account" : "Add New Client Account"} onClose={onClose} />
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Business or Client Name">
           <input required type="text" placeholder="Apex Solutions Ltd" value={form.name} onChange={set("name")} className={inputCls} />
         </Field>
         <Field label="Contact Person Name">
           <input required type="text" placeholder="John Miller" value={form.contactName} onChange={set("contactName")} className={inputCls} />
+        </Field>
+        <Field label="Contact Phone (optional — techs can tap to call)">
+          <input type="tel" placeholder="(312) 555-0100" value={form.contactPhone} onChange={set("contactPhone")} className={inputCls} />
         </Field>
         <Field label="Location Address">
           <input required type="text" placeholder="100 Main St, Chicago IL 60601" value={form.locationAddress} onChange={set("locationAddress")} className={inputCls} />
@@ -60,7 +76,7 @@ export default function AddClientModal({ onClose, onSuccess, onError }: Props) {
             <option value="Due on Receipt">Due on Receipt</option>
           </select>
         </Field>
-        <SubmitButton label="Create Client Profile" />
+        <SubmitButton label={client ? "Save Client" : "Create Client Profile"} />
       </form>
     </Modal>
   );

@@ -4,11 +4,16 @@ import { useMemo, useState } from "react";
 import Modal, { ModalHeader, Field, inputCls, selectCls, SubmitButton } from "@/components/shared/Modal";
 import { DashboardData, NewJobForm } from "@/types";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import { submitJob } from "@/lib/jobSubmit";
+import ConflictNotice from "@/components/shared/ConflictNotice";
+import ArrivalFields from "@/components/shared/ArrivalFields";
 
 const BLANK: NewJobForm = {
   clientId: "",
   assignedVehicleId: "",
   scheduledDate: "",
+  arrivalTime: "",
+  arrivalWindow: "",
   notes: "",
   personnelIds: [],
   equipmentIds: [],
@@ -17,6 +22,8 @@ const BLANK: NewJobForm = {
 interface Props {
   data: DashboardData;
   initialValues?: Partial<NewJobForm>;
+  /** True when initialValues come from an existing job (Clone), not just a prefilled date. */
+  isClone?: boolean;
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
@@ -62,11 +69,10 @@ function CheckboxList({
   );
 }
 
-export default function AddJobModal({ data, initialValues, onClose, onSuccess, onError }: Props) {
+export default function AddJobModal({ data, initialValues, isClone = false, onClose, onSuccess, onError }: Props) {
   const [form, setForm] = useState<NewJobForm>({ ...BLANK, ...initialValues });
-  const isClone = !!initialValues;
 
-  const warnings = useMemo(
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -85,13 +91,8 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
       return;
     }
     try {
-      const res = await fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to create job");
+      const result = await submitJob("POST", { ...form }, "Failed to create job");
+      if (result === null) return; // declined the double-booking confirm — stay open
       onSuccess(isClone ? "Job cloned and scheduled!" : "Job scheduled successfully!");
       onClose();
     } catch (err: unknown) {
@@ -162,6 +163,13 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
           />
         </Field>
 
+        <ArrivalFields
+          time={form.arrivalTime}
+          window={form.arrivalWindow}
+          onTime={(v) => setForm((f) => ({ ...f, arrivalTime: v }))}
+          onWindow={(v) => setForm((f) => ({ ...f, arrivalWindow: v }))}
+        />
+
         <Field label="Scope of Work / Notes">
           <textarea
             rows={3}
@@ -186,14 +194,7 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
           onChange={(ids) => setForm((f) => ({ ...f, equipmentIds: ids }))}
         />
 
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} />
 
         <SubmitButton label={isClone ? "Schedule Cloned Job" : "Create Dispatch Assignment"} />
       </form>

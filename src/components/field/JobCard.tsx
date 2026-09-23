@@ -16,9 +16,12 @@ import {
   Wrench,
   FileText,
   Package,
+  Phone,
 } from "lucide-react";
 import { submitWrite, type WriteResult } from "@/lib/offlineWrite";
 import type { FieldJob, InventoryItem } from "@/app/field/page";
+import { arrivalLabel } from "@/lib/arrival";
+import type { JobBadge } from "@/lib/jobSeen";
 
 // A queued (not-yet-synced) write must never be followed by a server refetch —
 // the server doesn't have it yet, so the refetch would silently overwrite the
@@ -373,12 +376,18 @@ export default function JobCard({
   job,
   techId,
   inventoryItems,
+  badge = null,
+  onExpand,
   onWriteResult,
   onError,
 }: {
   job: FieldJob;
   techId: string;
   inventoryItems: InventoryItem[];
+  /** "New"/"Updated" since the tech last opened this card (see jobSeen.ts). */
+  badge?: JobBadge;
+  /** Called when the card is opened — clears the badge. */
+  onExpand?: () => void;
   onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
@@ -415,15 +424,41 @@ export default function JobCard({
                 {job.status}
               </span>
               <span className="text-[10px] text-zinc-400 font-medium">{formatDate(job.scheduledDate)}</span>
+              {arrivalLabel(job) && (
+                <span className="text-[10px] text-zinc-700 font-bold">{arrivalLabel(job)}</span>
+              )}
+              {badge && (
+                <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wide">
+                  {badge === "new" ? "New" : "Updated"}
+                </span>
+              )}
             </div>
             <h3 className="font-bold text-zinc-900 text-base leading-tight truncate">{job.client.name}</h3>
-            <div className="flex items-center gap-1 mt-1 text-xs text-zinc-500">
+            {/* Opens the phone's maps app — works off the office WiFi too. */}
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(job.client.locationAddress)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 mt-1 text-xs text-blue-700 underline decoration-blue-200 underline-offset-2"
+            >
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{job.client.locationAddress}</span>
-            </div>
+            </a>
+            {job.client.contactPhone && (
+              <a
+                href={`tel:${job.client.contactPhone}`}
+                className="flex items-center gap-1 mt-1 text-xs text-blue-700 underline decoration-blue-200 underline-offset-2"
+              >
+                <Phone className="h-3 w-3 shrink-0" />
+                <span>{job.client.contactName} · {job.client.contactPhone}</span>
+              </a>
+            )}
           </div>
           <button
-            onClick={() => setExpanded((v) => !v)}
+            onClick={() => {
+              if (!expanded) onExpand?.();
+              setExpanded((v) => !v);
+            }}
             className="p-1.5 rounded-lg hover:bg-zinc-100 transition-colors shrink-0 mt-0.5"
             aria-label={expanded ? "Collapse" : "Expand"}
           >

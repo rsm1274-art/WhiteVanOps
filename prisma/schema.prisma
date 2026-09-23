@@ -10,6 +10,7 @@ model Client {
   id              String                 @id @default(cuid())
   name            String
   contactName     String
+  contactPhone    String?
   locationAddress String
   paymentTerms    String // E.g., "Net 30", "Net 15", "Due on Receipt"
   jobs            Job[]
@@ -253,6 +254,8 @@ model Job {
   assignedVehicleId   String?
   status              String // "Scheduled", "In Progress", "Completed", "Cancelled"
   scheduledDate       DateTime
+  arrivalTime         String? // Optional "HH:MM" (24h) start time — sort key within a day, never used for conflict math
+  arrivalWindow       String? // Optional free text shown to the tech/office, e.g. "8–10 AM", "PM"
   completionDate      DateTime?
   notes               String? // Scope of work / technician instructions
   qbInvoiceSyncStatus String                @default("Pending") // "Pending", "Exported"

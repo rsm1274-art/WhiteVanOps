@@ -4,6 +4,7 @@ import { DashboardData, Job } from "@/types";
 import { JobStatusBadge } from "@/components/shared/StatusBadge";
 import { todayLocalStr, dateToLocalStr, formatDate } from "@/lib/dateUtils";
 import { getAlerts } from "@/lib/alerts";
+import { arrivalLabel, compareByDayThenArrival } from "@/lib/arrival";
 
 interface Props {
   data: DashboardData;
@@ -15,9 +16,9 @@ export default function OverviewTab({ data, onOpenSyncReview }: Props) {
   const inMaintenanceVans = data.vehicles.filter((v) => v.status === "In Maintenance").length;
 
   const today = todayLocalStr();
-  const jobsToday = data.jobs.filter(
-    (j) => dateToLocalStr(j.scheduledDate) === today && j.status !== "Cancelled"
-  );
+  const jobsToday = data.jobs
+    .filter((j) => dateToLocalStr(j.scheduledDate) === today && j.status !== "Cancelled")
+    .sort(compareByDayThenArrival<Job>(dateToLocalStr));
 
   const deployedVansToday = new Set(
     jobsToday.map((j) => j.assignedVehicleId).filter(Boolean)
@@ -100,6 +101,9 @@ export default function OverviewTab({ data, onOpenSyncReview }: Props) {
                   <div>
                     <span className="text-xs font-bold uppercase text-zinc-400">
                       JOB #{job.id.substring(0, 8)}
+                      {arrivalLabel(job) && (
+                        <span className="ml-2 normal-case font-mono text-zinc-600">{arrivalLabel(job)}</span>
+                      )}
                     </span>
                     <h4 className="text-sm font-bold mt-0.5">{job.client.name}</h4>
                     <p className="text-xs text-zinc-500 mt-1 flex items-center gap-2">

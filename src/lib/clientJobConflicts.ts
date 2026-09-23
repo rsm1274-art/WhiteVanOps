@@ -4,11 +4,20 @@ import { dateToLocalStr, parseLocalDate } from "@/lib/dateUtils";
 /**
  * Client-side mirror of src/lib/jobConflicts.ts — runs entirely against the
  * already-loaded DashboardData so the Add/Edit Job modals can show a live
- * warning as the user picks a date/vehicle/crew/equipment, before they ever
- * submit. This is advisory only: the server (checkJobConflicts) remains the
- * source of truth and re-validates on save, so a stale warning here can
- * never let a real conflict through.
+ * notice as the user picks a date/vehicle/crew/equipment, before they ever
+ * submit. The server (checkJobConflicts) remains the source of truth and
+ * re-validates on save, so a stale notice here can never let a real
+ * conflict through.
+ *
+ * Same split as the server: `blocking` (open repair, time off, equipment
+ * already booked) will be refused on save; `advisory` (a tech or van
+ * already booked that day) is allowed after a "Book anyway?" confirm.
  */
+export interface ClientConflicts {
+  blocking: string[];
+  advisory: string[];
+}
+
 export function findClientSideConflicts(params: {
   data: DashboardData;
   scheduledDate: string; // yyyy-mm-dd, from a <input type="date">
@@ -16,11 +25,12 @@ export function findClientSideConflicts(params: {
   personnelIds?: string[];
   equipmentIds?: string[];
   excludeJobId?: string;
-}): string[] {
+}): ClientConflicts {
   const { data, scheduledDate, assignedVehicleId, personnelIds = [], equipmentIds = [], excludeJobId } = params;
-  if (!scheduledDate) return [];
+  const blocking: string[] = [];
+  const advisory: string[] = [];
+  if (!scheduledDate) return { blocking, advisory };
 
-  const warnings: string[] = [];
   const target = parseLocalDate(`${scheduledDate}T12:00:00`);
   const isSameDay = (jobDate: string) => dateToLocalStr(jobDate) === scheduledDate;
 
@@ -32,11 +42,11 @@ export function findClientSideConflicts(params: {
     const vehicle = data.vehicles.find((v) => v.id === assignedVehicleId);
     const openRepair = vehicle?.repairRecords.find((r) => !r.resolvedDate);
     if (openRepair) {
-      warnings.push(`Vehicle is currently out of service for repair: "${openRepair.description}".`);
+      blocking.push(`Vehicle is currently out of service for repair: "${openRepair.description}".`);
     }
     const conflictingJob = activeJobsThatDay.find((j) => j.assignedVehicleId === assignedVehicleId);
     if (conflictingJob) {
-      warnings.push(`Vehicle is already booked this day for ${conflictingJob.client.name}.`);
+      advisory.push(`Vehicle is already booked this day for ${conflictingJob.client.name}.`);
     }
   }
 
@@ -47,11 +57,11 @@ export function findClientSideConflicts(params: {
       (t) => parseLocalDate(t.startDate) <= target && parseLocalDate(t.endDate) >= target
     );
     if (onLeave) {
-      warnings.push(`${name} is on ${onLeave.type} leave this day.`);
+      blocking.push(`${name} is on ${onLeave.type} leave this day.`);
     }
     const conflictingJob = activeJobsThatDay.find((j) => j.assignments.some((a) => a.personnelId === personnelId));
     if (conflictingJob) {
-      warnings.push(`${name} is already assigned this day to ${conflictingJob.client.name}.`);
+      advisory.push(`${name} is already assigned this day to ${conflictingJob.client.name}.`);
     }
   }
 
@@ -60,13 +70,13 @@ export function findClientSideConflicts(params: {
     const label = eq?.name ?? "Selected equipment";
     const openRepair = eq?.repairRecords.find((r) => !r.resolvedDate);
     if (openRepair) {
-      warnings.push(`${label} is currently out of service for repair: "${openRepair.description}".`);
+      blocking.push(`${label} is currently out of service for repair: "${openRepair.description}".`);
     }
     const conflictingJob = activeJobsThatDay.find((j) => j.equipment.some((je) => je.equipmentId === equipmentId));
     if (conflictingJob) {
-      warnings.push(`${label} is already assigned this day to ${conflictingJob.client.name}.`);
+      blocking.push(`${label} is already assigned this day to ${conflictingJob.client.name}.`);
     }
   }
 
-  return warnings;
+  return { blocking, advisory };
 }

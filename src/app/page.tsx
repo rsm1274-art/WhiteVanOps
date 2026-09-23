@@ -154,6 +154,8 @@ export default function Dashboard() {
   const [adjustStockCtx, setAdjustStockCtx] = useState<AdjustStockContext | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [cloneSource, setCloneSource] = useState<Job | null>(null);
+  // Prefilled date when "Schedule job" is opened from the Scheduling tab.
+  const [newJobDate, setNewJobDate] = useState<string | null>(null);
   const [selectedRecurringJob, setSelectedRecurringJob] = useState<RecurringJobTemplate | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedFollowUp, setSelectedFollowUp] = useState<ClientFollowUp | null>(null);
@@ -193,6 +195,7 @@ export default function Dashboard() {
     setAdjustStockCtx(null);
     setSelectedJob(null);
     setCloneSource(null);
+    setNewJobDate(null);
     setSelectedRecurringJob(null);
     setSelectedClient(null);
     setSelectedFollowUp(null);
@@ -499,13 +502,19 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(result.error || "Failed to generate jobs");
       const createdCount: number = result.created?.length ?? 0;
       const skippedCount: number = result.skipped?.length ?? 0;
+      // Distinct dates with a same-day double-booking (the job was still created).
+      const doubleBookedDates = new Set((result.warnings ?? []).map((w: { date: string }) => w.date)).size;
+      const doubleBookedNote =
+        doubleBookedDates > 0
+          ? ` ${doubleBookedDates} date${doubleBookedDates !== 1 ? "s share" : " shares"} a tech or van with another job that day — check the schedule.`
+          : "";
       if (createdCount === 0 && skippedCount === 0) {
         handleSuccess("No new occurrences to generate — check the end date or last generated date.");
       } else if (skippedCount === 0) {
-        handleSuccess(`Generated ${createdCount} job${createdCount !== 1 ? "s" : ""}.`);
+        handleSuccess(`Generated ${createdCount} job${createdCount !== 1 ? "s" : ""}.${doubleBookedNote}`);
       } else {
         handleSuccess(
-          `Generated ${createdCount} job${createdCount !== 1 ? "s" : ""}; skipped ${skippedCount} occurrence${skippedCount !== 1 ? "s" : ""} due to conflicts.`
+          `Generated ${createdCount} job${createdCount !== 1 ? "s" : ""}; skipped ${skippedCount} occurrence${skippedCount !== 1 ? "s" : ""} due to conflicts.${doubleBookedNote}`
         );
       }
     } catch (err: unknown) {
@@ -948,6 +957,7 @@ export default function Dashboard() {
             <CRMTab
               data={data}
               onAddClient={() => setActiveModal("addClient")}
+              onEditClient={(client) => { setSelectedClient(client); setActiveModal("editClient"); }}
               onAddJob={() => setActiveModal("addJob")}
               onStartJob={startJob}
               onCompleteJob={requestCompleteJob}
@@ -970,7 +980,13 @@ export default function Dashboard() {
             />
           )}
 
-          {effectiveTab === "scheduling" && <SchedulingTab data={data} />}
+          {effectiveTab === "scheduling" && (
+            <SchedulingTab
+              data={data}
+              onScheduleJob={(date) => { setNewJobDate(date); setActiveModal("addJob"); }}
+              onEditJob={(job) => { setSelectedJob(job); setActiveModal("editJob"); }}
+            />
+          )}
 
           {effectiveTab === "personnel" && (
             <PersonnelTab
@@ -1057,6 +1073,9 @@ export default function Dashboard() {
       {activeModal === "addClient" && (
         <AddClientModal onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
       )}
+      {activeModal === "editClient" && selectedClient && (
+        <AddClientModal client={selectedClient} onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
+      )}
       {activeModal === "addPersonnel" && (
         <AddPersonnelModal onClose={closeModal} onSuccess={handleSuccess} onError={handleError} />
       )}
@@ -1132,7 +1151,10 @@ export default function Dashboard() {
             personnelIds: cloneSource.assignments.map((a) => a.personnelId),
             equipmentIds: cloneSource.equipment.map((e) => e.equipmentId),
             scheduledDate: "",
-          } : undefined}
+            arrivalTime: cloneSource.arrivalTime ?? "",
+            arrivalWindow: cloneSource.arrivalWindow ?? "",
+          } : newJobDate ? { scheduledDate: newJobDate } : undefined}
+          isClone={!!cloneSource}
           onClose={closeModal}
           onSuccess={handleSuccess}
           onError={handleError}

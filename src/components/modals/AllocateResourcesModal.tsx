@@ -5,6 +5,8 @@ import Modal, { ModalHeader, Field } from "@/components/shared/Modal";
 import { DashboardData, Job, JobPartLine, AddPartsContext } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import { submitJob } from "@/lib/jobSubmit";
+import ConflictNotice from "@/components/shared/ConflictNotice";
 
 interface Props {
   context: AddPartsContext;
@@ -58,7 +60,7 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
   // Completed jobs have locked crew server-side; reopen the job to change it.
   const isCompleted = job.status === "Completed";
 
-  const warnings = useMemo(
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -93,23 +95,23 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
       onError("At least one technician must be assigned.");
       return;
     }
+    const originalCrew = job.assignments.map((a) => a.personnelId).sort().join(",");
+    const crewChanged = [...personnelIds].sort().join(",") !== originalCrew;
     try {
-      const res = await fetch("/api/jobs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const result = await submitJob(
+        "PUT",
+        {
           jobId: context.jobId,
           lineItems: parts,
           equipmentIds: eqIds,
           // Crew is locked once a job is Completed — omit it so the server
-          // doesn't reject the materials/equipment save.
-          ...(isCompleted ? {} : { personnelIds }),
-        }),
-      });
-      if (!res.ok) {
-        const result = await res.json();
-        throw new Error(result.error || "Failed to save job allocations");
-      }
+          // doesn't reject the materials/equipment save. Also omit it when
+          // unchanged, so an already-accepted double-booking isn't re-asked.
+          ...(isCompleted || !crewChanged ? {} : { personnelIds }),
+        },
+        "Failed to save job allocations"
+      );
+      if (result === null) return;
       onSuccess("Job materials and equipment allocations saved.");
       onClose();
     } catch (err: unknown) {
@@ -230,14 +232,7 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
           <CheckboxList items={eqItems} selected={eqIds} onChange={setEqIds} />
         </Field>
 
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} />
 
         <div className="flex justify-end pt-2 border-t border-zinc-100">
           <button

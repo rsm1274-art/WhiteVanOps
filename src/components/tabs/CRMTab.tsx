@@ -1,10 +1,61 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Copy, Pencil, Repeat, Play, Pause, Trash2, RotateCw, StickyNote, CalendarCheck, Check, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Pencil, Repeat, Play, Pause, Trash2, RotateCw, StickyNote, CalendarCheck, Check, ChevronDown, ChevronUp, MoreHorizontal, Phone } from "lucide-react";
 import { Client, ClientFollowUp, DashboardData, Job, JobStatus, RecurringJobTemplate } from "@/types";
 import { JobStatusBadge, SyncStatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate, todayLocalStr, dateToLocalStr } from "@/lib/dateUtils";
+import { arrivalLabel } from "@/lib/arrival";
+
+type DateRange = "All" | "Today" | "This Week";
+
+/** yyyy-mm-dd bounds (Mon–Sun) of the current local week. */
+function currentWeekBounds(): [string, string] {
+  const now = new Date();
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7), 12);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6, 12);
+  return [dateToLocalStr(monday.toISOString()), dateToLocalStr(sunday.toISOString())];
+}
+
+/** "⋯" overflow menu for the less-used job row actions. */
+function RowMenu({ items }: { items: { label: string; onClick: () => void; danger?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="More actions"
+        className="p-1.5 border border-zinc-300 hover:bg-zinc-50 rounded"
+      >
+        <MoreHorizontal className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 z-20 min-w-[8rem] bg-white border border-zinc-200 rounded shadow-lg py-1 text-left">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => { setOpen(false); item.onClick(); }}
+              className={`block w-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-zinc-50 text-left ${
+                item.danger ? "text-red-700" : "text-zinc-700"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ALL_STATUSES: JobStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
 
@@ -17,6 +68,7 @@ const FREQUENCY_LABELS: Record<string, string> = {
 interface Props {
   data: DashboardData;
   onAddClient: () => void;
+  onEditClient: (client: Client) => void;
   onAddJob: () => void;
   onStartJob: (jobId: string) => void;
   onCompleteJob: (jobId: string) => void;
@@ -42,6 +94,7 @@ interface Props {
 export default function CRMTab({
   data,
   onAddClient,
+  onEditClient,
   onAddJob,
   onStartJob,
   onCompleteJob,
@@ -63,14 +116,28 @@ export default function CRMTab({
   onDeleteFollowUp,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<JobStatus | "All">("All");
+  const [dateRange, setDateRange] = useState<DateRange>("All");
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
   const today = todayLocalStr();
 
-  const filteredJobs =
-    statusFilter === "All"
-      ? data.jobs
-      : data.jobs.filter((j) => j.status === statusFilter);
+  const [weekStart, weekEnd] = currentWeekBounds();
+  const inRange = (j: Job) => {
+    const d = dateToLocalStr(j.scheduledDate);
+    if (dateRange === "Today") return d === today;
+    if (dateRange === "This Week") return d >= weekStart && d <= weekEnd;
+    return true;
+  };
+
+  // Newest day first (as the API returns them), then by arrival time within a day.
+  const filteredJobs = data.jobs
+    .filter((j) => (statusFilter === "All" || j.status === statusFilter) && inRange(j))
+    .sort((a, b) => {
+      const da = dateToLocalStr(a.scheduledDate);
+      const db = dateToLocalStr(b.scheduledDate);
+      if (da !== db) return da < db ? 1 : -1;
+      return (a.arrivalTime || "99:99").localeCompare(b.arrivalTime || "99:99");
+    });
 
   return (
     <div className="space-y-8">
@@ -116,10 +183,28 @@ export default function CRMTab({
               const expanded = expandedClientId === c.id;
               return (
                 <div key={c.id} className="p-4 border border-zinc-100 rounded bg-zinc-50">
-                  <h5 className="font-bold text-sm">{c.name}</h5>
+                  <div className="flex items-start justify-between gap-2">
+                    <h5 className="font-bold text-sm">{c.name}</h5>
+                    <button
+                      onClick={() => onEditClient(c)}
+                      title="Edit client"
+                      className="p-1 text-zinc-400 hover:text-zinc-800"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
                   <span className="text-[10px] text-zinc-400 block font-semibold mt-0.5">
                     Contact: {c.contactName}
                   </span>
+                  {c.contactPhone && (
+                    <a
+                      href={`tel:${c.contactPhone}`}
+                      className="text-[11px] text-zinc-600 hover:text-zinc-900 inline-flex items-center gap-1 mt-0.5"
+                    >
+                      <Phone className="h-3 w-3" />
+                      {c.contactPhone}
+                    </a>
+                  )}
                   <p className="text-xs text-zinc-500 mt-2">{c.locationAddress}</p>
                   <div className="mt-3 pt-2 border-t border-zinc-100 flex justify-between items-center text-xs">
                     <span className="text-zinc-400">Terms:</span>
@@ -310,8 +395,8 @@ export default function CRMTab({
         )}
       </div>
 
-      {/* Jobs table */}
-      <div className="bg-white border border-zinc-200 rounded overflow-hidden">
+      {/* Jobs table — no overflow-hidden, or the row "⋯" menus get clipped */}
+      <div className="bg-white border border-zinc-200 rounded">
         {/* Filter toolbar */}
         <div className="flex items-center gap-2 px-6 py-3 border-b border-zinc-200 bg-zinc-50">
           <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mr-2">
@@ -328,6 +413,20 @@ export default function CRMTab({
               }`}
             >
               {s}
+            </button>
+          ))}
+          <span className="w-px h-4 bg-zinc-300 mx-2" />
+          {(["All", "Today", "This Week"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setDateRange(r)}
+              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors ${
+                dateRange === r
+                  ? "bg-zinc-900 text-white"
+                  : "border border-zinc-300 text-zinc-600 hover:bg-zinc-100"
+              }`}
+            >
+              {r === "All" ? "Any Date" : r}
             </button>
           ))}
           <span className="ml-auto text-[10px] text-zinc-400">{filteredJobs.length} jobs</span>
@@ -394,6 +493,9 @@ export default function CRMTab({
                   </td>
                   <td className="py-4 px-6 text-zinc-600 align-top">
                     {formatDate(job.scheduledDate)}
+                    {arrivalLabel(job) && (
+                      <span className="block text-xs text-zinc-500 font-mono mt-0.5 whitespace-nowrap">{arrivalLabel(job)}</span>
+                    )}
                   </td>
                   <td className="py-4 px-6 align-top">
                     <JobStatusBadge status={job.status} />
@@ -407,30 +509,15 @@ export default function CRMTab({
                   </td>
                   <td className="py-4 px-6 text-right align-top">
                     <div className="flex items-center justify-end gap-2 flex-wrap">
-                      <button
-                        onClick={() => onOpenCosts(job)}
-                        className="px-2.5 py-1 text-xs border border-zinc-300 bg-zinc-50 hover:bg-zinc-100 font-bold uppercase tracking-wide rounded"
-                        title="View job cost summary"
-                      >
-                        Costs
-                      </button>
-
-                      <button
-                        onClick={() => onCloneJob(job)}
-                        className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide rounded inline-flex items-center gap-1"
-                        title="Clone this job for a new date"
-                      >
-                        <Copy className="h-3 w-3" />
-                        Clone
-                      </button>
-
-                      <button
-                        onClick={() => onReopenJob(job.id)}
-                        className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide text-blue-700 hover:text-blue-900 rounded inline-flex items-center gap-1"
-                        title="Re-open this completed job"
-                      >
-                        Re-open
-                      </button>
+                      {job.status === "Completed" && (
+                        <button
+                          onClick={() => onReopenJob(job.id)}
+                          className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide text-blue-700 hover:text-blue-900 rounded inline-flex items-center gap-1"
+                          title="Re-open this completed job"
+                        >
+                          Re-open
+                        </button>
+                      )}
 
                       {job.status === "Scheduled" && (
                         <button
@@ -446,7 +533,7 @@ export default function CRMTab({
                           <button
                             onClick={() => onEditJob(job)}
                             className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide rounded inline-flex items-center gap-1"
-                            title="Edit client, vehicle, date, or notes"
+                            title="Edit client, vehicle, date, arrival, or notes"
                           >
                             <Pencil className="h-3 w-3" />
                             Edit
@@ -463,14 +550,18 @@ export default function CRMTab({
                           >
                             Complete
                           </button>
-                          <button
-                            onClick={() => onCancelJob(job.id)}
-                            className="px-2.5 py-1 text-xs border border-red-200 hover:bg-red-50 text-red-700 font-bold uppercase tracking-wide rounded"
-                          >
-                            Cancel
-                          </button>
                         </>
                       )}
+
+                      <RowMenu
+                        items={[
+                          { label: "Costs", onClick: () => onOpenCosts(job) },
+                          { label: "Clone", onClick: () => onCloneJob(job) },
+                          ...(job.status !== "Completed" && job.status !== "Cancelled"
+                            ? [{ label: "Cancel Job", onClick: () => onCancelJob(job.id), danger: true }]
+                            : []),
+                        ]}
+                      />
                     </div>
                   </td>
                 </tr>

@@ -44,7 +44,7 @@ Your login session is saved by the browser. On future visits to the same device 
 
 ## Switching Technicians
 
-If someone else needs to use the same device, tap the **Switch** button in the top-right corner of the header. This returns to the name selection screen.
+If someone else needs to use the same device, tap the **Switch** button in the top-right corner of the header. This returns to the name selection screen. A technician login only ever sees its own name and jobs — to use the device as another tech, sign out and sign in with that tech's account.
 
 ---
 
@@ -60,10 +60,23 @@ Once you've selected your name, you see a list of all jobs assigned to you.
 | Done | Jobs that are Completed |
 | All | Every job regardless of status |
 
+Jobs are grouped by day, each group with a header you can tap to open or close:
+
+| Group | What's in it |
+|---|---|
+| Today | Today's jobs, in arrival-time order. Open by default. |
+| Upcoming | Future jobs, soonest first. Open by default only when you have nothing today. |
+| Overdue (Active filter) / Earlier (Done and All filters) | Jobs from past days, most recent first. Overdue is open by default and shown in red. |
+
+A closed group shows how many of its jobs changed (e.g. "2 changed").
+
 Each job card shows:
-- The client's name and job address
+- The client's name
+- The job address — **tap it to open it in your phone's maps app** (this works away from the office WiFi too)
+- The client contact and phone number, if the office entered one — **tap it to call**
 - The current status (Scheduled, In Progress, Completed)
-- The scheduled date
+- The scheduled date, and the arrival time or window (e.g. "8:00 AM · 8–10 AM") if the office set one
+- A blue **New** or **Updated** badge if the office assigned or changed the job since you last opened it
 - Your assigned vehicle
 - Your crew (other techs on the same job)
 - A count of logged time entries and materials, if any
@@ -89,6 +102,8 @@ Tap the **down arrow (v)** on the right side of any job card to expand it. The e
 - Buttons to open the Log Time, Notes, and Materials & Services panels
 
 Tap the **up arrow (^)** to collapse the card again.
+
+Opening a card clears its **New**/**Updated** badge. Your own changes (status, notes, time, materials) never make a card show **Updated**. Badges only appear after you refresh on the office WiFi — the office can't push changes to your phone, so refresh at the start of the day and when you're back at the office.
 
 ---
 
@@ -327,6 +342,8 @@ Make sure your phone's browser zoom is set to 100%. On most phones, you can rese
 | Add a note | Expand card → tap **Notes** → type → Save |
 | Record materials/services | Expand card → tap **Materials & Services** → Add Line Item → Save |
 | Refresh job list | Tap the circular arrow in the header |
+| See what the office changed | Look for the blue **New** / **Updated** badges after refreshing |
+| Get directions / call the customer | Tap the address / phone number on the job card |
 | Export a backup of your work | Tap the export button next to the refresh icon |
 | Switch to another tech | Tap **Switch** in the header |
 

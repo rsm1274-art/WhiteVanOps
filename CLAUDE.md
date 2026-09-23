@@ -275,6 +275,26 @@ without re-deriving why it existed here first.
 - Conversion: `POST /api/license` with `{ action: "unlock-trial", licenseKey }` (superuser-only) verifies a signed payload against **this machine's real `machineIdSync()`** (never the payload's claimed value) and, if valid, writes `trial-unlock.json` (its presence permanently defeats the lock). Keys are minted vendor-side via `node scripts/license-manager.js --unlock-trial --machine <id>` (no `--tier` flag — there is nothing left to select).
 - Full design/build history: `docs/superpowers/specs/2026-07-13-trial-demo-installer-design.md` and `docs/superpowers/plans/2026-07-13-trial-demo-installer.md` (both predate the v2.0 tier removal — read with that in mind). Customer-facing build/conversion steps: `MANUAL_Setup_Installation.md` §6.4.
 
+### Dispatch: day-level conflicts, blocking vs. advisory (2026-09-23)
+
+`checkJobConflicts()` (`src/lib/jobConflicts.ts`) returns `{ error, warnings }`, not a string.
+**Blocking** (`error`, HTTP 400): open vehicle/equipment repair, technician time off, equipment
+already booked that day. **Advisory** (`warnings`): a tech or van already booked that day — the
+business runs several short jobs per tech per day, so this is normal. `/api/jobs` answers advisory
+conflicts with **409 `{ needsConfirmation, warnings }`** unless the body carries
+`confirmDoubleBooking: true`; `src/lib/jobSubmit.ts`'s `submitJob()` does the "Book anyway?"
+round-trip for the three job modals. PUT only re-asks when the van, date, or crew actually changed
+(the modals send those fields only when changed). Recurring generation creates advisory-conflict
+occurrences and reports them under `warnings`. `src/lib/clientJobConflicts.ts` mirrors the same
+split (`{ blocking, advisory }`) for the live modal notice. **Conflicts stay day-level** —
+`Job.arrivalTime` ("HH:MM") / `Job.arrivalWindow` (free text) only order and label a day's jobs
+(`src/lib/arrival.ts`); don't add hour-level conflict math on top of them.
+
+`GET /api/field` checks the session: a tech is forced to their own `personnelId` (and sees only
+their own record in the picker), whatever the query string says. The field page's New/Updated
+badges are client-only (`src/lib/jobSeen.ts`, localStorage keyed per tech, server `updatedAt`
+only) — see the file comment for how the tech's own writes are kept from badging.
+
 ### Data flow (dashboard)
 
 `/api/dashboard` fetches all entities in a single parallel `Promise.all` and returns them as `DashboardData`. The `useDashboardData` hook in `src/hooks/useDashboardData.ts` fetches this on mount and exposes a `reload()` callback. After any mutation, components call `onSuccess()` which calls `reload()` to refresh everything. **There is no per-entity caching or optimistic UI** — every action does a full dashboard refresh.
@@ -311,7 +331,7 @@ without re-deriving why it existed here first.
 
 ## Testing
 
-Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`, `license`, `invoice`, `quote`, `fieldAccessUrl`, `opId`, `opOrdering`, `fieldOps`, `fieldExport`, `storagePressure`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
+Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`, `license`, `invoice`, `quote`, `fieldAccessUrl`, `opId`, `opOrdering`, `fieldOps`, `fieldExport`, `storagePressure`, `arrival`, `fieldGroups`, `jobSeen`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
 
 - **`src/lib/db.ts` opens a real `pg.Pool` at import time and throws without `DATABASE_URL`** — any module that imports it (like `jobConflicts.ts`) needs `@/lib/db` mocked with `vi.mock`, never imported for real, in unit tests.
 - **`next/headers`'s `cookies()` is request-scoped** and throws outside a real request — mock it (see `auth.test.ts`) when testing code that calls `getSessionUser()`. `NextResponse` itself (from `next/server`) works fine unmocked — it's just a `Response` subclass.

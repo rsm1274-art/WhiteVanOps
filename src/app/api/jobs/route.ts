@@ -2,19 +2,39 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { checkJobConflicts } from "@/lib/jobConflicts";
+import { checkJobConflicts, JobConflictResult } from "@/lib/jobConflicts";
+import { normalizeArrivalTime } from "@/lib/arrival";
 
-// POST: Create a new job with double-booking validation for vehicles, personnel, and equipment
+// A blocking conflict → 400. A same-day tech/van double-booking → 409 with
+// `warnings` unless the caller re-sent with `confirmDoubleBooking: true`
+// (the modal's "Book anyway?"). Returns null when the save may proceed.
+function conflictResponse(result: JobConflictResult, confirmed: boolean) {
+  if (result.error) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (result.warnings.length > 0 && !confirmed) {
+    return NextResponse.json(
+      { error: result.warnings.join(" "), warnings: result.warnings, needsConfirmation: true },
+      { status: 409 }
+    );
+  }
+  return null;
+}
+
+// POST: Create a new job with availability validation for vehicles, personnel, and equipment
 export async function POST(request: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
 
   try {
-    const { clientId, assignedVehicleId, scheduledDate, notes, personnelIds, equipmentIds } = await request.json();
+    const { clientId, assignedVehicleId, scheduledDate, arrivalTime, arrivalWindow, notes, personnelIds, equipmentIds, confirmDoubleBooking } = await request.json();
 
     if (!clientId || !scheduledDate || !personnelIds || !Array.isArray(personnelIds)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    const time = normalizeArrivalTime(arrivalTime);
+    if (time === undefined) {
+      return NextResponse.json({ error: "Arrival time must be HH:MM." }, { status: 400 });
     }
 
     const targetDate = new Date(scheduledDate);
@@ -25,9 +45,8 @@ export async function POST(request: Request) {
       personnelIds,
       equipmentIds: Array.isArray(equipmentIds) ? equipmentIds : [],
     });
-    if (conflict) {
-      return NextResponse.json({ error: conflict }, { status: 400 });
-    }
+    const blocked = conflictResponse(conflict, confirmDoubleBooking === true);
+    if (blocked) return blocked;
 
     // Create Job and Assignments inside a transaction
     const newJob = await prisma.$transaction(async (tx) => {
@@ -37,6 +56,8 @@ export async function POST(request: Request) {
           assignedVehicleId: assignedVehicleId || null,
           status: "Scheduled",
           scheduledDate: targetDate,
+          arrivalTime: time,
+          arrivalWindow: typeof arrivalWindow === "string" && arrivalWindow.trim() ? arrivalWindow.trim() : null,
           notes: notes || null,
         },
       });
@@ -72,7 +93,7 @@ export async function PUT(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { jobId, status, clientId, assignedVehicleId, scheduledDate, notes, lineItems, equipmentIds, personnelIds } = await request.json();
+    const { jobId, status, clientId, assignedVehicleId, scheduledDate, arrivalTime, arrivalWindow, notes, lineItems, equipmentIds, personnelIds, confirmDoubleBooking } = await request.json();
 
     if (!jobId) {
       return NextResponse.json({ error: "Missing job ID" }, { status: 400 });
@@ -84,7 +105,7 @@ export async function PUT(request: Request) {
 
     // Techs may only update status; block all other field changes
     if (user.role === "tech") {
-      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined || personnelIds !== undefined) {
+      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || arrivalTime !== undefined || arrivalWindow !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined || personnelIds !== undefined) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       // Verify they are assigned to this job. A tech account not linked to a
@@ -128,9 +149,17 @@ export async function PUT(request: Request) {
         equipmentIds: effectiveEquipmentIds,
         excludeJobId: jobId,
       });
-      if (conflict) {
-        return NextResponse.json({ error: conflict }, { status: 400 });
-      }
+      // An equipment-only change (Resources panel with crew untouched) can't
+      // create a new tech/van double-booking, so it never needs a re-confirm
+      // for one the office already accepted.
+      const bookingChanged = assignedVehicleId !== undefined || !!scheduledDate || Array.isArray(personnelIds);
+      const blocked = conflictResponse(conflict, confirmDoubleBooking === true || !bookingChanged);
+      if (blocked) return blocked;
+    }
+
+    const time = arrivalTime !== undefined ? normalizeArrivalTime(arrivalTime) : null;
+    if (time === undefined) {
+      return NextResponse.json({ error: "Arrival time must be HH:MM." }, { status: 400 });
     }
 
     // If status is transitioning FROM Completed to something else
@@ -234,6 +263,8 @@ export async function PUT(request: Request) {
       if (clientId) dataUpdate.clientId = clientId;
       if (assignedVehicleId !== undefined) dataUpdate.assignedVehicleId = assignedVehicleId || null;
       if (scheduledDate) dataUpdate.scheduledDate = new Date(scheduledDate);
+      if (arrivalTime !== undefined) dataUpdate.arrivalTime = time;
+      if (arrivalWindow !== undefined) dataUpdate.arrivalWindow = typeof arrivalWindow === "string" && arrivalWindow.trim() ? arrivalWindow.trim() : null;
       if (notes !== undefined) dataUpdate.notes = notes || null;
 
       if (lineItems && Array.isArray(lineItems)) {

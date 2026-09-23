@@ -5,6 +5,9 @@ import Modal, { ModalHeader, Field, inputCls, selectCls, SubmitButton } from "@/
 import { DashboardData, Job } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import { submitJob } from "@/lib/jobSubmit";
+import ConflictNotice from "@/components/shared/ConflictNotice";
+import ArrivalFields from "@/components/shared/ArrivalFields";
 
 interface Props {
   job: Job;
@@ -18,10 +21,12 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
   const [clientId, setClientId] = useState(job.clientId);
   const [assignedVehicleId, setAssignedVehicleId] = useState(job.assignedVehicleId ?? "");
   const [scheduledDate, setScheduledDate] = useState(dateToLocalStr(job.scheduledDate));
+  const [arrivalTime, setArrivalTime] = useState(job.arrivalTime ?? "");
+  const [arrivalWindow, setArrivalWindow] = useState(job.arrivalWindow ?? "");
   const [notes, setNotes] = useState(job.notes ?? "");
   const [saving, setSaving] = useState(false);
 
-  const warnings = useMemo(
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -38,19 +43,23 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch("/api/jobs", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // Send van/date only when changed: an unchanged booking was already
+      // accepted, so editing notes or the arrival time shouldn't re-run the
+      // availability checks (or re-ask to confirm a known double-booking).
+      const result = await submitJob(
+        "PUT",
+        {
           jobId: job.id,
           clientId,
-          assignedVehicleId,
-          scheduledDate,
+          ...(assignedVehicleId !== (job.assignedVehicleId ?? "") ? { assignedVehicleId } : {}),
+          ...(scheduledDate !== dateToLocalStr(job.scheduledDate) ? { scheduledDate } : {}),
+          arrivalTime,
+          arrivalWindow,
           notes,
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Failed to update job");
+        },
+        "Failed to update job"
+      );
+      if (result === null) return;
       onSuccess("Job details updated.");
       onClose();
     } catch (err: unknown) {
@@ -110,6 +119,8 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
           />
         </Field>
 
+        <ArrivalFields time={arrivalTime} window={arrivalWindow} onTime={setArrivalTime} onWindow={setArrivalWindow} />
+
         <Field label="Scope of Work / Notes">
           <textarea
             rows={3}
@@ -124,14 +135,7 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
           Crew and equipment assignments are managed from the <span className="font-semibold text-zinc-700">Resources</span> action on this job.
         </div>
 
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} />
 
         <SubmitButton label={saving ? "Saving…" : "Save Job Details"} />
       </form>

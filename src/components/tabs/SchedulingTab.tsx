@@ -1,32 +1,84 @@
 "use client";
 
 import { useState } from "react";
-import { DashboardData } from "@/types";
-import { formatDate, todayLocalStr, dateToLocalStr } from "@/lib/dateUtils";
+import { DashboardData, Job } from "@/types";
+import { formatDate, todayLocalStr, dateToLocalStr, parseLocalDate } from "@/lib/dateUtils";
+import { arrivalLabel, compareByDayThenArrival } from "@/lib/arrival";
 
 interface Props {
   data: DashboardData;
+  onScheduleJob: (date: string) => void;
+  onEditJob: (job: Job) => void;
 }
 
-export default function SchedulingTab({ data }: Props) {
+/** Right-hand status cell: job chips when booked, else an out-of-service/leave label, else Available. */
+function StatusCell({
+  jobs,
+  unavailable,
+  onEditJob,
+}: {
+  jobs: Job[];
+  unavailable: string | null;
+  onEditJob: (job: Job) => void;
+}) {
+  if (jobs.length === 0) {
+    return unavailable ? (
+      <span className="text-xs text-red-700 font-semibold uppercase bg-red-50 px-2 py-1 rounded">{unavailable}</span>
+    ) : (
+      <span className="text-xs text-emerald-600 font-semibold uppercase bg-emerald-50 px-2 py-1 rounded">Available</span>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      {unavailable && (
+        <div className="text-[10px] text-red-700 font-semibold uppercase">{unavailable}</div>
+      )}
+      {jobs.map((j) => {
+        const when = arrivalLabel(j);
+        return (
+          <button
+            key={j.id}
+            type="button"
+            onClick={() => onEditJob(j)}
+            title="Edit job"
+            className="block w-full text-right text-xs bg-zinc-100 hover:bg-zinc-200 px-2 py-1 rounded font-bold"
+          >
+            {when && <span className="block font-mono font-medium text-[10px] text-zinc-500 whitespace-nowrap">{when}</span>}
+            {j.client.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function SchedulingTab({ data, onScheduleJob, onEditJob }: Props) {
   const [dateFilter, setDateFilter] = useState(todayLocalStr());
 
-  const filteredJobs = dateFilter
-    ? data.jobs.filter(
-        (j) =>
-          dateToLocalStr(j.scheduledDate) === dateFilter &&
-          j.status !== "Cancelled" &&
-          j.status !== "Completed"
-      )
-    : data.jobs.filter((j) => j.status !== "Cancelled" && j.status !== "Completed");
+  const filteredJobs = data.jobs
+    .filter(
+      (j) =>
+        (!dateFilter || dateToLocalStr(j.scheduledDate) === dateFilter) &&
+        j.status !== "Cancelled" &&
+        j.status !== "Completed"
+    )
+    .sort(compareByDayThenArrival<Job>(dateToLocalStr));
 
-  const assignedVehicleIds = new Set(filteredJobs.map((j) => j.assignedVehicleId).filter(Boolean));
-  const assignedPersonnelIds = new Set(
-    filteredJobs.flatMap((j) => j.assignments.map((a) => a.personnelId))
-  );
-  const assignedEquipmentIds = new Set(
-    filteredJobs.flatMap((j) => j.equipment.map((e) => e.equipmentId))
-  );
+  const noVanCount = filteredJobs.filter((j) => !j.assignedVehicleId).length;
+
+  // Leave is date-specific, so it only applies when a single day is selected.
+  const target = dateFilter ? parseLocalDate(`${dateFilter}T12:00:00`) : null;
+  const leaveFor = (personnelId: string): string | null => {
+    if (!target) return null;
+    const person = data.personnel.find((p) => p.id === personnelId);
+    const off = person?.timeOff.find(
+      (t) => parseLocalDate(t.startDate) <= target && parseLocalDate(t.endDate) >= target
+    );
+    return off ? `On leave (${off.type})` : null;
+  };
+
+  const vehicles = data.vehicles.filter((v) => v.status !== "Retired");
+  const technicians = data.personnel.filter((p) => p.role === "Technician");
 
   return (
     <div className="space-y-8">
@@ -35,6 +87,12 @@ export default function SchedulingTab({ data }: Props) {
           <h3 className="text-base font-bold uppercase text-zinc-800">Dispatch Calendar Allocation</h3>
           <p className="text-xs text-zinc-500 mt-1">
             Review vehicle allocations, tool assignments, and crew shifts to prevent conflicts.
+          </p>
+          <p className="text-xs text-zinc-600 mt-2 font-semibold">
+            {filteredJobs.length} open job{filteredJobs.length !== 1 ? "s" : ""}
+            {noVanCount > 0 && (
+              <span className="text-amber-700"> · {noVanCount} with no van</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -55,6 +113,12 @@ export default function SchedulingTab({ data }: Props) {
               Show All
             </button>
           )}
+          <button
+            onClick={() => onScheduleJob(dateFilter || todayLocalStr())}
+            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-xs uppercase tracking-wider font-bold rounded transition-colors"
+          >
+            + Schedule Job
+          </button>
         </div>
       </div>
 
@@ -70,9 +134,9 @@ export default function SchedulingTab({ data }: Props) {
             )}
           </h4>
           <div className="space-y-3">
-            {data.vehicles.map((v) => {
+            {vehicles.map((v) => {
               const jobs = filteredJobs.filter((j) => j.assignedVehicleId === v.id);
-              const isAssigned = assignedVehicleIds.has(v.id);
+              const outOfService = v.status === "In Maintenance" || v.repairRecords.some((r) => !r.resolvedDate);
               return (
                 <div key={v.id} className="p-4 border border-zinc-100 rounded flex items-center justify-between">
                   <div>
@@ -85,24 +149,12 @@ export default function SchedulingTab({ data }: Props) {
                     </span>
                   </div>
                   <div className="text-right">
-                    {!isAssigned ? (
-                      <span className="text-xs text-emerald-600 font-semibold uppercase bg-emerald-50 px-2 py-1 rounded">
-                        Available
-                      </span>
-                    ) : (
-                      <div className="space-y-1">
-                        {jobs.map((j) => (
-                          <div key={j.id} className="text-xs bg-zinc-100 px-2 py-1 rounded font-bold">
-                            {j.client.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <StatusCell jobs={jobs} unavailable={outOfService ? "Out of service" : null} onEditJob={onEditJob} />
                   </div>
                 </div>
               );
             })}
-            {data.vehicles.length === 0 && (
+            {vehicles.length === 0 && (
               <p className="text-xs text-zinc-400">No vehicles registered.</p>
             )}
           </div>
@@ -114,7 +166,7 @@ export default function SchedulingTab({ data }: Props) {
             Technician Shifts
           </h4>
           <div className="space-y-3">
-            {data.personnel.filter((p) => p.role === "Technician").map((p) => {
+            {technicians.map((p) => {
               const jobs = filteredJobs.filter((j) =>
                 j.assignments.some((a) => a.personnelId === p.id)
               );
@@ -127,24 +179,12 @@ export default function SchedulingTab({ data }: Props) {
                     )}
                   </div>
                   <div className="text-right">
-                    {!assignedPersonnelIds.has(p.id) ? (
-                      <span className="text-xs text-emerald-600 font-semibold uppercase bg-emerald-50 px-2 py-1 rounded">
-                        Available
-                      </span>
-                    ) : (
-                      <div className="space-y-1">
-                        {jobs.map((j) => (
-                          <div key={j.id} className="text-xs bg-zinc-100 px-2 py-1 rounded font-bold">
-                            {j.client.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <StatusCell jobs={jobs} unavailable={leaveFor(p.id)} onEditJob={onEditJob} />
                   </div>
                 </div>
               );
             })}
-            {data.personnel.filter((p) => p.role === "Technician").length === 0 && (
+            {technicians.length === 0 && (
               <p className="text-xs text-zinc-400">No technicians registered.</p>
             )}
           </div>
@@ -160,6 +200,7 @@ export default function SchedulingTab({ data }: Props) {
               const jobs = filteredJobs.filter((j) =>
                 j.equipment.some((je) => je.equipmentId === eq.id)
               );
+              const outOfService = eq.status === "Maintenance" || eq.repairRecords.some((r) => !r.resolvedDate);
               return (
                 <div key={eq.id} className="p-4 border border-zinc-100 rounded flex items-center justify-between">
                   <div>
@@ -172,19 +213,7 @@ export default function SchedulingTab({ data }: Props) {
                     </span>
                   </div>
                   <div className="text-right">
-                    {!assignedEquipmentIds.has(eq.id) ? (
-                      <span className="text-xs text-emerald-600 font-semibold uppercase bg-emerald-50 px-2 py-1 rounded">
-                        Available
-                      </span>
-                    ) : (
-                      <div className="space-y-1">
-                        {jobs.map((j) => (
-                          <div key={j.id} className="text-xs bg-zinc-100 px-2 py-1 rounded font-bold">
-                            {j.client.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <StatusCell jobs={jobs} unavailable={outOfService ? "Out of service" : null} onEditJob={onEditJob} />
                   </div>
                 </div>
               );

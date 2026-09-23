@@ -6,6 +6,7 @@ export interface Client {
   id: string;
   name: string;
   contactName: string;
+  contactPhone: string | null;
   locationAddress: string;
   paymentTerms: string;
   notes?: ClientNote[];
@@ -287,6 +288,8 @@ export interface Job {
   status: JobStatus;
   notes: string | null;
   scheduledDate: string;
+  arrivalTime: string | null;
+  arrivalWindow: string | null;
   completionDate: string | null;
   qbInvoiceSyncStatus: SyncStatus;
   recurringTemplateId: string | null;
@@ -390,6 +393,8 @@ export interface NewJobForm {
   clientId: string;
   assignedVehicleId: string;
   scheduledDate: string;
+  arrivalTime: string;
+  arrivalWindow: string;
   notes: string;
   personnelIds: string[];
   equipmentIds: string[];
@@ -419,6 +424,7 @@ export interface NewTimeForm {
 export interface NewClientForm {
   name: string;
   contactName: string;
+  contactPhone: string;
   locationAddress: string;
   paymentTerms: string;
 }
@@ -482,6 +488,7 @@ export type ModalType =
   | "logTime"
   | "addParts"
   | "addClient"
+  | "editClient"
   | "addPersonnel"
   | "addVehicle"
   | "addMaintenance"
