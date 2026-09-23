@@ -193,12 +193,24 @@ The key is stamped onto its Firestore record, read during activation, and baked 
 
 1. Compile the Next.js production build
 2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only)
-3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
+3. Bundle every Prisma migration into `migrations.json`. The installed app applies the pending ones on every launch (all of them on a new install, only the new ones on an upgrade)
 4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single installer (NSIS on Windows, `.dmg` on macOS)
 5. Output the resulting executable, named per the table above, in `dist-electron/`
 6. Write a build stamp so a leftover file from a previous run can't be mistaken for the one you just built (see below)
 
 Distribute the generated installer to office staff. The installer upgrades an existing installation in-place.
+
+### What happens to the database on an upgrade
+
+On the first launch after an in-place upgrade, the app brings the bundled database up to date by itself before the window opens:
+
+1. It checks which database changes (migrations) the existing database already has. Installs from before this mechanism existed are recognised from their tables and columns.
+2. If anything is missing, it first saves a backup of the whole database to `%APPDATA%\whitevanops\pre-upgrade-backups\` (macOS: `~/Library/Application Support/whitevanops/pre-upgrade-backups/`). The newest 3 are kept. **If that backup can't be taken, the upgrade stops and nothing is changed.**
+3. It applies each missing change on its own. If one fails, that change is rolled back, the app shows a **"Database upgrade failed"** startup error, and it doesn't open. See `docs/MANUAL_Troubleshooting.md` §3.2b.
+
+No action is needed for a normal upgrade. The applied changes are recorded in the database's `_prisma_migrations` table, the same table `npx prisma migrate status` reads.
+
+> **Office PM2 machine or any external database:** the automatic step above only runs against the app's own bundled database. A database the app doesn't manage (a PM2-hosted PostgreSQL, or a `DATABASE_URL` pointing at another host) must be updated by hand with `npx prisma migrate deploy` from the project folder before the new version is used against it. See §12.
 
 ### Telling a current build apart from a stale one
 
@@ -371,7 +383,7 @@ Field technicians need a **tech** account linked to their Personnel record so th
 
 1. Pull the latest code.
 2. Install any new dependencies: `npm install`
-3. Apply schema changes: `npx prisma migrate deploy`
+3. Apply schema changes to any database the desktop app does **not** manage itself (the office PM2 database, or an external `DATABASE_URL`): `npx prisma migrate deploy`. Customer installs using the bundled database update themselves on first launch; see "What happens to the database on an upgrade" in §6.
 4. Rebuild the installer: `npm run electron:build`
 5. Distribute the new `.exe` to office staff. The installer upgrades in-place.
 
@@ -419,7 +431,7 @@ Choose the option that fits your situation:
      *(Enter the database password from your `.env.local` when prompted).*
 
 ### Step 5: Verify
-Launch WhiteVanOps on the new machine. Your accounts, historical data, and configurations will be fully restored.
+Launch WhiteVanOps on the new machine. Your accounts, historical data, and configurations will be fully restored. If the new machine runs a newer version than the old one, the first launch also brings the restored database up to date automatically. A pre-upgrade backup is taken first; see "What happens to the database on an upgrade" in §6.
 
 ---
 

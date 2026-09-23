@@ -161,19 +161,18 @@ if (variant === 'trial') {
 fs.writeFileSync(envDest, envContent, 'utf8');
 console.log(`\nCopied .env.local into standalone bundle${variant === 'trial' ? ' with WVO_IS_TRIAL' : ''}.`);
 
-// 5. Concatenate Prisma migrations into a single schema.sql — applied by
-// electron/postgres.js when the bundled PostgreSQL initializes on first run.
-const migrationsDir = path.join(root, 'prisma', 'migrations');
-const migrations = fs
-  .readdirSync(migrationsDir)
-  .filter((d) => fs.existsSync(path.join(migrationsDir, d, 'migration.sql')))
-  .sort();
-const schemaSql = migrations
-  .map((d) => `-- Migration: ${d}\n` + fs.readFileSync(path.join(migrationsDir, d, 'migration.sql'), 'utf8'))
-  .join('\n\n');
-fs.mkdirSync(path.join(root, '.next', 'db'), { recursive: true });
-fs.writeFileSync(path.join(root, '.next', 'db', 'schema.sql'), schemaSql);
-console.log(`\nGenerated .next/db/schema.sql from ${migrations.length} migrations.`);
+// 5. Bundle every Prisma migration individually into migrations.json — applied
+// by electron/migrate.js on every launch (first run: all of them; in-place
+// upgrade: only the ones the customer's database hasn't recorded yet). This
+// replaced a concatenated schema.sql that only ever ran on first launch, so
+// upgraded installs never received new columns.
+const { buildBundle } = require('../electron/migrate');
+const migrationBundle = buildBundle(path.join(root, 'prisma', 'migrations'));
+const dbOutDir = path.join(root, '.next', 'db');
+fs.rmSync(dbOutDir, { recursive: true, force: true });
+fs.mkdirSync(dbOutDir, { recursive: true });
+fs.writeFileSync(path.join(dbOutDir, 'migrations.json'), JSON.stringify(migrationBundle));
+console.log(`\nGenerated .next/db/migrations.json from ${migrationBundle.length} migrations.`);
 
 // Platform-aware payload dirs and binary names. Mac binaries live in
 // pgsql-mac/ — a parallel, gitignored directory, kept separate from the
@@ -283,6 +282,18 @@ for (const { arch, unpackedDir } of buildTargets) {
     console.error('electron/*.js requires these at launch. Move them from "devDependencies" back to "dependencies" in package.json.\n');
     process.exit(1);
   }
+  // 7d. The migration bundle must match the repo's migrations exactly — a stale
+  // or missing one ships an installer that can't create or upgrade its database.
+  const bundlePath = path.join(distElectron, unpackedDir, ...resourcesRel, 'db', 'migrations.json');
+  let packagedCount = -1;
+  try {
+    packagedCount = JSON.parse(fs.readFileSync(bundlePath, 'utf8')).length;
+  } catch { /* reported below */ }
+  if (packagedCount !== migrationBundle.length) {
+    console.error(`\n❌ Error: packaged output (${label}) has ${packagedCount < 0 ? 'no readable' : packagedCount} db/migrations.json entries, expected ${migrationBundle.length} — do not ship it.`);
+    process.exit(1);
+  }
+
   const asarMb = (fs.statSync(asarPath).size / (1024 * 1024)).toFixed(0);
   console.log(`\nVerified app.asar (${label}, ${asarMb} MB, ${bundledModules.length} modules) carries all ${ELECTRON_RUNTIME_MODULES.length} Electron runtime deps.`);
 }

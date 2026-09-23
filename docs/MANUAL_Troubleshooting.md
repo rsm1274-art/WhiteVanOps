@@ -168,6 +168,29 @@ Check in this order — most likely first:
 
 ---
 
+### 3.2b ✅ "Database upgrade failed" / "Database upgrade aborted" / "Database upgrade blocked" at startup
+
+**Symptom:** right after installing a new version, the app shows a startup error beginning with one of those phrases and doesn't open.
+
+**What's actually happening:** on the first launch after an upgrade, the app applies any database changes the new version needs (`electron/migrate.js`). It refuses to open against a database that doesn't match, because that would fail every screen with a less helpful error. The message says which case you're in:
+
+- **"aborted: … pre-upgrade backup failed" / "pg_dump not found"** — the safety backup couldn't be taken, so **nothing was changed**. Usually antivirus quarantined `pg_dump` under the install directory (§3.5) or the disk is full. Fix that and relaunch.
+- **"failed at migration \<name\>"** — one change hit an error and **was rolled back**. Changes listed as "applied before it" are in place; the database is otherwise as it was. A backup from just before the upgrade is in `%APPDATA%\whitevanops\pre-upgrade-backups\`.
+- **"blocked: … not one WhiteVanOps recognises"** or **"… recorded as failed from an earlier attempt"** — the database isn't in a state the app will guess about. Nothing was changed.
+
+**Fix:**
+
+1. Relaunch once. A transient cause (disk full, antivirus lock) may have cleared.
+2. If it repeats, **don't delete `pgdata`** and don't reinstall over it expecting a fix. Collect the exact error text and `%APPDATA%\whitevanops\postgres.log`, and escalate (Part 5). The failing change needs a fixed build.
+3. To get the customer working in the meantime, reinstall the **previous** installer. An older version ignores database changes it doesn't know about and opens normally.
+4. Restore the pre-upgrade backup only if data is actually wrong (a failed change never needs it, because it was rolled back). With the app open so its database is running, from the install's `resources\pgsql\bin` folder:
+   `pg_restore --clean --if-exists -h 127.0.0.1 -p 5433 -U wvo_user -d white_van_ops "<path to the .dump>"`
+   Use the password from `%APPDATA%\whitevanops\.env.local`.
+
+**Prevention:** test every new installer by upgrading a copy of a real install before sending it out. Never edit a migration that has already shipped (see `CLAUDE.md`).
+
+---
+
 ### 3.3 ✅ "The app opened something that isn't White Van Ops"
 
 **Symptom:** the app window shows some other application entirely, or a blank/broken page.

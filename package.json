@@ -30,6 +30,7 @@
     },
     "files": [
       "electron/**/*",
+      "!electron/**/*.test.js",
       "package.json"
     ],
     "extraResources": [
