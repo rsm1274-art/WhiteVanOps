@@ -75,7 +75,8 @@ export async function GET() {
             },
           },
         },
-        orderBy: { scheduledDate: "desc" },
+        // Newest day first; within a day, by arrival time (untimed last).
+        orderBy: [{ scheduledDate: "desc" }, { arrivalTime: "asc" }],
       }),
       prisma.timeEntry.findMany({
         include: {

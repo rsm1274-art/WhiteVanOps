@@ -127,8 +127,11 @@ Click **Add Client** to create a new client record. Fields:
 |---|---|
 | Company Name | Required. This appears on QuickBooks invoice exports. |
 | Contact Name | Primary contact person at the client. |
-| Location Address | Site address where work is performed. |
+| Contact Phone | Optional. Shown to field techs as a tap-to-call link on the job card. |
+| Location Address | Site address where work is performed. Field techs can tap it to open their phone's maps app. |
 | Payment Terms | Select from: **Due on Receipt**, **Net 15**, or **Net 30**. This controls the invoice due date on QB exports. |
+
+Click the **pencil** icon on a client card to edit any of these fields later (for example, to add a phone number to an existing client or correct an address).
 
 ### Client Notes & Follow-Ups
 
@@ -150,12 +153,18 @@ Click **Add Job** to schedule a new job. Fields:
 |---|---|
 | Client | Select from existing clients. |
 | Scheduled Date | The date work is planned. |
+| Arrival Time | Optional. When the crew is expected on site. Jobs on the same day are listed in arrival-time order everywhere (jobs table, Overview, Scheduling, and the techs' phones); jobs with no time sort last. |
 | Assigned Vehicle | The van dispatched to this job. |
 | Crew | Select one or more technicians (checkboxes). |
 | Equipment | Select any special equipment assigned (checkboxes). |
 | Notes | Internal notes about the job. |
 
-While picking a vehicle, date, crew, or equipment, an amber **Availability Conflict** notice appears live in the form if that combination overlaps with another job, an unresolved repair, or a technician's time off — before you submit. This is advisory; the save itself is always re-checked and rejected server-side if a real conflict exists.
+While picking a vehicle, date, crew, or equipment, availability notices appear live in the form before you submit. There are two kinds:
+
+- **Unavailable — cannot be scheduled** (red): the vehicle or a piece of equipment has an unresolved repair, a technician is on time off that day, or a piece of equipment is already out on another job that day. The save is refused.
+- **Already booked this day** (amber): the van or a technician already has another job that day. This is allowed — a tech can do several short jobs in one day — but you must tick **Book anyway** before the job will save. Set an **Arrival Time** on each job so the crew knows the order.
+
+Every save is re-checked on the server, so an out-of-date notice in the form can never let a real conflict through.
 
 ### Recurring Jobs
 
@@ -171,7 +180,7 @@ For clients you service on a regular cadence, click **New Recurring Job** in the
 | Notes | Optional — carried onto every generated job. |
 | Crew / Equipment | Same as a regular job; carried onto every generated job. |
 
-Creating a template does **not** schedule anything by itself — there is no background scheduler in this app. Click **Generate** on the template's row to create the next batch of up to 4 real jobs from it. Each generated job goes through the same double-booking, repair, and time-off checks as a manually created job; any occurrence that conflicts is skipped and reported (e.g. "Generated 3 jobs; skipped 1 occurrence due to conflicts") rather than silently dropped or blocking the rest of the batch. Click Generate again later to produce the next batch.
+Creating a template does **not** schedule anything by itself — there is no background scheduler in this app. Click **Generate** on the template's row to create the next batch of up to 4 real jobs from it. Each generated job goes through the same repair, time-off, and equipment checks as a manually created job; any occurrence that hits one of those is skipped and reported (e.g. "Generated 3 jobs; skipped 1 occurrence due to conflicts") rather than silently dropped or blocking the rest of the batch. An occurrence where the van or a technician already has another job that day is still created, and the message tells you how many dates are double-booked so you can check them on the Scheduling tab. Click Generate again later to produce the next batch.
 
 Other actions on a recurring job row:
 
@@ -196,18 +205,27 @@ Jobs generated from a template show a small **Recurring** tag next to the client
 - **Complete** — moves job to Completed and deducts materials from the assigned van's stock. *This action requires confirmation.* If a job was completed by mistake, use **Re-open**.
 - **Re-open** — available on Completed jobs only. Sets the job back to In Progress and **reverses the van inventory deductions** that Complete made, so completing it again later deducts stock exactly once. *Requires confirmation.*
 - **Cancel** — cancels the job. *Requires confirmation.*
-- **Edit** — opens the Edit Job Details panel to change the client, assigned vehicle, scheduled date, or notes on a job. Available on Scheduled and In Progress jobs only; blocked once a job is Completed or Cancelled. Changing the vehicle or date re-runs the same double-booking and repair checks used when a job is first created — the save is rejected if it would conflict with another job, an active repair, or a technician's time off.
+- **Edit** — opens the Edit Job Details panel to change the client, assigned vehicle, scheduled date, arrival time, or notes on a job. Available on Scheduled and In Progress jobs only; blocked once a job is Completed or Cancelled. Changing the vehicle or date re-runs the same availability checks used when a job is first created — refused for an active repair or a technician's time off, and **Book anyway** required if the van is already booked that day.
 - **Clone** — creates a new draft job pre-filled with the same client, vehicle, crew, and equipment. Useful for recurring service calls.
-- **Resources** — opens the Allocate Resources panel to add/edit the crew (assigned technicians), materials, and equipment on a job. At least one technician must remain assigned. Crew and equipment changes are checked for double-booking, time off, and open repairs against the job's date, with the same live warning and server-side rejection as Add/Edit Job. Once a job is Completed its crew is locked — reopen the job if you need to change assignments (materials and equipment can still be edited).
+- **Resources** — opens the Allocate Resources panel to add/edit the crew (assigned technicians), materials, and equipment on a job. At least one technician must remain assigned. Crew and equipment changes are checked for double-booking, time off, and open repairs against the job's date, with the same live notices and rules as Add/Edit Job (a technician already booked that day needs **Book anyway**; equipment already out that day is refused). Once a job is Completed its crew is locked — reopen the job if you need to change assignments (materials and equipment can still be edited).
 - **Costs** — opens a read-only cost summary showing labor time and material totals for the job.
 
-The jobs list has a **status filter toolbar** so you can view only Scheduled, In Progress, Completed, or Cancelled jobs.
+The jobs list has a **filter toolbar**: status buttons (Scheduled, In Progress, Completed, Cancelled) and date buttons (**Any date**, **Today**, **Next 7 days**). The two combine — e.g. Scheduled + Today. Within a day, jobs are listed by arrival time, which is also shown under the date.
 
 ---
 
 ## Module 3: Scheduling Engine
 
-A date-filtered calendar view of all scheduled jobs. Use the **date picker** at the top to jump to any date. Each job card shows the client name, assigned crew, vehicle, and current status. This tab is read-only — use the Clients & Jobs tab to make changes.
+A day-by-day dispatch board. Use the **date picker** at the top to jump to any date (or **Show All** for every open job). The header shows how many open jobs are on that day and how many have **no van** assigned.
+
+Three columns list your vans (retired vans are hidden), technicians, and equipment. Each row shows one of:
+
+- **Available** — nothing booked that day.
+- The day's jobs, in arrival-time order, as clickable chips — **click a chip to open that job's Edit panel**. A resource with more than one job shows a "N jobs" count.
+- **On leave (type)** — the technician has time off that day.
+- **Out for repair** / **In maintenance** — the van or equipment has an unresolved repair or is marked In Maintenance.
+
+Click **Schedule Job** to open the Add Job form with the selected date already filled in.
 
 ---
 

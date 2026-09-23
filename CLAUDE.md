@@ -275,6 +275,10 @@ without re-deriving why it existed here first.
 - Conversion: `POST /api/license` with `{ action: "unlock-trial", licenseKey }` (superuser-only) verifies a signed payload against **this machine's real `machineIdSync()`** (never the payload's claimed value) and, if valid, writes `trial-unlock.json` (its presence permanently defeats the lock). Keys are minted vendor-side via `node scripts/license-manager.js --unlock-trial --machine <id>` (no `--tier` flag — there is nothing left to select).
 - Full design/build history: `docs/superpowers/specs/2026-07-13-trial-demo-installer-design.md` and `docs/superpowers/plans/2026-07-13-trial-demo-installer.md` (both predate the v2.0 tier removal — read with that in mind). Customer-facing build/conversion steps: `MANUAL_Setup_Installation.md` §6.4.
 
+### Dispatch rules (2026-09-23)
+
+`checkJobConflicts()` (`src/lib/jobConflicts.ts`) returns `{ error, warnings }`, mirrored client-side by `findClientSideConflicts()` → `{ blocking, advisory }`. **Blocking** = open repair (van or equipment), tech time off, or equipment already out that day — the write is refused. **Advisory** = van or tech already booked that day — allowed, because techs do several short jobs a day; the job modals require a "Book anyway" tick (`ConflictNotice.tsx`, deliberately not `window.confirm`) and recurring generation creates the job and reports it. Don't re-harden van/tech double-booking into an error. Ordering within a day uses the optional `Job.arrivalTime` ("HH:MM", validated by `normalizeArrivalTime()` in `src/lib/jobOrder.ts`); conflicts stay day-level — no time-slot math. `GET /api/field` forces a tech's `personnelId` to their own session value.
+
 ### Data flow (dashboard)
 
 `/api/dashboard` fetches all entities in a single parallel `Promise.all` and returns them as `DashboardData`. The `useDashboardData` hook in `src/hooks/useDashboardData.ts` fetches this on mount and exposes a `reload()` callback. After any mutation, components call `onSuccess()` which calls `reload()` to refresh everything. **There is no per-entity caching or optimistic UI** — every action does a full dashboard refresh.
@@ -311,7 +315,7 @@ without re-deriving why it existed here first.
 
 ## Testing
 
-Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`, `license`, `invoice`, `quote`, `fieldAccessUrl`, `opId`, `opOrdering`, `fieldOps`, `fieldExport`, `storagePressure`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
+Vitest covers pure-logic modules in `src/lib/`: `dateUtils`, `recurrence`, `jobConflicts`, `auth`, `license`, `invoice`, `quote`, `fieldAccessUrl`, `opId`, `opOrdering`, `fieldOps`, `fieldExport`, `storagePressure`, `jobOrder`, `fieldSeen`. `vitest.config.ts` resolves the `@/` alias to `src/` and runs in the `node` environment. Conventions used across these tests:
 
 - **`src/lib/db.ts` opens a real `pg.Pool` at import time and throws without `DATABASE_URL`** — any module that imports it (like `jobConflicts.ts`) needs `@/lib/db` mocked with `vi.mock`, never imported for real, in unit tests.
 - **`next/headers`'s `cookies()` is request-scoped** and throws outside a real request — mock it (see `auth.test.ts`) when testing code that calls `getSessionUser()`. `NextResponse` itself (from `next/server`) works fine unmocked — it's just a `Response` subclass.

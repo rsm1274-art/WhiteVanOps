@@ -6,8 +6,10 @@ import { cacheApiResponse, getCachedApiResponse, getSyncQueue, getStuckOps, getH
 import { drainSyncQueue, type DrainResult, type WriteResult } from "@/lib/offlineWrite";
 import { deriveSyncStatus } from "@/lib/syncStatus";
 import { shouldWarnAboutStorage } from "@/lib/storagePressure";
-import { formatTimeOnly } from "@/lib/dateUtils";
+import { formatTimeOnly, todayLocalStr } from "@/lib/dateUtils";
 import { buildExport } from "@/lib/fieldExport";
+import { groupFieldJobs } from "@/lib/jobOrder";
+import { type SeenMap, seenStorageKey, parseSeen, reconcileSeen, jobBadge } from "@/lib/fieldSeen";
 import StuckOpsPanel from "@/components/field/StuckOpsPanel";
 import SyncStatusBar from "@/components/field/SyncStatusBar";
 import JobCard from "@/components/field/JobCard";
@@ -51,9 +53,11 @@ export interface FieldJob {
   id: string;
   status: string;
   scheduledDate: string;
+  arrivalTime: string | null;
   completionDate: string | null;
+  updatedAt: string;
   notes: string | null;
-  client: { name: string; contactName: string; locationAddress: string };
+  client: { name: string; contactName: string; contactPhone: string | null; locationAddress: string };
   vehicle: { make: string; model: string } | null;
   assignments: { personnel: Personnel }[];
   lineItems: LineItem[];
@@ -84,6 +88,10 @@ export default function FieldPage() {
   const [jobsLastRefreshedAt, setJobsLastRefreshedAt] = useState<number | null>(null);
   const [storagePressure, setStoragePressure] = useState(false);
   const [storageBannerDismissed, setStorageBannerDismissed] = useState(false);
+  const [seen, setSeen] = useState<SeenMap | null>(null);
+  // Jobs this tech just wrote to — their own save bumps updatedAt, which
+  // must not come back as an "Updated" badge after the next refetch.
+  const selfWrittenRef = useRef<Set<string>>(new Set());
 
   const checkStoragePressure = useCallback(async () => {
     try {
@@ -227,6 +235,28 @@ export default function FieldPage() {
       });
   }, []);
 
+  // localStorage is best-effort: a private window or blocked storage just
+  // means no badges, never a broken page.
+  const updateSeen = (personnelId: string, list: FieldJob[], fromServer: boolean) => {
+    let stored: SeenMap | null = null;
+    try { stored = parseSeen(localStorage.getItem(seenStorageKey(personnelId))); } catch { }
+    const next = reconcileSeen(stored, list, selfWrittenRef.current);
+    // Only a fresh server read carries the post-write updatedAt; a cached
+    // read is older, so keep the self-written ids for the next real load.
+    if (fromServer) selfWrittenRef.current.clear();
+    try { localStorage.setItem(seenStorageKey(personnelId), JSON.stringify(next)); } catch { }
+    setSeen(next);
+  };
+
+  const markSeen = (job: FieldJob) => {
+    if (!tech) return;
+    setSeen((prev) => {
+      const next = { ...(prev ?? {}), [job.id]: job.updatedAt };
+      try { localStorage.setItem(seenStorageKey(tech.id), JSON.stringify(next)); } catch { }
+      return next;
+    });
+  };
+
   const loadJobs = useCallback(async (personnelId: string) => {
     setLoading(true);
     const url = `/api/field?personnelId=${personnelId}`;
@@ -236,6 +266,7 @@ export default function FieldPage() {
       const data = await res.json();
       setJobs(data.jobs ?? []);
       setInventoryItems(data.inventoryItems ?? []);
+      updateSeen(personnelId, data.jobs ?? [], true);
       await cacheApiResponse(url, data);
       setJobsLastRefreshedAt(Date.now());
     } catch {
@@ -243,6 +274,7 @@ export default function FieldPage() {
       if (cached) {
         setJobs(cached.jobs ?? []);
         setInventoryItems(cached.inventoryItems ?? []);
+        updateSeen(personnelId, cached.jobs ?? [], false);
         setJobsLastRefreshedAt(Date.now());
         showToast("Loaded jobs from offline cache", false);
       } else {
@@ -270,6 +302,7 @@ export default function FieldPage() {
   // pick up server-derived fields (e.g. completionDate).
   const handleWriteResult = (jobId: string, result: WriteResult, patch: Partial<FieldJob>) => {
     setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...patch } : j)));
+    selfWrittenRef.current.add(jobId);
     checkSyncStatus();
     if (result === "queued") {
       showToast("Saved on this device — will sync automatically once you're back on the office network.");
@@ -287,6 +320,7 @@ export default function FieldPage() {
     localStorage.removeItem("fieldTechId");
     setTech(null);
     setJobs([]);
+    setSeen(null);
   };
 
   /**
@@ -335,6 +369,13 @@ export default function FieldPage() {
     if (statusFilter === "completed") return j.status === "Completed";
     return true;
   });
+  const groups = groupFieldJobs(filteredJobs, todayLocalStr());
+  const sections = [
+    { key: "today", title: "Today", jobs: groups.today },
+    { key: "upcoming", title: "Upcoming", jobs: groups.upcoming },
+    // Under Active, everything past-dated is unfinished — i.e. overdue.
+    { key: "earlier", title: statusFilter === "active" ? "Earlier / overdue" : "Earlier", jobs: groups.earlier },
+  ].filter((sec) => sec.jobs.length > 0);
 
   // ---------------------------------------------------------------------------
   // Technician picker screen
@@ -516,16 +557,28 @@ export default function FieldPage() {
             <p className="text-sm font-medium">No {statusFilter === "all" ? "" : statusFilter + " "}assignments found.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredJobs.map((j) => (
-            <JobCard
-              key={j.id}
-              job={j}
-              techId={tech.id}
-              inventoryItems={inventoryItems}
-              onWriteResult={(result, patch) => handleWriteResult(j.id, result, patch)}
-              onError={showToast}
-            />
+          <div className="space-y-6">
+          {sections.map((sec) => (
+            <section key={sec.key}>
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-2">
+                {sec.title} <span className="text-zinc-400">({sec.jobs.length})</span>
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {sec.jobs.map((j) => (
+                  <JobCard
+                    key={j.id}
+                    job={j}
+                    techId={tech.id}
+                    inventoryItems={inventoryItems}
+                    badge={jobBadge(j, seen)}
+                    defaultExpanded={sec.key === "today"}
+                    onSeen={() => markSeen(j)}
+                    onWriteResult={(result, patch) => handleWriteResult(j.id, result, patch)}
+                    onError={showToast}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
         )}

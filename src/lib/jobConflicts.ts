@@ -2,22 +2,33 @@ import { prisma } from "@/lib/db";
 
 /**
  * Shared conflict/availability validation for scheduling a job on a given date.
- * Used by both job creation (POST /api/jobs) and job editing (PUT /api/jobs)
- * so the two code paths can never drift out of sync.
+ * Used by job creation (POST /api/jobs), job editing (PUT /api/jobs) and
+ * recurring generation so the code paths can never drift out of sync.
  *
  * `excludeJobId` lets an edit check for conflicts against every *other* job —
  * without it, a job being rescheduled would always conflict with itself.
  *
- * Returns a human-readable error string on the first conflict found, or null
- * if the requested date/resources are clear.
+ * Two severities:
+ * - `error` — the first *physical* impossibility found: an open repair, a
+ *   tech on time off, or a piece of equipment already out on another job.
+ *   The caller must refuse the write.
+ * - `warnings` — a van or tech already booked on another job that day.
+ *   Techs routinely do several short jobs a day, so this is advisory only:
+ *   the caller proceeds and passes the warnings back for display.
+ *   `src/lib/clientJobConflicts.ts` mirrors the same split for the modals.
  */
+export interface JobConflictResult {
+  error: string | null;
+  warnings: string[];
+}
+
 export async function checkJobConflicts(params: {
   scheduledDate: Date;
   assignedVehicleId?: string | null;
   personnelIds?: string[];
   equipmentIds?: string[];
   excludeJobId?: string;
-}): Promise<string | null> {
+}): Promise<JobConflictResult> {
   const { scheduledDate, assignedVehicleId, personnelIds = [], equipmentIds = [], excludeJobId } = params;
 
   const startOfDay = new Date(scheduledDate);
@@ -25,17 +36,20 @@ export async function checkJobConflicts(params: {
   const endOfDay = new Date(scheduledDate);
   endOfDay.setHours(23, 59, 59, 999);
 
+  const warnings: string[] = [];
+  const blocked = (error: string): JobConflictResult => ({ error, warnings });
+
   // 1a. Vehicle out for repair
   if (assignedVehicleId) {
     const vehicleRepair = await prisma.repairRecord.findFirst({
       where: { vehicleId: assignedVehicleId, resolvedDate: null },
     });
     if (vehicleRepair) {
-      return `This vehicle is currently out of service for repair: "${vehicleRepair.description}". Resolve the repair before scheduling.`;
+      return blocked(`This vehicle is currently out of service for repair: "${vehicleRepair.description}". Resolve the repair before scheduling.`);
     }
   }
 
-  // 1b. Vehicle double-booking
+  // 1b. Vehicle double-booking (advisory)
   if (assignedVehicleId) {
     const vehicleConflictingJob = await prisma.job.findFirst({
       where: {
@@ -47,7 +61,7 @@ export async function checkJobConflicts(params: {
       include: { client: true },
     });
     if (vehicleConflictingJob) {
-      return `Vehicle is already booked on this day for job with client ${vehicleConflictingJob.client.name}.`;
+      warnings.push(`Vehicle is already booked on this day for job with client ${vehicleConflictingJob.client.name}.`);
     }
   }
 
@@ -63,11 +77,11 @@ export async function checkJobConflicts(params: {
     });
     if (timeOffConflict) {
       const name = `${timeOffConflict.personnel.firstName} ${timeOffConflict.personnel.lastName}`;
-      return `${name} is on ${timeOffConflict.type} leave on this date and is not available.`;
+      return blocked(`${name} is on ${timeOffConflict.type} leave on this date and is not available.`);
     }
   }
 
-  // 2b. Personnel double-booking
+  // 2b. Personnel double-booking (advisory)
   for (const personnelId of personnelIds) {
     const personnelConflictingAssignment = await prisma.jobAssignment.findFirst({
       where: {
@@ -85,7 +99,7 @@ export async function checkJobConflicts(params: {
     });
     if (personnelConflictingAssignment) {
       const name = `${personnelConflictingAssignment.personnel.firstName} ${personnelConflictingAssignment.personnel.lastName}`;
-      return `${name} is already assigned on this day to job with client ${personnelConflictingAssignment.job.client.name}.`;
+      warnings.push(`${name} is already assigned on this day to job with client ${personnelConflictingAssignment.job.client.name}.`);
     }
   }
 
@@ -96,7 +110,7 @@ export async function checkJobConflicts(params: {
       include: { equipment: true },
     });
     if (eqRepair) {
-      return `${eqRepair.equipment?.name ?? "Equipment"} is currently out of service for repair: "${eqRepair.description}". Resolve the repair before scheduling.`;
+      return blocked(`${eqRepair.equipment?.name ?? "Equipment"} is currently out of service for repair: "${eqRepair.description}". Resolve the repair before scheduling.`);
     }
   }
 
@@ -117,9 +131,9 @@ export async function checkJobConflicts(params: {
       },
     });
     if (conflictingEquipment) {
-      return `${conflictingEquipment.equipment.name} is already assigned on this day to job with client ${conflictingEquipment.job.client.name}.`;
+      return blocked(`${conflictingEquipment.equipment.name} is already assigned on this day to job with client ${conflictingEquipment.job.client.name}.`);
     }
   }
 
-  return null;
+  return { error: null, warnings };
 }

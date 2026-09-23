@@ -4,6 +4,7 @@ import { DashboardData, Job } from "@/types";
 import { JobStatusBadge } from "@/components/shared/StatusBadge";
 import { todayLocalStr, dateToLocalStr, formatDate } from "@/lib/dateUtils";
 import { getAlerts } from "@/lib/alerts";
+import { compareJobsBySchedule, formatArrivalTime } from "@/lib/jobOrder";
 
 interface Props {
   data: DashboardData;
@@ -15,9 +16,9 @@ export default function OverviewTab({ data, onOpenSyncReview }: Props) {
   const inMaintenanceVans = data.vehicles.filter((v) => v.status === "In Maintenance").length;
 
   const today = todayLocalStr();
-  const jobsToday = data.jobs.filter(
-    (j) => dateToLocalStr(j.scheduledDate) === today && j.status !== "Cancelled"
-  );
+  const jobsToday = data.jobs
+    .filter((j) => dateToLocalStr(j.scheduledDate) === today && j.status !== "Cancelled")
+    .sort(compareJobsBySchedule);
 
   const deployedVansToday = new Set(
     jobsToday.map((j) => j.assignedVehicleId).filter(Boolean)
@@ -99,6 +100,7 @@ export default function OverviewTab({ data, onOpenSyncReview }: Props) {
                 >
                   <div>
                     <span className="text-xs font-bold uppercase text-zinc-400">
+                      {job.arrivalTime && <span className="text-zinc-700 mr-2">{formatArrivalTime(job.arrivalTime)}</span>}
                       JOB #{job.id.substring(0, 8)}
                     </span>
                     <h4 className="text-sm font-bold mt-0.5">{job.client.name}</h4>

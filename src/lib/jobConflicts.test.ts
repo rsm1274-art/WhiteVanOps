@@ -37,32 +37,34 @@ const baseParams = {
 };
 
 describe("checkJobConflicts", () => {
-  it("returns null when nothing conflicts", async () => {
+  it("returns no error and no warnings when nothing conflicts", async () => {
     const result = await checkJobConflicts({
       ...baseParams,
       assignedVehicleId: "van-1",
       personnelIds: ["tech-1"],
       equipmentIds: ["eq-1"],
     });
-    expect(result).toBeNull();
+    expect(result).toEqual({ error: null, warnings: [] });
   });
 
   it("blocks scheduling when the vehicle is out for repair", async () => {
     mockPrisma.repairRecord.findFirst.mockResolvedValueOnce({
       description: "Transmission fluid leak",
     });
-    const result = await checkJobConflicts({ ...baseParams, assignedVehicleId: "van-1" });
-    expect(result).toMatch(/out of service for repair/);
-    expect(result).toMatch(/Transmission fluid leak/);
+    const { error } = await checkJobConflicts({ ...baseParams, assignedVehicleId: "van-1" });
+    expect(error).toMatch(/out of service for repair/);
+    expect(error).toMatch(/Transmission fluid leak/);
   });
 
-  it("blocks scheduling when the vehicle is already booked that day", async () => {
+  it("warns but does not block when the vehicle is already booked that day", async () => {
     mockPrisma.job.findFirst.mockResolvedValueOnce({
       client: { name: "Acme Corp" },
     });
-    const result = await checkJobConflicts({ ...baseParams, assignedVehicleId: "van-1" });
-    expect(result).toMatch(/already booked/);
-    expect(result).toMatch(/Acme Corp/);
+    const { error, warnings } = await checkJobConflicts({ ...baseParams, assignedVehicleId: "van-1" });
+    expect(error).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/already booked/);
+    expect(warnings[0]).toMatch(/Acme Corp/);
   });
 
   it("blocks scheduling when a technician is on time off that day", async () => {
@@ -70,19 +72,21 @@ describe("checkJobConflicts", () => {
       type: "Vacation",
       personnel: { firstName: "Dave", lastName: "Grohl" },
     });
-    const result = await checkJobConflicts({ ...baseParams, personnelIds: ["tech-1"] });
-    expect(result).toMatch(/Dave Grohl/);
-    expect(result).toMatch(/Vacation leave/);
+    const { error } = await checkJobConflicts({ ...baseParams, personnelIds: ["tech-1"] });
+    expect(error).toMatch(/Dave Grohl/);
+    expect(error).toMatch(/Vacation leave/);
   });
 
-  it("blocks scheduling when a technician is already assigned that day", async () => {
+  it("warns but does not block when a technician is already assigned that day", async () => {
     mockPrisma.jobAssignment.findFirst.mockResolvedValueOnce({
       personnel: { firstName: "Trent", lastName: "Reznor" },
       job: { client: { name: "Beacon Hospital" } },
     });
-    const result = await checkJobConflicts({ ...baseParams, personnelIds: ["tech-2"] });
-    expect(result).toMatch(/Trent Reznor/);
-    expect(result).toMatch(/Beacon Hospital/);
+    const { error, warnings } = await checkJobConflicts({ ...baseParams, personnelIds: ["tech-2"] });
+    expect(error).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/Trent Reznor/);
+    expect(warnings[0]).toMatch(/Beacon Hospital/);
   });
 
   it("blocks scheduling when equipment is out for repair", async () => {
@@ -95,9 +99,9 @@ describe("checkJobConflicts", () => {
         ? Promise.resolve({ description: "Generator won't start", equipment: { name: "Generac 5000W" } })
         : Promise.resolve(null)
     );
-    const result = await checkJobConflicts({ ...baseParams, equipmentIds: ["eq-1"] });
-    expect(result).toMatch(/Generac 5000W/);
-    expect(result).toMatch(/Generator won't start/);
+    const { error } = await checkJobConflicts({ ...baseParams, equipmentIds: ["eq-1"] });
+    expect(error).toMatch(/Generac 5000W/);
+    expect(error).toMatch(/Generator won't start/);
   });
 
   it("blocks scheduling when equipment is already assigned that day", async () => {
@@ -105,9 +109,41 @@ describe("checkJobConflicts", () => {
       equipment: { name: "Trailer A" },
       job: { client: { name: "Summit Properties" } },
     });
-    const result = await checkJobConflicts({ ...baseParams, equipmentIds: ["eq-2"] });
-    expect(result).toMatch(/Trailer A/);
-    expect(result).toMatch(/Summit Properties/);
+    const { error } = await checkJobConflicts({ ...baseParams, equipmentIds: ["eq-2"] });
+    expect(error).toMatch(/Trailer A/);
+    expect(error).toMatch(/Summit Properties/);
+  });
+
+  it("reports every van/tech double-booking, and still blocks on a later hard conflict", async () => {
+    mockPrisma.job.findFirst.mockResolvedValueOnce({ client: { name: "Acme Corp" } });
+    mockPrisma.jobAssignment.findFirst
+      .mockResolvedValueOnce({
+        personnel: { firstName: "Trent", lastName: "Reznor" },
+        job: { client: { name: "Acme Corp" } },
+      })
+      .mockResolvedValueOnce({
+        personnel: { firstName: "Dave", lastName: "Grohl" },
+        job: { client: { name: "Acme Corp" } },
+      });
+    const soft = await checkJobConflicts({
+      ...baseParams,
+      assignedVehicleId: "van-1",
+      personnelIds: ["tech-1", "tech-2"],
+    });
+    expect(soft.error).toBeNull();
+    expect(soft.warnings).toHaveLength(3);
+
+    mockPrisma.job.findFirst.mockResolvedValueOnce({ client: { name: "Acme Corp" } });
+    mockPrisma.jobEquipment.findFirst.mockResolvedValueOnce({
+      equipment: { name: "Trailer A" },
+      job: { client: { name: "Acme Corp" } },
+    });
+    const hard = await checkJobConflicts({
+      ...baseParams,
+      assignedVehicleId: "van-1",
+      equipmentIds: ["eq-2"],
+    });
+    expect(hard.error).toMatch(/Trailer A/);
   });
 
   it("excludes the current job from vehicle/personnel/equipment double-booking checks when excludeJobId is set", async () => {

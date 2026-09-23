@@ -5,6 +5,7 @@ import Modal, { ModalHeader, Field, inputCls, selectCls, SubmitButton } from "@/
 import { DashboardData, Job } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import ConflictNotice, { needsAcknowledgement, ACKNOWLEDGE_MESSAGE } from "@/components/shared/ConflictNotice";
 
 interface Props {
   job: Job;
@@ -18,10 +19,12 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
   const [clientId, setClientId] = useState(job.clientId);
   const [assignedVehicleId, setAssignedVehicleId] = useState(job.assignedVehicleId ?? "");
   const [scheduledDate, setScheduledDate] = useState(dateToLocalStr(job.scheduledDate));
+  const [arrivalTime, setArrivalTime] = useState(job.arrivalTime ?? "");
   const [notes, setNotes] = useState(job.notes ?? "");
   const [saving, setSaving] = useState(false);
 
-  const warnings = useMemo(
+  const [acknowledged, setAcknowledged] = useState(false);
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -36,6 +39,10 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (needsAcknowledgement(conflicts, acknowledged)) {
+      onError(ACKNOWLEDGE_MESSAGE);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/jobs", {
@@ -46,6 +53,7 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
           clientId,
           assignedVehicleId,
           scheduledDate,
+          arrivalTime,
           notes,
         }),
       });
@@ -110,6 +118,15 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
           />
         </Field>
 
+        <Field label="Arrival Time (optional)">
+          <input
+            type="time"
+            value={arrivalTime}
+            onChange={(e) => setArrivalTime(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+
         <Field label="Scope of Work / Notes">
           <textarea
             rows={3}
@@ -123,15 +140,7 @@ export default function EditJobModal({ job, data, onClose, onSuccess, onError }:
         <div className="px-3 py-2 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-500">
           Crew and equipment assignments are managed from the <span className="font-semibold text-zinc-700">Resources</span> action on this job.
         </div>
-
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />
 
         <SubmitButton label={saving ? "Saving…" : "Save Job Details"} />
       </form>

@@ -5,6 +5,7 @@ import Modal, { ModalHeader, Field } from "@/components/shared/Modal";
 import { DashboardData, Job, JobPartLine, AddPartsContext } from "@/types";
 import { dateToLocalStr } from "@/lib/dateUtils";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import ConflictNotice, { needsAcknowledgement, ACKNOWLEDGE_MESSAGE } from "@/components/shared/ConflictNotice";
 
 interface Props {
   context: AddPartsContext;
@@ -58,7 +59,8 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
   // Completed jobs have locked crew server-side; reopen the job to change it.
   const isCompleted = job.status === "Completed";
 
-  const warnings = useMemo(
+  const [acknowledged, setAcknowledged] = useState(false);
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -91,6 +93,10 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
     e.preventDefault();
     if (!isCompleted && personnelIds.length === 0) {
       onError("At least one technician must be assigned.");
+      return;
+    }
+    if (!isCompleted && needsAcknowledgement(conflicts, acknowledged)) {
+      onError(ACKNOWLEDGE_MESSAGE);
       return;
     }
     try {
@@ -229,15 +235,7 @@ export default function AllocateResourcesModal({ context, data, job, onClose, on
         <Field label="Allocate Specialized Tools">
           <CheckboxList items={eqItems} selected={eqIds} onChange={setEqIds} />
         </Field>
-
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />
 
         <div className="flex justify-end pt-2 border-t border-zinc-100">
           <button

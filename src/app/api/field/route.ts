@@ -1,19 +1,34 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getSessionUser } from "@/lib/auth";
 
 export async function GET(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { searchParams } = new URL(request.url);
-  const personnelId = searchParams.get("personnelId");
+  const requestedId = searchParams.get("personnelId");
+
+  // A tech only ever sees their own record and jobs — the query parameter is
+  // ignored for them, so changing it can't expose another tech's schedule.
+  // Admin/superuser keep the picker and can view any tech (same split as
+  // fieldOps.ts's assignment check).
+  const isTech = user.role === "tech";
+  if (isTech && !user.personnelId) {
+    return NextResponse.json({ error: "Your account is not linked to a personnel record" }, { status: 403 });
+  }
 
   try {
     // No personnelId = return personnel list for the technician picker
-    if (!personnelId) {
+    if (!requestedId) {
       const personnel = await prisma.personnel.findMany({
-        where: { role: "Technician" },
+        where: isTech ? { id: user.personnelId! } : { role: "Technician" },
         orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
       });
       return NextResponse.json({ personnel });
     }
+
+    const personnelId = isTech ? user.personnelId! : requestedId;
 
     // Return all non-cancelled jobs assigned to this technician
     const jobs = await prisma.job.findMany({
@@ -32,7 +47,7 @@ export async function GET(request: Request) {
           orderBy: { date: "desc" },
         },
       },
-      orderBy: { scheduledDate: "asc" },
+      orderBy: [{ scheduledDate: "asc" }, { arrivalTime: "asc" }],
     });
 
     const inventoryItems = await prisma.inventoryItem.findMany({
