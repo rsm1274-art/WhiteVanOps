@@ -158,6 +158,30 @@ trial) copy, and that's the whole job it does now.
 
 ## 6. Build the Desktop Installers
 
+### Easiest: build on GitHub (no local setup)
+
+GitHub can build both installers on its own Windows and Mac machines, with nothing to install
+on yours:
+
+1. On GitHub, open the repository → **Actions** → **Build installers** → **Run workflow** (branch `main`).
+2. Wait about 20–30 minutes for both jobs to go green.
+3. Open the finished run and download the artifacts at the bottom of the page:
+   * **WhiteVanOps-Windows** — `WhiteVanOps-Setup.exe`
+   * **WhiteVanOps-macOS** — `WhiteVanOps-Setup-arm64.dmg` (Apple Silicon) and `WhiteVanOps-Setup-x64.dmg` (Intel Macs)
+
+   Each comes as a `.zip` with a `.buildinfo.txt` naming the commit it was built from.
+   Artifacts are kept for 30 days.
+
+Pushing a version tag (for example `git tag v2.1.0 && git push origin v2.1.0`) runs the same
+build automatically. These are **generic** installers, with no `.env.local` bundled, so each
+install creates its own database password and session secret. They're right for a download
+link or a trial. For a build with one customer's pre-set `.env.local`, use the local build below.
+
+The Mac installers are ad-hoc signed, not Apple-notarized. On first open, right-click the app →
+**Open**. On macOS 15+ you may need **System Settings → Privacy & Security → Open Anyway** instead.
+
+### Local build
+
 **One installer per platform.** The same file serves paying customers and prospects on a 30-day
 trial; the choice is made by the customer on first launch, not at build time:
 

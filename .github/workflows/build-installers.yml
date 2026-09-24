@@ -1,0 +1,114 @@
+# Builds the customer installers on GitHub's own machines, so nobody needs a
+# local build setup: WhiteVanOps-Setup.exe on Windows, and
+# WhiteVanOps-Setup-{arm64,x64}.dmg on macOS. Each job downloads the bundled
+# PostgreSQL itself (the pgsql/ and pgsql-mac/ folders are gitignored — see
+# MANUAL_Setup_Installation.md §1), runs the normal `npm run electron:build*`
+# script with all its packaging assertions, and uploads the result as a
+# downloadable artifact on the run's page.
+#
+# These are GENERIC builds: there is never a .env.local here, so every install
+# generates its own database password and SESSION_SECRET on first launch.
+# That is what a download link / trial needs. A per-customer build with a
+# bundled .env.local must still be made by hand (CLAUDE.md, "Distributing to
+# multiple customers").
+#
+# Run it: GitHub → Actions → "Build installers" → Run workflow. Pushing a tag
+# like v2.1.0 also runs it.
+
+name: Build installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: build-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # prisma generate / next build need these to EXIST; nothing connects, and
+  # neither value ends up in the installer (only a .env.local would).
+  DATABASE_URL: postgresql://build:build@localhost:5433/build
+  SESSION_SECRET: build-only
+  HUSKY: 0
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # Electron 42 bundles Node 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # MANUAL_Setup_Installation.md §1: EDB "binaries only" zip, pruned.
+      - name: Stage bundled PostgreSQL (pgsql/)
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "pgsql.zip"
+          Invoke-WebRequest "https://get.enterprisedb.com/postgresql/postgresql-17.6-1-windows-x64-binaries.zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath $env:RUNNER_TEMP
+          Move-Item (Join-Path $env:RUNNER_TEMP "pgsql") "pgsql"
+          foreach ($d in "pgAdmin 4", "StackBuilder", "doc", "include", "lib/pgxs") {
+            $p = Join-Path "pgsql" $d
+            if (Test-Path $p) { Remove-Item $p -Recurse -Force }
+          }
+          if (-not (Test-Path "pgsql/bin/pg_ctl.exe")) { throw "pgsql/bin/pg_ctl.exe missing after extraction" }
+
+      - name: Build installer
+        run: npm run electron:build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WhiteVanOps-Windows
+          path: |
+            dist-electron/WhiteVanOps-Setup.exe
+            dist-electron/WhiteVanOps-Setup.exe.buildinfo.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }} # stage-pgsql-mac.sh downloads Postgres.app with gh
+      # No Developer ID certificate yet (signing is deferred by design — see
+      # CLAUDE.md); package.json's mac.identity "-" makes electron-builder
+      # ad-hoc sign instead of searching the keychain.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Stage bundled PostgreSQL (pgsql-mac/)
+        run: bash scripts/ci/stage-pgsql-mac.sh
+
+      - name: Build installers (arm64 + x64)
+        run: npm run electron:build:mac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WhiteVanOps-macOS
+          path: |
+            dist-electron/WhiteVanOps-Setup-arm64.dmg
+            dist-electron/WhiteVanOps-Setup-x64.dmg
+            dist-electron/*.dmg.buildinfo.txt
+          if-no-files-found: error
+          retention-days: 30

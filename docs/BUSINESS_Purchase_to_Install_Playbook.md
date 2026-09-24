@@ -79,7 +79,7 @@ That key now exists in your cloud database with `machineId: null` — meaning "s
 
 ### Step 4 — Get them the installer
 
-`dist-electron/WhiteVanOps-Setup.exe` (Windows) or `WhiteVanOps-Setup-{arm64,x64}.dmg` (macOS), roughly 156 MB. There is only one installer per platform — the same file for paying customers and for trials. Options, in order of preference:
+`dist-electron/WhiteVanOps-Setup.exe` (Windows) or `WhiteVanOps-Setup-{arm64,x64}.dmg` (macOS), roughly 156 MB. There is only one installer per platform — the same file for paying customers and for trials. The easiest way to produce it is GitHub → Actions → **Build installers** → Run workflow; the finished run has the `.exe` and both `.dmg`s to download (`MANUAL_Setup_Installation.md` §6). Options for getting it to the customer, in order of preference:
 
 - **Bring it on a USB drive** to the white glove appointment. Simplest, fastest, no upload, no "it says the file is corrupted."
 - **A download link** (Dropbox / Google Drive / your own site) if you're doing this remotely.
