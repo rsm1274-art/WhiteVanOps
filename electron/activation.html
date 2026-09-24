@@ -78,15 +78,49 @@
     #switchLink:hover {
       color: #2563eb;
     }
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #9ca3af;
+      font-size: 12px;
+      margin: 20px 0;
+    }
+    .divider::before, .divider::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid #e5e7eb;
+    }
+    #trialBtn {
+      background-color: white;
+      color: #111827;
+      border: 1px solid #d1d5db;
+    }
+    #trialBtn:hover {
+      background-color: #f9fafb;
+    }
+    .note {
+      font-size: 12px;
+      color: #6b7280;
+      margin: 8px 0 0;
+    }
+    .hidden {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Activate WhiteVanOps</h1>
-    <p>Please enter your license key to activate this installation.</p>
+    <h1 id="title">Activate WhiteVanOps</h1>
+    <p id="intro">Enter your activation key, or try WhiteVanOps free for 30 days.</p>
     <input type="text" id="licenseKey" placeholder="WVO-XXXX-XXXX-XXXX-XXXX" />
     <button id="activateBtn">Activate</button>
     <div id="error"></div>
+    <div id="trialSection">
+      <div class="divider">or</div>
+      <button id="trialBtn">Start 30-day free trial</button>
+      <p class="note">Full features. After 30 days you'll need an activation key to keep using it. Everything you enter stays on this computer.</p>
+    </div>
     <a id="switchLink">Connecting to an existing office server instead?</a>
   </div>
 
@@ -96,6 +130,26 @@
     const activateBtn = document.getElementById('activateBtn');
     const licenseInput = document.getElementById('licenseKey');
     const errorDiv = document.getElementById('error');
+
+    // first    — first launch: key, trial, or client mode
+    // expired  — trial over: key only (your data is safe)
+    // activate — Help menu during a trial: key only
+    const mode = new URLSearchParams(location.search).get('mode') || 'first';
+    if (mode !== 'first') {
+      document.getElementById('trialSection').classList.add('hidden');
+      document.getElementById('switchLink').classList.add('hidden');
+    }
+    if (mode === 'expired') {
+      document.getElementById('title').innerText = 'Your trial has ended';
+      document.getElementById('intro').innerText =
+        'Enter an activation key to keep using WhiteVanOps. Your data is safe on this computer and will be exactly as you left it.';
+    } else if (mode === 'activate') {
+      document.getElementById('intro').innerText = 'Enter your activation key to convert this trial into a full installation.';
+    }
+
+    document.getElementById('trialBtn').addEventListener('click', () => {
+      window.wvoActivation.startTrial();
+    });
 
     activateBtn.addEventListener('click', () => {
       const key = licenseInput.value.trim();

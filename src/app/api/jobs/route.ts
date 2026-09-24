@@ -3,23 +3,31 @@ import { prisma } from "@/lib/db";
 import { getSessionUser, requireRole } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { checkJobConflicts } from "@/lib/jobConflicts";
+import { normalizeArrivalTime } from "@/lib/jobOrder";
 
-// POST: Create a new job with double-booking validation for vehicles, personnel, and equipment
+// POST: Create a new job. Hard conflicts (repair, time off, equipment already
+// out) are refused; a van/tech already booked that day is allowed and the
+// warnings are returned alongside the job for the modal to display.
 export async function POST(request: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
   if (err) return err;
 
   try {
-    const { clientId, assignedVehicleId, scheduledDate, notes, personnelIds, equipmentIds } = await request.json();
+    const { clientId, assignedVehicleId, scheduledDate, arrivalTime, notes, personnelIds, equipmentIds } = await request.json();
 
     if (!clientId || !scheduledDate || !personnelIds || !Array.isArray(personnelIds)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    const arrival = normalizeArrivalTime(arrivalTime);
+    if (arrival === undefined) {
+      return NextResponse.json({ error: "Arrival time must be HH:MM (24-hour)." }, { status: 400 });
+    }
+
     const targetDate = new Date(scheduledDate);
 
-    const conflict = await checkJobConflicts({
+    const { error: conflict, warnings } = await checkJobConflicts({
       scheduledDate: targetDate,
       assignedVehicleId,
       personnelIds,
@@ -37,6 +45,7 @@ export async function POST(request: Request) {
           assignedVehicleId: assignedVehicleId || null,
           status: "Scheduled",
           scheduledDate: targetDate,
+          arrivalTime: arrival,
           notes: notes || null,
         },
       });
@@ -58,7 +67,7 @@ export async function POST(request: Request) {
 
     await audit(user!.userId, "CREATE", "Job", newJob.id, { clientId, scheduledDate, personnelIds });
 
-    return NextResponse.json(newJob);
+    return NextResponse.json({ ...newJob, warnings });
   } catch (error) {
     console.error("Create Job API Error:", error);
     return NextResponse.json({ error: "Failed to create job" }, { status: 500 });
@@ -72,7 +81,7 @@ export async function PUT(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { jobId, status, clientId, assignedVehicleId, scheduledDate, notes, lineItems, equipmentIds, personnelIds } = await request.json();
+    const { jobId, status, clientId, assignedVehicleId, scheduledDate, arrivalTime, notes, lineItems, equipmentIds, personnelIds } = await request.json();
 
     if (!jobId) {
       return NextResponse.json({ error: "Missing job ID" }, { status: 400 });
@@ -84,7 +93,7 @@ export async function PUT(request: Request) {
 
     // Techs may only update status; block all other field changes
     if (user.role === "tech") {
-      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined || personnelIds !== undefined) {
+      if (clientId !== undefined || assignedVehicleId !== undefined || scheduledDate !== undefined || arrivalTime !== undefined || notes !== undefined || lineItems !== undefined || equipmentIds !== undefined || personnelIds !== undefined) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       // Verify they are assigned to this job. A tech account not linked to a
@@ -95,6 +104,11 @@ export async function PUT(request: Request) {
       }
       const assignment = await prisma.jobAssignment.findFirst({ where: { jobId, personnelId: user.personnelId } });
       if (!assignment) return NextResponse.json({ error: "You are not assigned to this job" }, { status: 403 });
+    }
+
+    const arrival = arrivalTime === undefined ? null : normalizeArrivalTime(arrivalTime);
+    if (arrival === undefined) {
+      return NextResponse.json({ error: "Arrival time must be HH:MM (24-hour)." }, { status: 400 });
     }
 
     const currentJob = await prisma.job.findUnique({
@@ -120,8 +134,9 @@ export async function PUT(request: Request) {
     const effectiveDate = scheduledDate ? new Date(scheduledDate) : currentJob.scheduledDate;
     const effectiveEquipmentIds = Array.isArray(equipmentIds) ? equipmentIds : currentJob.equipment.map((e) => e.equipmentId);
     const effectivePersonnelIds = Array.isArray(personnelIds) ? personnelIds : currentJob.assignments.map((a) => a.personnelId);
+    let warnings: string[] = [];
     if (assignedVehicleId !== undefined || scheduledDate || Array.isArray(equipmentIds) || Array.isArray(personnelIds)) {
-      const conflict = await checkJobConflicts({
+      const { error: conflict, warnings: found } = await checkJobConflicts({
         scheduledDate: effectiveDate,
         assignedVehicleId: effectiveVehicleId,
         personnelIds: effectivePersonnelIds,
@@ -131,6 +146,7 @@ export async function PUT(request: Request) {
       if (conflict) {
         return NextResponse.json({ error: conflict }, { status: 400 });
       }
+      warnings = found;
     }
 
     // If status is transitioning FROM Completed to something else
@@ -234,6 +250,7 @@ export async function PUT(request: Request) {
       if (clientId) dataUpdate.clientId = clientId;
       if (assignedVehicleId !== undefined) dataUpdate.assignedVehicleId = assignedVehicleId || null;
       if (scheduledDate) dataUpdate.scheduledDate = new Date(scheduledDate);
+      if (arrivalTime !== undefined) dataUpdate.arrivalTime = arrival;
       if (notes !== undefined) dataUpdate.notes = notes || null;
 
       if (lineItems && Array.isArray(lineItems)) {
@@ -270,9 +287,9 @@ export async function PUT(request: Request) {
       return await tx.job.update({ where: { id: jobId }, data: dataUpdate });
     });
 
-    await audit(user.userId, "UPDATE", "Job", jobId, { status, clientId, assignedVehicleId, scheduledDate, personnelIds });
+    await audit(user.userId, "UPDATE", "Job", jobId, { status, clientId, assignedVehicleId, scheduledDate, arrivalTime, personnelIds });
 
-    return NextResponse.json(updatedJob);
+    return NextResponse.json({ ...updatedJob, warnings });
   } catch (error) {
     console.error("Update Job API Error:", error);
     return NextResponse.json({ error: "Failed to update job" }, { status: 500 });

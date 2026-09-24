@@ -16,9 +16,7 @@
     "test:watch": "vitest",
     "electron:dev": "node scripts/electron-dev.js",
     "electron:build": "node scripts/electron-build.js",
-    "electron:build:trial": "node scripts/electron-build.js --trial",
     "electron:build:mac": "node scripts/electron-build.js --mac",
-    "electron:build:mac:trial": "node scripts/electron-build.js --mac --trial",
     "prepare": "husky"
   },
   "build": {
@@ -30,6 +28,7 @@
     },
     "files": [
       "electron/**/*",
+      "!electron/**/*.test.js",
       "package.json"
     ],
     "extraResources": [

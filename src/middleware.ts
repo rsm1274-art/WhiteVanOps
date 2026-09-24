@@ -15,16 +15,19 @@ const PUBLIC_PATHS = [
   "/manifest.webmanifest",
 ];
 const CHANGE_PASSWORD_PATHS = ["/change-password", "/api/auth/change-password"];
-// A trial-locked session may reach only the lockout page and the unlock API.
-// The unlock handler lives on POST /api/license ({ action: "unlock-trial" }),
-// so that path must be allowlisted or the unlock POST would itself be redirected
-// to /trial-expired and could never succeed. Safe: trialLocked is recomputed at
-// login from trial-unlock.json (not the License tier row), so reaching the
+// A trial-locked session may reach only the lockout page, the offline-unlock
+// API, and logout (so "Sign in again" can pick up an activation made on the
+// office PC). The unlock handler lives on POST /api/license ({ action:
+// "unlock-trial" }), so that path must be allowlisted or the unlock POST would
+// itself be redirected to /trial-expired and could never succeed. Safe:
+// trialLocked is recomputed at login from the signed files, so reaching the
 // role- and signature-gated license API cannot bypass the lock.
-const TRIAL_EXPIRED_PATHS = ["/trial-expired", "/api/license"];
+const TRIAL_EXPIRED_PATHS = ["/trial-expired", "/api/license", "/api/auth/logout"];
 
-// Routes a tech role may access
-const TECH_ALLOWED_PREFIXES = ["/field", "/api/field", "/api/time", "/api/auth", "/api/jobs"];
+// Routes a tech role may access. /trial-expired is here because a tech whose
+// session predates the trial ending is sent there by the field page (its data
+// load is refused) without carrying the trialLocked claim.
+const TECH_ALLOWED_PREFIXES = ["/field", "/api/field", "/api/time", "/api/auth", "/api/jobs", "/trial-expired"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -55,7 +58,10 @@ export async function middleware(req: NextRequest) {
     // Trial-lock takes priority over role-based routing — a locked trial
     // install shows nothing but the unlock screen until a valid key is applied.
     const trialLocked = payload.trialLocked as boolean | undefined;
-    if (trialLocked && !TRIAL_EXPIRED_PATHS.some((p) => pathname.startsWith(p))) {
+    if (trialLocked) {
+      // Let the trial pages through before role routing below: a locked tech
+      // would otherwise bounce /trial-expired → /field → /trial-expired forever.
+      if (TRIAL_EXPIRED_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
       return NextResponse.redirect(new URL("/trial-expired", req.url));
     }
 

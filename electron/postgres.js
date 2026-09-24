@@ -1,7 +1,7 @@
 // Bundled PostgreSQL lifecycle for the packaged desktop app.
 //
-// The installer ships portable PostgreSQL binaries in resources/pgsql and the
-// concatenated Prisma migrations in resources/db/schema.sql. On startup we:
+// The installer ships portable PostgreSQL binaries in resources/pgsql and every
+// Prisma migration in resources/db/migrations.json. On startup we:
 //   1. Ensure appDataWvoDir/.env.local exists (generate one with unique
 //      random credentials on first launch of a generic build). This lives in
 //      the OS app-data directory, not inside resourcesPath, so writing it
@@ -11,14 +11,19 @@
 //      or a user-managed install), we manage nothing.
 //   3. Otherwise initdb a data directory under appDataWvoDir/pgdata on first
 //      run, start the server with pg_ctl, and on first run create the
-//      database, apply the schema, and bootstrap the admin/admin superuser
+//      database and bootstrap the admin/admin superuser
 //      (mustChangePassword = true).
+//   4. On EVERY launch against our own database (first run, later runs, and
+//      the "already running" reuse path) apply any migrations the database
+//      hasn't recorded — see electron/migrate.js. A non-empty database is
+//      pg_dump'ed to appDataWvoDir/pre-upgrade-backups first.
 const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
+const { loadBundle, runMigrations, dumpBeforeUpgrade } = require('./migrate');
 
 function log(msg) {
   console.log(`[postgres] ${msg}`);
@@ -152,6 +157,34 @@ async function createDatabase(port, user, password, dbName) {
   }
 }
 
+// Bring the database up to this build's migrations. Throws (surfaced by
+// main.js as a startup-error dialog) rather than letting the web server boot
+// against a schema it doesn't match.
+async function applyMigrations({ port, user, password, dbName, resourcesPath, appDataWvoDir, pgDumpExe }) {
+  const { Client } = require('pg');
+  const bundle = loadBundle(path.join(resourcesPath, 'db', 'migrations.json'));
+  const client = new Client({ host: '127.0.0.1', port, user, password, database: dbName });
+  await client.connect();
+  try {
+    const result = await runMigrations({
+      client,
+      bundle,
+      log,
+      beforeApply: async (pending) => {
+        const file = dumpBeforeUpgrade({
+          pgDumpExe, port, user, password, dbName,
+          dir: path.join(appDataWvoDir, 'pre-upgrade-backups'),
+          label: pending[0],
+        });
+        log(`Pre-upgrade backup saved to ${file}`);
+      },
+    });
+    log(`Schema ${result.state}: ${result.applied.length} migration(s) applied, ${result.baseline.length} recorded as already present.`);
+  } finally {
+    await client.end();
+  }
+}
+
 // Bootstrap the initial superuser directly over SQL. Prisma generates cuid
 // ids client-side, so we must supply id and updatedAt ourselves.
 async function bootstrapAdmin(port, user, password, dbName, nextjsDir) {
@@ -197,7 +230,6 @@ async function testDbConnection(port, user, password, dbName) {
 async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
   const nextjsDir = path.join(resourcesPath, 'nextjs');
   const pgDir = path.join(resourcesPath, 'pgsql');
-  const schemaFile = path.join(resourcesPath, 'db', 'schema.sql');
   const envPath = path.join(appDataWvoDir, '.env.local');
 
   const env = ensureEnvLocal(appDataWvoDir, nextjsDir);
@@ -236,6 +268,7 @@ async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
   }
 
   const bin = (exe) => path.join(pgDir, 'bin', isWin ? `${exe}.exe` : exe);
+  const migrationArgs = { port, user, password, dbName, resourcesPath, appDataWvoDir, pgDumpExe: bin('pg_dump') };
   const dataDir = path.join(appDataWvoDir, 'pgdata');
   const logFile = path.join(appDataWvoDir, 'postgres.log');
   // Sentinel written only after initdb + schema + admin bootstrap all
@@ -252,6 +285,8 @@ async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
       const canConnect = await testDbConnection(port, user, password, dbName);
       if (canConnect) {
         log(`Port ${port} already has our database running — reusing the existing database server.`);
+        // Our credentials work, so it's our database: still bring it up to date.
+        await applyMigrations(migrationArgs);
         return { managed: false };
       } else {
         log(`Port ${port} is in use but database is unreachable/foreign; assuming collision.`);
@@ -267,6 +302,7 @@ async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
     }
     log(`Found free database port: ${freePort}. Updating DATABASE_URL.`);
     port = freePort;
+    migrationArgs.port = freePort;
     url.port = String(freePort);
     env.DATABASE_URL = url.toString();
 
@@ -315,14 +351,23 @@ async function ensurePostgres({ resourcesPath, appDataWvoDir }) {
     try {
       log(`Creating database "${dbName}" and applying schema ...`);
       await createDatabase(port, user, password, dbName);
-      const schemaSql = fs.readFileSync(schemaFile, 'utf8');
-      await executeSql(port, user, password, dbName, schemaSql);
+      await applyMigrations(migrationArgs);
       await bootstrapAdmin(port, user, password, dbName, nextjsDir);
       fs.writeFileSync(sentinel, new Date().toISOString());
     } catch (err) {
       // Roll back the half-initialized cluster so the next launch retries.
       try { runDetachedIo(bin('pg_ctl'), ['-D', dataDir, '-m', 'immediate', 'stop']); } catch { /* already down */ }
       fs.rmSync(dataDir, { recursive: true, force: true });
+      throw err;
+    }
+  } else {
+    try {
+      await applyMigrations(migrationArgs);
+    } catch (err) {
+      // We started this server; main.js only stops it when `managed` comes
+      // back true, so stop it here or it outlives the error dialog. The data
+      // directory is kept — a failed migration was rolled back.
+      try { runDetachedIo(bin('pg_ctl'), ['-D', dataDir, '-m', 'fast', '-w', '-t', '30', 'stop']); } catch { /* already down */ }
       throw err;
     }
   }

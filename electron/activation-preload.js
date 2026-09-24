@@ -1,7 +1,7 @@
 // Preload for the license-activation window. The window runs with
 // nodeIntegration:false / contextIsolation:true (matching every other window),
 // so the renderer has no direct access to Node or ipcRenderer. This bridge
-// exposes only the two narrow calls the activation UI needs.
+// exposes only the narrow calls the activation UI needs.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('wvoActivation', {
@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('wvoActivation', {
   onResult: (callback) =>
     ipcRenderer.on('license-result', (_event, result) => callback(result)),
   switchToClientSetup: () => ipcRenderer.send('switch-to-client-setup'),
+  startTrial: () => ipcRenderer.send('start-trial'),
 });

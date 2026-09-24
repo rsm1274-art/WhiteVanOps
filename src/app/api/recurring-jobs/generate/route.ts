@@ -11,9 +11,10 @@ import { nextOccurrence, RecurrenceFrequency } from "@/lib/recurrence";
 const BATCH_SIZE = 4;
 
 // POST: Generate the next batch of Job rows from a recurring template.
-// Conflicting occurrences (double-booking, open repair, time-off) are
-// skipped individually and reported back — never silently dropped, never
-// blocking the rest of the batch.
+// Occurrences with a hard conflict (open repair, time-off, equipment already
+// out) are skipped individually and reported back — never silently dropped,
+// never blocking the rest of the batch. A van/tech already booked that day is
+// only advisory: the job is created and the occurrence reported in `warnings`.
 export async function POST(request: Request) {
   const user = await getSessionUser();
   const err = requireRole(user, "admin", "superuser");
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
 
     const created: string[] = [];
     const skipped: { date: string; reason: string }[] = [];
+    const warnings: { date: string; reason: string }[] = [];
     let lastAttempted: Date | null = null;
 
     for (let i = 0; i < BATCH_SIZE; i++) {
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
       lastAttempted = cursor;
       const occurrenceDate = cursor;
 
-      const conflict = await checkJobConflicts({
+      const { error: conflict, warnings: found } = await checkJobConflicts({
         scheduledDate: occurrenceDate,
         assignedVehicleId: template.assignedVehicleId,
         personnelIds,
@@ -64,6 +66,7 @@ export async function POST(request: Request) {
       if (conflict) {
         skipped.push({ date: occurrenceDate.toISOString(), reason: conflict });
       } else {
+        for (const reason of found) warnings.push({ date: occurrenceDate.toISOString(), reason });
         await prisma.$transaction(async (tx) => {
           const job = await tx.job.create({
             data: {
@@ -103,9 +106,10 @@ export async function POST(request: Request) {
       action: "generate",
       createdCount: created.length,
       skippedCount: skipped.length,
+      warningCount: warnings.length,
     });
 
-    return NextResponse.json({ created, skipped });
+    return NextResponse.json({ created, skipped, warnings });
   } catch (error) {
     console.error("Generate Recurring Jobs API Error:", error);
     return NextResponse.json({ error: "Failed to generate jobs" }, { status: 500 });

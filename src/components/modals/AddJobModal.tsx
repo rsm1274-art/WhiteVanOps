@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import Modal, { ModalHeader, Field, inputCls, selectCls, SubmitButton } from "@/components/shared/Modal";
 import { DashboardData, NewJobForm } from "@/types";
 import { findClientSideConflicts } from "@/lib/clientJobConflicts";
+import ConflictNotice, { needsAcknowledgement, ACKNOWLEDGE_MESSAGE } from "@/components/shared/ConflictNotice";
 
 const BLANK: NewJobForm = {
   clientId: "",
   assignedVehicleId: "",
   scheduledDate: "",
+  arrivalTime: "",
   notes: "",
   personnelIds: [],
   equipmentIds: [],
@@ -64,9 +66,12 @@ function CheckboxList({
 
 export default function AddJobModal({ data, initialValues, onClose, onSuccess, onError }: Props) {
   const [form, setForm] = useState<NewJobForm>({ ...BLANK, ...initialValues });
-  const isClone = !!initialValues;
+  // A clone carries the source job's client; "Schedule job" from the
+  // Scheduling tab only pre-fills the date and is a plain new job.
+  const isClone = !!initialValues?.clientId;
 
-  const warnings = useMemo(
+  const [acknowledged, setAcknowledged] = useState(false);
+  const conflicts = useMemo(
     () =>
       findClientSideConflicts({
         data,
@@ -82,6 +87,10 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
     e.preventDefault();
     if (form.personnelIds.length === 0) {
       onError("At least one technician must be assigned.");
+      return;
+    }
+    if (needsAcknowledgement(conflicts, acknowledged)) {
+      onError(ACKNOWLEDGE_MESSAGE);
       return;
     }
     try {
@@ -162,6 +171,15 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
           />
         </Field>
 
+        <Field label="Arrival Time (optional)">
+          <input
+            type="time"
+            value={form.arrivalTime ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, arrivalTime: e.target.value }))}
+            className={inputCls}
+          />
+        </Field>
+
         <Field label="Scope of Work / Notes">
           <textarea
             rows={3}
@@ -185,15 +203,7 @@ export default function AddJobModal({ data, initialValues, onClose, onSuccess, o
           selected={form.equipmentIds}
           onChange={(ids) => setForm((f) => ({ ...f, equipmentIds: ids }))}
         />
-
-        {warnings.length > 0 && (
-          <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900 space-y-1">
-            <p className="font-bold uppercase tracking-wider text-[10px]">Availability Conflict{warnings.length > 1 ? "s" : ""}</p>
-            {warnings.map((w, i) => (
-              <p key={i}>{w}</p>
-            ))}
-          </div>
-        )}
+        <ConflictNotice conflicts={conflicts} acknowledged={acknowledged} onAcknowledge={setAcknowledged} />
 
         <SubmitButton label={isClone ? "Schedule Cloned Job" : "Create Dispatch Assignment"} />
       </form>

@@ -60,13 +60,31 @@ Once you've selected your name, you see a list of all jobs assigned to you.
 | Done | Jobs that are Completed |
 | All | Every job regardless of status |
 
+Jobs are grouped under three headings:
+
+| Heading | What's in it |
+|---|---|
+| Today | Today's jobs, in arrival-time order. These cards open expanded automatically. |
+| Upcoming | Future jobs, soonest first. |
+| Earlier / overdue | Past-dated jobs, most recent first. Under the Active filter this heading reads "Earlier / overdue" — anything here was never marked complete. Under Done or All it just reads "Earlier". |
+
 Each job card shows:
-- The client's name and job address
+- The client's name and job address — **tap the address to open it in your phone's maps app** (this works away from the office WiFi too)
+- The customer contact's phone number, if the office entered one — **tap it to call**
 - The current status (Scheduled, In Progress, Completed)
-- The scheduled date
+- The scheduled date and, if set, the **arrival time**
 - Your assigned vehicle
 - Your crew (other techs on the same job)
 - A count of logged time entries and materials, if any
+
+### "New" and "Updated" badges
+
+The app can't notify you when the office changes your schedule, so it marks changes on the cards instead:
+
+- **New** — a job assigned to you since you last looked.
+- **Updated** — the office changed something on this job (date, time, crew, notes, …) since you last opened it.
+
+The badge clears when you tap the card open (or tap the badge itself). Your own saves never trigger it. Tap **Refresh** after reconnecting to the office WiFi to pick up the latest changes. Badges are remembered per phone, so a different phone starts clean.
 
 ---
 
@@ -319,7 +337,9 @@ Make sure your phone's browser zoom is set to 100%. On most phones, you can rese
 | What you want to do | How to do it |
 |---|---|
 | Sign in | Open the Field Module URL → enter your username and password |
-| See your active jobs | Default view when signed in |
+| See your active jobs | Default view when signed in — grouped Today / Upcoming / Earlier |
+| Navigate to a job | Tap the job address |
+| Call the customer | Tap the phone number on the card |
 | See completed jobs | Tap **Done** filter button |
 | Start a job | Expand card → tap **Start Job** |
 | Complete a job | Expand card → tap **Mark Complete** |

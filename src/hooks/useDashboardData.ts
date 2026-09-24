@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { DashboardData } from "@/types";
+import { isTrialExpiredResponse } from "@/lib/trialExpired";
 
 interface UseDashboardData {
   data: DashboardData | null;
@@ -21,6 +22,10 @@ export function useDashboardData(): UseDashboardData {
       if (!silent) setLoading(true);
       setError(null);
       const res = await fetch("/api/dashboard");
+      if (await isTrialExpiredResponse(res)) {
+        window.location.href = "/trial-expired";
+        return;
+      }
       if (!res.ok) throw new Error("Failed to load dashboard data");
       const json: DashboardData = await res.json();
       setData(json);

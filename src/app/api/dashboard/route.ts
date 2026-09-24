@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getLicense } from "@/lib/license";
+import { trialExpiredResponse } from "@/lib/trialGuard";
 
 export async function GET() {
+  const expired = trialExpiredResponse();
+  if (expired) return expired;
+
   try {
     const license = await getLicense();
 
@@ -75,7 +79,8 @@ export async function GET() {
             },
           },
         },
-        orderBy: { scheduledDate: "desc" },
+        // Newest day first; within a day, by arrival time (untimed last).
+        orderBy: [{ scheduledDate: "desc" }, { arrivalTime: "asc" }],
       }),
       prisma.timeEntry.findMany({
         include: {

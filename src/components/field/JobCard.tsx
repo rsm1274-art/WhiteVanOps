@@ -16,8 +16,11 @@ import {
   Wrench,
   FileText,
   Package,
+  Phone,
 } from "lucide-react";
 import { submitWrite, type WriteResult } from "@/lib/offlineWrite";
+import { formatArrivalTime } from "@/lib/jobOrder";
+import type { JobBadge } from "@/lib/fieldSeen";
 import type { FieldJob, InventoryItem } from "@/app/field/page";
 
 // A queued (not-yet-synced) write must never be followed by a server refetch —
@@ -373,16 +376,27 @@ export default function JobCard({
   job,
   techId,
   inventoryItems,
+  badge,
+  defaultExpanded = false,
+  onSeen,
   onWriteResult,
   onError,
 }: {
   job: FieldJob;
   techId: string;
   inventoryItems: InventoryItem[];
+  badge: JobBadge;
+  defaultExpanded?: boolean;
+  onSeen: () => void;
   onWriteResult: WriteResultHandler;
   onError: (msg: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const toggleExpanded = () => {
+    setExpanded((v) => !v);
+    if (badge) onSeen();
+  };
+  const arrival = formatArrivalTime(job.arrivalTime);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [actioning, setActioning] = useState(false);
 
@@ -414,16 +428,45 @@ export default function JobCard({
               <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${STATUS_COLORS[job.status] ?? "bg-zinc-100 text-zinc-600"}`}>
                 {job.status}
               </span>
-              <span className="text-[10px] text-zinc-400 font-medium">{formatDate(job.scheduledDate)}</span>
+              <span className="text-[10px] text-zinc-400 font-medium">
+                {formatDate(job.scheduledDate)}
+                {arrival && <span className="ml-1 font-bold text-zinc-600">· {arrival}</span>}
+              </span>
+              {badge && (
+                <button
+                  onClick={onSeen}
+                  title="Changed by the office since you last opened this job — tap to clear"
+                  className="px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white"
+                >
+                  {badge === "new" ? "New" : "Updated"}
+                </button>
+              )}
             </div>
             <h3 className="font-bold text-zinc-900 text-base leading-tight truncate">{job.client.name}</h3>
-            <div className="flex items-center gap-1 mt-1 text-xs text-zinc-500">
+            {/* Opens the phone's maps app; works off the office WiFi too. */}
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent(job.client.locationAddress)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 mt-1 text-xs text-blue-700 underline underline-offset-2"
+            >
               <MapPin className="h-3 w-3 shrink-0" />
               <span className="truncate">{job.client.locationAddress}</span>
-            </div>
+            </a>
+            {job.client.contactPhone && (
+              <a
+                href={`tel:${job.client.contactPhone.replace(/[^\d+]/g, "")}`}
+                className="flex items-center gap-1 mt-1 text-xs text-blue-700 underline underline-offset-2"
+              >
+                <Phone className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {job.client.contactName ? `${job.client.contactName} · ` : ""}{job.client.contactPhone}
+                </span>
+              </a>
+            )}
           </div>
           <button
-            onClick={() => setExpanded((v) => !v)}
+            onClick={toggleExpanded}
             className="p-1.5 rounded-lg hover:bg-zinc-100 transition-colors shrink-0 mt-0.5"
             aria-label={expanded ? "Collapse" : "Expand"}
           >

@@ -5,8 +5,23 @@ import { Plus, Copy, Pencil, Repeat, Play, Pause, Trash2, RotateCw, StickyNote, 
 import { Client, ClientFollowUp, DashboardData, Job, JobStatus, RecurringJobTemplate } from "@/types";
 import { JobStatusBadge, SyncStatusBadge } from "@/components/shared/StatusBadge";
 import { formatDate, todayLocalStr, dateToLocalStr } from "@/lib/dateUtils";
+import { formatArrivalTime } from "@/lib/jobOrder";
 
 const ALL_STATUSES: JobStatus[] = ["Scheduled", "In Progress", "Completed", "Cancelled"];
+
+type DateRange = "any" | "today" | "week";
+const DATE_RANGES: { key: DateRange; label: string }[] = [
+  { key: "any", label: "Any date" },
+  { key: "today", label: "Today" },
+  { key: "week", label: "Next 7 days" },
+];
+
+/** Local yyyy-mm-dd for today + n days. */
+function localDayOffset(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const FREQUENCY_LABELS: Record<string, string> = {
   Weekly: "Every week",
@@ -33,6 +48,7 @@ interface Props {
   onDeleteRecurringJob: (template: RecurringJobTemplate) => void;
   // Plus tier — CRM notes & follow-ups (undefined handlers on Base installs)
   onAddNote?: (client: Client) => void;
+  onEditClient: (client: Client) => void;
   onAddFollowUp?: (client: Client) => void;
   onEditFollowUp?: (client: Client, followUp: ClientFollowUp) => void;
   onToggleFollowUp?: (followUp: ClientFollowUp) => void;
@@ -57,20 +73,25 @@ export default function CRMTab({
   onToggleRecurringActive,
   onDeleteRecurringJob,
   onAddNote,
+  onEditClient,
   onAddFollowUp,
   onEditFollowUp,
   onToggleFollowUp,
   onDeleteFollowUp,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<JobStatus | "All">("All");
+  const [dateRange, setDateRange] = useState<DateRange>("any");
   const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
 
   const today = todayLocalStr();
 
-  const filteredJobs =
-    statusFilter === "All"
-      ? data.jobs
-      : data.jobs.filter((j) => j.status === statusFilter);
+  const rangeEnd = dateRange === "week" ? localDayOffset(6) : today;
+  const filteredJobs = data.jobs.filter((j) => {
+    if (statusFilter !== "All" && j.status !== statusFilter) return false;
+    if (dateRange === "any") return true;
+    const day = dateToLocalStr(j.scheduledDate);
+    return day >= today && day <= rangeEnd;
+  });
 
   return (
     <div className="space-y-8">
@@ -116,9 +137,18 @@ export default function CRMTab({
               const expanded = expandedClientId === c.id;
               return (
                 <div key={c.id} className="p-4 border border-zinc-100 rounded bg-zinc-50">
-                  <h5 className="font-bold text-sm">{c.name}</h5>
+                  <div className="flex items-start justify-between gap-2">
+                    <h5 className="font-bold text-sm">{c.name}</h5>
+                    <button
+                      onClick={() => onEditClient(c)}
+                      className="text-zinc-400 hover:text-zinc-800"
+                      title="Edit client details"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
                   <span className="text-[10px] text-zinc-400 block font-semibold mt-0.5">
-                    Contact: {c.contactName}
+                    Contact: {c.contactName}{c.contactPhone ? ` · ${c.contactPhone}` : ""}
                   </span>
                   <p className="text-xs text-zinc-500 mt-2">{c.locationAddress}</p>
                   <div className="mt-3 pt-2 border-t border-zinc-100 flex justify-between items-center text-xs">
@@ -330,6 +360,20 @@ export default function CRMTab({
               {s}
             </button>
           ))}
+          <span className="mx-2 h-4 w-px bg-zinc-300" />
+          {DATE_RANGES.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setDateRange(key)}
+              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded transition-colors ${
+                dateRange === key
+                  ? "bg-zinc-900 text-white"
+                  : "border border-zinc-300 text-zinc-600 hover:bg-zinc-100"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
           <span className="ml-auto text-[10px] text-zinc-400">{filteredJobs.length} jobs</span>
         </div>
 
@@ -394,6 +438,9 @@ export default function CRMTab({
                   </td>
                   <td className="py-4 px-6 text-zinc-600 align-top">
                     {formatDate(job.scheduledDate)}
+                    {job.arrivalTime && (
+                      <span className="block text-xs text-zinc-400">{formatArrivalTime(job.arrivalTime)}</span>
+                    )}
                   </td>
                   <td className="py-4 px-6 align-top">
                     <JobStatusBadge status={job.status} />
@@ -424,13 +471,15 @@ export default function CRMTab({
                         Clone
                       </button>
 
-                      <button
-                        onClick={() => onReopenJob(job.id)}
-                        className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide text-blue-700 hover:text-blue-900 rounded inline-flex items-center gap-1"
-                        title="Re-open this completed job"
-                      >
-                        Re-open
-                      </button>
+                      {job.status === "Completed" && (
+                        <button
+                          onClick={() => onReopenJob(job.id)}
+                          className="px-2.5 py-1 text-xs border border-zinc-300 hover:bg-zinc-50 font-bold uppercase tracking-wide text-blue-700 hover:text-blue-900 rounded inline-flex items-center gap-1"
+                          title="Re-open this completed job"
+                        >
+                          Re-open
+                        </button>
+                      )}
 
                       {job.status === "Scheduled" && (
                         <button

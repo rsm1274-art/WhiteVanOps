@@ -1,0 +1,5 @@
+# Migration SQL must check out byte-identical on every OS: the installed app and
+# Prisma both record a sha256 of each migration.sql, and a CRLF checkout on a
+# Windows build machine would make `prisma migrate status` elsewhere report
+# shipped migrations as modified. See electron/migrate.js.
+*.sql text eol=lf

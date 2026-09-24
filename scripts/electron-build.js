@@ -1,6 +1,7 @@
-// Production build: Next.js standalone → electron-builder installer (full or
-// trial variant), NSIS .exe by default or a .dmg with --mac. The Mac build must
-// run on a Mac.
+// Production build: Next.js standalone → electron-builder installer, NSIS .exe
+// by default or a .dmg with --mac. The Mac build must run on a Mac. There is
+// one installer: the 30-day trial is chosen by the customer on first launch
+// (electron/main.js), not baked in at build time.
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -9,7 +10,6 @@ const root = path.join(__dirname, '..');
 const standalone = path.join(root, '.next', 'standalone');
 
 const args = process.argv.slice(2);
-const isTrial = args.includes('--trial');
 // The Mac build must actually run on a Mac (electron-builder can't produce a
 // signed-shape .app on Windows, and the pgsql-mac payload is macOS binaries).
 // This flag only selects which config/checks apply here.
@@ -21,29 +21,25 @@ if (args.includes('--upgrade')) {
   process.exit(1);
 }
 if (args.includes('--base') || args.includes('--plus')) {
-  console.error('\n❌ --base/--plus were removed in v2.0 — there is one product now. Use --trial for a demo build, or no flag for the full installer.\n');
+  console.error('\n❌ --base/--plus were removed in v2.0 — there is one product now. Build with no flag.\n');
+  process.exit(1);
+}
+if (args.includes('--trial')) {
+  console.error('\n❌ --trial was removed on 2026-09-24 — there is one installer now. Customers choose "Start 30-day trial" on first launch. Build with no flag.\n');
   process.exit(1);
 }
 
-const variant = isTrial ? 'trial' : 'full';
-
 const ARTIFACT_NAMES = {
-  win: {
-    full: 'WhiteVanOps-Setup.exe',
-    trial: 'WhiteVanOps-Trial-Setup.exe',
-  },
+  win: 'WhiteVanOps-Setup.exe',
   // Mac builds both arm64 and x64 from one electron-builder invocation
   // (package.json's mac.target lists both arches against the dmg target).
   // The "${arch}" token is electron-builder's own templating syntax — it
   // substitutes 'arm64'/'x64' when it writes each file. Without a per-arch
   // token here, both builds resolve to the same filename and the second one
   // (x64) silently overwrites the first (arm64) on disk.
-  mac: {
-    full: 'WhiteVanOps-Setup-${arch}.dmg',
-    trial: 'WhiteVanOps-Trial-Setup-${arch}.dmg',
-  },
+  mac: 'WhiteVanOps-Setup-${arch}.dmg',
 };
-const artifactName = ARTIFACT_NAMES[targetPlatform][variant];
+const artifactName = ARTIFACT_NAMES[targetPlatform];
 
 // Resolve our own copy of electron-builder's "${arch}" substitution, so the
 // verification/manifest code below (which electron-builder never sees) can
@@ -54,8 +50,8 @@ function resolvedArtifactName(arch) {
 
 console.log(
   isMac
-    ? `\nBuilding ${resolvedArtifactName('arm64')} and ${resolvedArtifactName('x64')}  (platform=${targetPlatform} variant=${variant})`
-    : `\nBuilding ${artifactName}  (platform=${targetPlatform} variant=${variant})`
+    ? `\nBuilding ${resolvedArtifactName('arm64')} and ${resolvedArtifactName('x64')}  (platform=${targetPlatform})`
+    : `\nBuilding ${artifactName}  (platform=${targetPlatform})`
 );
 
 function run(cmd, env = {}) {
@@ -75,11 +71,11 @@ function copyDir(src, dst) {
 const distElectron = path.join(root, 'dist-electron');
 
 // ==========================================
-// TARGET: Full App Installer (full / trial variants)
+// TARGET: App Installer
 // ==========================================
 // Clean only the temporary build output to preserve previously generated
 // installers. Do NOT blanket-delete dist-electron/: the finished installers
-// live here and they are built one variant at a time across both platforms,
+// live here and they are built one platform at a time,
 // so a wipe would destroy artifacts this run cannot rebuild.
 //
 // electron-builder names the unpacked dir per-arch on mac (mac-arm64, mac),
@@ -152,28 +148,24 @@ let envContent = '';
 if (fs.existsSync(envSrc)) {
   envContent = fs.readFileSync(envSrc, 'utf8');
 }
-// Trial builds set WVO_IS_TRIAL so src/lib/trial.ts activates the 30-day lock.
-// There is no plan stamp any more (v2.0 has no tier) — a trial build simply
-// runs the full feature set for 30 days, same as every other install.
-if (variant === 'trial') {
-  envContent += `\nWVO_IS_TRIAL="true"\n`;
-}
+// A stale WVO_IS_TRIAL line (from the removed trial-build variant) would do
+// nothing today, but strip it so no build ever ships a trial flag again.
+envContent = envContent.replace(/^\s*WVO_IS_TRIAL\s*=.*$\n?/gm, '');
 fs.writeFileSync(envDest, envContent, 'utf8');
-console.log(`\nCopied .env.local into standalone bundle${variant === 'trial' ? ' with WVO_IS_TRIAL' : ''}.`);
+console.log('\nCopied .env.local into standalone bundle.');
 
-// 5. Concatenate Prisma migrations into a single schema.sql — applied by
-// electron/postgres.js when the bundled PostgreSQL initializes on first run.
-const migrationsDir = path.join(root, 'prisma', 'migrations');
-const migrations = fs
-  .readdirSync(migrationsDir)
-  .filter((d) => fs.existsSync(path.join(migrationsDir, d, 'migration.sql')))
-  .sort();
-const schemaSql = migrations
-  .map((d) => `-- Migration: ${d}\n` + fs.readFileSync(path.join(migrationsDir, d, 'migration.sql'), 'utf8'))
-  .join('\n\n');
-fs.mkdirSync(path.join(root, '.next', 'db'), { recursive: true });
-fs.writeFileSync(path.join(root, '.next', 'db', 'schema.sql'), schemaSql);
-console.log(`\nGenerated .next/db/schema.sql from ${migrations.length} migrations.`);
+// 5. Bundle every Prisma migration individually into migrations.json — applied
+// by electron/migrate.js on every launch (first run: all of them; in-place
+// upgrade: only the ones the customer's database hasn't recorded yet). This
+// replaced a concatenated schema.sql that only ever ran on first launch, so
+// upgraded installs never received new columns.
+const { buildBundle } = require('../electron/migrate');
+const migrationBundle = buildBundle(path.join(root, 'prisma', 'migrations'));
+const dbOutDir = path.join(root, '.next', 'db');
+fs.rmSync(dbOutDir, { recursive: true, force: true });
+fs.mkdirSync(dbOutDir, { recursive: true });
+fs.writeFileSync(path.join(dbOutDir, 'migrations.json'), JSON.stringify(migrationBundle));
+console.log(`\nGenerated .next/db/migrations.json from ${migrationBundle.length} migrations.`);
 
 // Platform-aware payload dirs and binary names. Mac binaries live in
 // pgsql-mac/ — a parallel, gitignored directory, kept separate from the
@@ -196,12 +188,12 @@ if (!fs.existsSync(path.join(root, pgPayloadDir, 'bin', pgCtlName))) {
   process.exit(1);
 }
 
-// 7. Package with electron-builder using a per-variant config derived from
+// 7. Package with electron-builder using a config derived from
 // package.json's "build" key. package.json stays the single source of truth;
 // only the delta (artifact name) is computed here, so the two cannot drift.
 const builderConfig = JSON.parse(JSON.stringify(require(path.join(root, 'package.json')).build));
 builderConfig[targetPlatform].artifactName = artifactName;
-const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}-${variant}.json`);
+const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}.json`);
 fs.writeFileSync(builderConfigPath, JSON.stringify(builderConfig, null, 2), 'utf8');
 run(`npx electron-builder --${targetPlatform} --config "${builderConfigPath}"`);
 
@@ -283,6 +275,18 @@ for (const { arch, unpackedDir } of buildTargets) {
     console.error('electron/*.js requires these at launch. Move them from "devDependencies" back to "dependencies" in package.json.\n');
     process.exit(1);
   }
+  // 7d. The migration bundle must match the repo's migrations exactly — a stale
+  // or missing one ships an installer that can't create or upgrade its database.
+  const bundlePath = path.join(distElectron, unpackedDir, ...resourcesRel, 'db', 'migrations.json');
+  let packagedCount = -1;
+  try {
+    packagedCount = JSON.parse(fs.readFileSync(bundlePath, 'utf8')).length;
+  } catch { /* reported below */ }
+  if (packagedCount !== migrationBundle.length) {
+    console.error(`\n❌ Error: packaged output (${label}) has ${packagedCount < 0 ? 'no readable' : packagedCount} db/migrations.json entries, expected ${migrationBundle.length} — do not ship it.`);
+    process.exit(1);
+  }
+
   const asarMb = (fs.statSync(asarPath).size / (1024 * 1024)).toFixed(0);
   console.log(`\nVerified app.asar (${label}, ${asarMb} MB, ${bundledModules.length} modules) carries all ${ELECTRON_RUNTIME_MODULES.length} Electron runtime deps.`);
 }
@@ -307,9 +311,9 @@ for (const { arch } of buildTargets) {
 // otherwise fixed, so nothing about the filename itself reveals when or from
 // what code it was built. Writes a human-readable sidecar next to each
 // installer (travels with the file if it's copied elsewhere) and updates a
-// shared manifest across all variants (and, on mac, both arches), tracked in
+// shared manifest across both platforms (and, on mac, both arches), tracked in
 // an internal JSON store so later builds can merge into it without clobbering
-// other variants'/arches' entries.
+// the other platform's/arch's entries.
 const appVersion = require(path.join(root, 'package.json')).version;
 let gitCommit = 'unknown (not a git checkout)';
 let gitDirty = false;
@@ -336,7 +340,7 @@ for (const { arch } of buildTargets) {
   const finalArtifact = path.join(distElectron, name);
   if (!fs.existsSync(finalArtifact)) continue;
 
-  const buildInfo = { artifactName: name, variant, appVersion, gitCommit, gitDirty, builtAt };
+  const buildInfo = { artifactName: name, appVersion, gitCommit, gitDirty, builtAt };
 
   fs.writeFileSync(
     path.join(distElectron, `${name}.buildinfo.txt`),
@@ -355,8 +359,8 @@ for (const { arch } of buildTargets) {
 fs.writeFileSync(manifestJsonPath, JSON.stringify(manifest, null, 2), 'utf8');
 
 const allArtifactNames = [
-  ...Object.values(ARTIFACT_NAMES.win),
-  ...Object.values(ARTIFACT_NAMES.mac).flatMap((n) => ['arm64', 'x64'].map((a) => n.replace('${arch}', a))),
+  ARTIFACT_NAMES.win,
+  ...['arm64', 'x64'].map((a) => ARTIFACT_NAMES.mac.replace('${arch}', a)),
 ];
 const manifestLines = ['All installers currently on record in dist-electron/:', ''];
 for (const name of allArtifactNames) {

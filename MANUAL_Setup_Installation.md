@@ -158,15 +158,16 @@ trial) copy, and that's the whole job it does now.
 
 ## 6. Build the Desktop Installers
 
-Two installer variants — build vs. trial-or-not — per platform. There is no plan axis; every
-build runs the full feature set:
+**One installer per platform.** The same file serves paying customers and prospects on a 30-day
+trial; the choice is made by the customer on first launch, not at build time:
 
 ```bash
-npm run electron:build            # Windows installer   → dist-electron/WhiteVanOps-Setup.exe
-npm run electron:build:trial      # Windows 30-day trial → dist-electron/WhiteVanOps-Trial-Setup.exe
-npm run electron:build:mac        # macOS installer      → dist-electron/WhiteVanOps-Setup-{arm64,x64}.dmg
-npm run electron:build:mac:trial  # macOS 30-day trial   → dist-electron/WhiteVanOps-Trial-Setup-{arm64,x64}.dmg
+npm run electron:build            # Windows → dist-electron/WhiteVanOps-Setup.exe
+npm run electron:build:mac        # macOS   → dist-electron/WhiteVanOps-Setup-{arm64,x64}.dmg
 ```
+
+(The separate `electron:build:trial` / `-Trial-Setup` builds were removed on 2026-09-24; passing
+`--trial` to the build script now stops with an explanation.)
 
 **The activation key proves a legitimate install — it no longer selects a plan.** Keys are minted with:
 ```bash
@@ -174,31 +175,62 @@ node scripts/license-manager.js
 ```
 The key is stamped onto its Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC.
 
-### Trial/Demo Installers (Sales Demos)
+> **A download link for prospects must be a generic build:** build it with **no** `.env.local` in
+> the project folder. Each install then generates its own database password and `SESSION_SECRET`
+> on first launch (`<appData>/whitevanops/.env.local`). A build that bundles your `.env.local`
+> would hand the same secret to every prospect who downloads it (see §3).
 
-`electron:build:trial` and `electron:build:mac:trial` build time-limited demo installers for prospect evaluations, locked to 30 days after first launch.
+### First launch: activation key or 30-day trial
 
-* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs the full feature set for 30 days. (This differs from a standard customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
-* **What the prospect sees:** during the trial, **Settings → License & Plan** shows license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
-* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen.
-* **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
-  ```bash
-  node scripts/license-manager.js --unlock-trial --machine <theirMachineId> [--notes "Order #1234"]
-  ```
-  Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control. **The good news to lead with:** all the data they entered during the trial stays — no reinstall, no migration, no re-entry.
+The first time WhiteVanOps opens, one window offers three things:
+
+* **Activate** — type a `WVO-XXXX-XXXX-XXXX-XXXX` key. Needs internet once; the key is bound to this computer. The app then runs with no time limit.
+* **Start 30-day free trial** — no key, no internet. Full feature set for 30 days from this moment.
+* **Connecting to an existing office server instead?** — client mode (§7A).
+
+During a trial:
+
+* A **"Trial: N days left"** strip shows across the top of the dashboard, and **Settings → License & Plan** shows `TRIAL-ACTIVE` with the end date.
+* To convert early, in the WhiteVanOps window choose **Help → Enter activation key…** and enter the `WVO-` key. Nothing is reinstalled and no data moves.
+
+When the 30 days are up:
+
+* The next time WhiteVanOps opens (or within the hour, if it's left open), it shows **"Your trial has ended"** with only the activation-key box. Closing that window closes the app. **The database is untouched** — the moment a key is entered, everything is exactly as they left it.
+* Field techs' phones and any other browser show a "trial has ended" page instead of data; once the office PC is activated, **Sign in again** on that page brings them back. Work a tech had queued offline is still accepted and kept.
+* The trial start date is kept both in `<appData>/whitevanops/trial.json` and inside the database, and the earlier of the two counts — deleting the file doesn't restart the trial.
+
+**Converting a site with no internet at all:** the old per-machine unlock code still works as a
+fallback. Have them open **Settings → License & Plan → "No internet at the office? Use an offline
+unlock code"** (or the same link on the trial-ended page), read you the Machine ID, and run:
+```bash
+node scripts/license-manager.js --unlock-trial --machine <theirMachineId> [--notes "Order #1234"]
+```
+Send the printed JSON block back for them to paste in (superuser account required).
 
 ---
 
 ### What the build commands do
 
 1. Compile the Next.js production build
-2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only)
-3. Concatenate the Prisma migrations into `schema.sql` for the bundled database's first-run initialization
+2. Copy `.env.local` into the Next.js standalone bundle, if one exists (leave it out for a generic/download build — see above)
+3. Bundle every Prisma migration into `migrations.json`. The installed app applies the pending ones on every launch (all of them on a new install, only the new ones on an upgrade)
 4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single installer (NSIS on Windows, `.dmg` on macOS)
 5. Output the resulting executable, named per the table above, in `dist-electron/`
 6. Write a build stamp so a leftover file from a previous run can't be mistaken for the one you just built (see below)
 
 Distribute the generated installer to office staff. The installer upgrades an existing installation in-place.
+
+### What happens to the database on an upgrade
+
+On the first launch after an in-place upgrade, the app brings the bundled database up to date by itself before the window opens:
+
+1. It checks which database changes (migrations) the existing database already has. Installs from before this mechanism existed are recognised from their tables and columns.
+2. If anything is missing, it first saves a backup of the whole database to `%APPDATA%\whitevanops\pre-upgrade-backups\` (macOS: `~/Library/Application Support/whitevanops/pre-upgrade-backups/`). The newest 3 are kept. **If that backup can't be taken, the upgrade stops and nothing is changed.**
+3. It applies each missing change on its own. If one fails, that change is rolled back, the app shows a **"Database upgrade failed"** startup error, and it doesn't open. See `docs/MANUAL_Troubleshooting.md` §3.2b.
+
+No action is needed for a normal upgrade. The applied changes are recorded in the database's `_prisma_migrations` table, the same table `npx prisma migrate status` reads.
+
+> **Office PM2 machine or any external database:** the automatic step above only runs against the app's own bundled database. A database the app doesn't manage (a PM2-hosted PostgreSQL, or a `DATABASE_URL` pointing at another host) must be updated by hand with `npx prisma migrate deploy` from the project folder before the new version is used against it. See §12.
 
 ### Telling a current build apart from a stale one
 
@@ -371,7 +403,7 @@ Field technicians need a **tech** account linked to their Personnel record so th
 
 1. Pull the latest code.
 2. Install any new dependencies: `npm install`
-3. Apply schema changes: `npx prisma migrate deploy`
+3. Apply schema changes to any database the desktop app does **not** manage itself (the office PM2 database, or an external `DATABASE_URL`): `npx prisma migrate deploy`. Customer installs using the bundled database update themselves on first launch; see "What happens to the database on an upgrade" in §6.
 4. Rebuild the installer: `npm run electron:build`
 5. Distribute the new `.exe` to office staff. The installer upgrades in-place.
 
@@ -419,7 +451,7 @@ Choose the option that fits your situation:
      *(Enter the database password from your `.env.local` when prompted).*
 
 ### Step 5: Verify
-Launch WhiteVanOps on the new machine. Your accounts, historical data, and configurations will be fully restored.
+Launch WhiteVanOps on the new machine. Your accounts, historical data, and configurations will be fully restored. If the new machine runs a newer version than the old one, the first launch also brings the restored database up to date automatically. A pre-upgrade backup is taken first; see "What happens to the database on an upgrade" in §6.
 
 ---
 

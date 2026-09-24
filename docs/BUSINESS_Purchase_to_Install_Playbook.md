@@ -22,10 +22,10 @@ the Base/Plus tier — there is nothing left to upgrade a customer into).
 | | **Activation Key** | **Trial Unlock Key** |
 |---|---|---|
 | **Looks like** | `WVO-4A2F-91BC-D7E3-0518` | A block of JSON text |
-| **Its job** | Proves this install is a legitimate paid copy. Every non-trial install needs one. | Converts a 30-day sales demo into a permanent install. |
+| **Its job** | Proves this install is a legitimate paid copy. Also what converts a 30-day trial. | Offline fallback only: converts a trial at a site with no internet at all. |
 | **Made by** | `node scripts/license-manager.js` | `node scripts/license-manager.js --unlock-trial --machine <their machine ID>` |
 | **Needs internet?** | **Yes** — writes the key to your Firebase/Firestore database in the cloud, and the customer's PC checks it there when they activate. | No. It's math, done offline. |
-| **Where it gets typed** | The activation window that pops up on first launch, before the app opens. | Settings → License & Plan, or the trial-expired screen. |
+| **Where it gets typed** | The activation window on first launch, the "trial has ended" window, or Help → Enter activation key… | Settings → License & Plan, or the trial-ended page ("No internet at the office?"). |
 | **Locked to** | One physical machine, forever (see below). | One physical machine. |
 
 ### What "locked to a machine" actually means
@@ -79,7 +79,7 @@ That key now exists in your cloud database with `machineId: null` — meaning "s
 
 ### Step 4 — Get them the installer
 
-`dist-electron/WhiteVanOps-Setup.exe` (Windows) or `WhiteVanOps-Setup-{arm64,x64}.dmg` (macOS), roughly 156 MB. There is only one installer per platform — no plan to match against the key. (`WhiteVanOps-Trial-Setup.exe` / `-Trial-Setup-{arm64,x64}.dmg` are the separate 30-day demos.) Options, in order of preference:
+`dist-electron/WhiteVanOps-Setup.exe` (Windows) or `WhiteVanOps-Setup-{arm64,x64}.dmg` (macOS), roughly 156 MB. There is only one installer per platform — the same file for paying customers and for trials. Options, in order of preference:
 
 - **Bring it on a USB drive** to the white glove appointment. Simplest, fastest, no upload, no "it says the file is corrupted."
 - **A download link** (Dropbox / Google Drive / your own site) if you're doing this remotely.
@@ -107,13 +107,17 @@ Give them: their admin password, the manuals, the license key on paper (for thei
 
 ## Part 4: The Demo Path (Worth Knowing, Because It Changes the Sale)
 
-You have a trial installer too — `WhiteVanOps-Trial-Setup.exe` (Windows) / `WhiteVanOps-Trial-Setup-{arm64,x64}.dmg` (macOS) — for a 30-day, fully-loaded demo. Its important property for sales purposes is that **it needs no key at all** — a prospect can install it themselves and it boots straight to the login screen. No activation window, no phone call to you.
+There is no separate demo installer any more — the normal `WhiteVanOps-Setup.exe` /
+`WhiteVanOps-Setup-{arm64,x64}.dmg` **is** the demo. On first launch the prospect clicks **Start
+30-day free trial** instead of typing a key: no key, no internet, no phone call to you. For a
+download link, use a **generic build made without a `.env.local`** so every prospect's install
+generates its own secrets (`MANUAL_Setup_Installation.md` §6).
 
-That makes it your ideal "let me leave this with you" artifact. When they're ready to buy, the conversion is:
+That makes it your ideal "let me leave this with you" artifact. When they're ready to buy:
 
-1. They give you their machine ID (shown on the trial-expired screen).
-2. You run `node scripts/license-manager.js --unlock-trial --machine <that ID>`.
-3. They paste the resulting JSON in. The 30-day lock is permanently defeated.
+1. You mint a normal activation key: `node scripts/license-manager.js`.
+2. They enter it — **Help → Enter activation key…** any time during the trial, or in the "Your trial has ended" window after day 30.
+3. That's it. No machine ID to collect, no JSON to paste. (The offline unlock code still exists for a site with no internet at all — see `docs/MANUAL_Troubleshooting.md` §1.6.)
 
 The elegance here: **they keep all the data they entered during the trial.** No reinstall, no migration, no lost work. That is a genuinely strong closing argument and you should use it deliberately — a prospect who has spent 30 days entering their real jobs and real clients has already done the switching cost that would otherwise stop them from buying.
 
@@ -214,14 +218,14 @@ Contained change: the sign calls in `license-manager.js`, the verify calls in `l
 node scripts/license-manager.js
 node scripts/license-manager.js --notes "Order #1234"
 
-# Convert a 30-day trial install into a permanent one
+# Convert a 30-day trial: just mint a normal key (above) — they enter it via
+# Help → Enter activation key… or the "trial has ended" window.
+# Offline fallback only (a site with no internet at all):
 node scripts/license-manager.js --unlock-trial --machine <machineId>
 
-# Build installers — one per platform, no plan axis
-npm run electron:build            # Windows installer   → WhiteVanOps-Setup.exe
-npm run electron:build:trial      # Windows 30-day trial → WhiteVanOps-Trial-Setup.exe
-npm run electron:build:mac        # macOS installer      → WhiteVanOps-Setup-{arm64,x64}.dmg
-npm run electron:build:mac:trial  # macOS 30-day trial   → WhiteVanOps-Trial-Setup-{arm64,x64}.dmg
+# Build installers — one per platform; trial vs. paid is chosen on first launch
+npm run electron:build            # Windows → WhiteVanOps-Setup.exe
+npm run electron:build:mac        # macOS   → WhiteVanOps-Setup-{arm64,x64}.dmg
 
 # Emergency: reset a locked-out admin password on a customer's PC
 # (copy both files from scripts/recovery/; the app must be running)
