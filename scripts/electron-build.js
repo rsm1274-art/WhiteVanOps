@@ -195,7 +195,10 @@ const builderConfig = JSON.parse(JSON.stringify(require(path.join(root, 'package
 builderConfig[targetPlatform].artifactName = artifactName;
 const builderConfigPath = path.join(root, '.next', `electron-builder.${targetPlatform}.json`);
 fs.writeFileSync(builderConfigPath, JSON.stringify(builderConfig, null, 2), 'utf8');
-run(`npx electron-builder --${targetPlatform} --config "${builderConfigPath}"`);
+// --publish never: electron-builder auto-publishes to GitHub Releases when it
+// detects CI (and fails without a token). Distribution is by hand or by the
+// build workflow's artifact upload, never by electron-builder itself.
+run(`npx electron-builder --${targetPlatform} --config "${builderConfigPath}" --publish never`);
 
 // 7b. Assert the packaged output actually contains the pieces electron-builder
 // is known to drop silently (missing extraResources sources, node_modules).

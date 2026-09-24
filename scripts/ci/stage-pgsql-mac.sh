@@ -66,7 +66,11 @@ while [ ${#QUEUE[@]} -gt 0 ]; do
     fi
     cp -p "$SRC/lib/$name" "$OUT/lib/"
     QUEUE+=("$SRC/lib/$name")
-  done < <(otool -L "$f" | tail -n +2 | awk '{print $1}' | grep -v "^$(basename "$f")\$" || true)
+  done < <(otool -L "$f" | awk -v self="$(basename "$f")" '
+    # Only the tab-indented lines are libraries; universal binaries also print
+    # one un-indented "<path> (architecture X):" header per arch. A dylib lists
+    # its own install id first, so skip entries naming the file itself.
+    /^\t/ { n = $1; sub(/.*\//, "", n); if (n != self) print $1 }')
 done
 chmod +x "$OUT"/bin/*
 
