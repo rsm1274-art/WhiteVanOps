@@ -8,6 +8,17 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// The trial guard reads app-data files and the machine id; its own rules are
+// covered in trial.test.ts. Here: off by default, on for one test.
+const trialLocked = vi.hoisted(() => ({ current: false }));
+vi.mock("@/lib/trialGuard", async () => {
+  const { NextResponse } = await import("next/server");
+  return {
+    trialExpiredResponse: () =>
+      trialLocked.current ? NextResponse.json({ code: "trial_expired" }, { status: 403 }) : null,
+  };
+});
+
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({
     get: () => ({ value: "fake-token" }),
@@ -46,6 +57,7 @@ beforeEach(() => {
   mockPrisma.job.findMany.mockResolvedValue([]);
   mockPrisma.inventoryItem.findMany.mockResolvedValue([]);
   sessionPayload.current = TECH;
+  trialLocked.current = false;
   vi.stubEnv("SESSION_SECRET", "test-secret-32-bytes-xxxxxxxxxxxx");
 });
 
@@ -72,6 +84,14 @@ describe("GET /api/field", () => {
     const res = await GET(req("?personnelId=per_1"));
     expect(res.status).toBe(403);
     expect(mockPrisma.job.findMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to load data once the trial has ended", async () => {
+    trialLocked.current = true;
+    const res = await GET(req());
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("trial_expired");
+    expect(mockPrisma.personnel.findMany).not.toHaveBeenCalled();
   });
 
   it("lets an admin view any technician", async () => {

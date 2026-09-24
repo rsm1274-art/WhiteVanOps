@@ -4,7 +4,7 @@
 
 Because White Van Ops runs entirely locally, you can physically copy the database folder to save a "Golden State" snapshot, and then paste it back to instantly reset the system.
 
-**Scope note:** this technique is for your own reusable demo laptop (a regular Base/Plus install you reset between client pitches). It does **not** apply to the separate `WhiteVanOps-Trial-Setup.exe` you leave behind with a prospect — that installer's 30-day clock is tracked by a signed, machine-bound `trial.json` file outside the `pgdata` folder (see `MANUAL_Setup_Installation.md` §6.4), so swapping `pgdata` on a trial-installed machine does not reset its trial lock.
+**Scope note:** this technique is for your own reusable demo laptop (a regular Base/Plus install you reset between client pitches). It does **not** apply to an install a prospect started as a 30-day trial — that clock is tracked by a signed, machine-bound `trial.json` outside the `pgdata` folder, with a copy inside the prospect's own database (see `MANUAL_Setup_Installation.md` §6), so swapping in a `pgdata` from another machine does not reset the trial.
 
 ---
 

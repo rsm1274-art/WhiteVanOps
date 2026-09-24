@@ -1,5 +1,6 @@
 import path from "path";
 import os from "os";
+import fs from "fs";
 import crypto from "crypto";
 
 // ---------------------------------------------------------------------------
@@ -88,4 +89,70 @@ export function verifyTrialUnlock(payload: unknown, machineId: string): payload 
   const expiresAt = typeof p.expiresAt === "string" ? p.expiresAt : null;
   const expected = signTrialUnlock(machineId, expiresAt);
   return timingSafeEqualStrings(p.sig, expected);
+}
+
+// ---------------------------------------------------------------------------
+// Trial anchor (trial.json). Written by electron/main.js when the operator
+// picks "Start 30-day trial" on first launch; mirrored into the database's
+// SystemSetting "trial_anchor" row so deleting the file alone can't restart
+// the clock. electron/trial.js duplicates this signature in plain JS.
+// ---------------------------------------------------------------------------
+
+export interface TrialAnchor {
+  installedAt: string;
+  machineId: string;
+  sig: string;
+}
+
+/** Signs a trial anchor. Mirrored in electron/trial.js — keep byte-identical. */
+export function signTrialAnchor(installedAt: string, machineId: string): string {
+  return crypto
+    .createHmac("sha256", LICENSE_SIGNING_SECRET)
+    .update(`${installedAt}:${machineId}`)
+    .digest("hex");
+}
+
+// ---------------------------------------------------------------------------
+// "Is this machine activated?" — the two signed files that end a trial.
+// Kept here (a leaf module) so both license.ts and trial.ts can ask without
+// importing each other. Both verify against THIS machine's id, never the
+// file's claimed one, and return null for anything absent/corrupt/forged.
+// ---------------------------------------------------------------------------
+
+export interface BaseLicense {
+  key: string;
+  machineId: string;
+  sig: string;
+}
+
+export function readVerifiedBaseLicense(machineId: string): BaseLicense | null {
+  try {
+    const filePath = path.join(getAppDataWvoDir(), "license.json");
+    if (!fs.existsSync(filePath)) return null;
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!data.key || !data.machineId || !data.sig) return null;
+    if (data.machineId !== machineId) return null;
+    const sig = String(data.sig);
+    if (
+      !timingSafeEqualStrings(sig, signBaseLicense(data.key, data.machineId)) &&
+      !timingSafeEqualStrings(sig, signLegacyBaseLicense(data.key, data.machineId))
+    ) {
+      return null;
+    }
+    return { key: data.key, machineId: data.machineId, sig: data.sig };
+  } catch {
+    return null;
+  }
+}
+
+/** The offline-conversion fallback (license-manager.js --unlock-trial). */
+export function readVerifiedTrialUnlock(machineId: string): TrialUnlockPayload | null {
+  try {
+    const unlockPath = path.join(getAppDataWvoDir(), "trial-unlock.json");
+    if (!fs.existsSync(unlockPath)) return null;
+    const data = JSON.parse(fs.readFileSync(unlockPath, "utf8"));
+    return verifyTrialUnlock(data, machineId) ? data : null;
+  } catch {
+    return null;
+  }
 }

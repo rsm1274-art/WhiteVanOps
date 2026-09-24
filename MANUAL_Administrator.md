@@ -481,7 +481,9 @@ The tiles at the top show total **Outstanding AR** (unpaid balances across Sent/
 
 ## Settings: License & Plan
 
-Open **Settings** in the sidebar. The **License & Plan** section shows your activation key and, if this is a trial install, the days remaining. There is no plan to upgrade or downgrade — every activated install runs the full feature set described in this manual.
+Open **Settings** in the sidebar. The **License & Plan** section shows your activation key and, if this install is on its 30-day trial, the days remaining. There is no plan to upgrade or downgrade — every activated install runs the full feature set described in this manual.
+
+**On a trial:** a "Trial: N days left" strip also shows across the top of the dashboard. To activate, choose **Help → Enter activation key…** in the WhiteVanOps window on the office computer and type your `WVO-` key; nothing is reinstalled and no data changes. After day 30 the app asks for the key when it opens and won't continue without one — your data is kept exactly as it was. If the office has no internet, use **Settings → License & Plan → "No internet at the office? Use an offline unlock code"** and contact your vendor with the Machine ID shown there.
 
 ---
 

@@ -235,8 +235,6 @@ describe("getLicense", () => {
   });
 
   it("a valid trial-unlock.json reconciles the DB with its key/expiry/notes", async () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-
     const expiresAt = "2027-06-01T00:00:00.000Z";
     const sig = crypto.createHmac("sha256", LICENSE_SIGNING_SECRET).update(`test-machine-id:${expiresAt}`).digest("hex");
 
@@ -272,8 +270,6 @@ describe("getLicense", () => {
   // A forged unlock (signed for someone else's machine) must not affect the
   // DB — it falls back to whatever the trial's own state already resolves to.
   it("ignores a trial-unlock.json signed for a different machine", async () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-
     const sig = crypto.createHmac("sha256", LICENSE_SIGNING_SECRET).update("some-other-machine:").digest("hex");
 
     vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => p.toString().endsWith("trial-unlock.json"));

@@ -9,6 +9,7 @@ import { shouldWarnAboutStorage } from "@/lib/storagePressure";
 import { formatTimeOnly, todayLocalStr } from "@/lib/dateUtils";
 import { buildExport } from "@/lib/fieldExport";
 import { groupFieldJobs } from "@/lib/jobOrder";
+import { isTrialExpiredResponse } from "@/lib/trialExpired";
 import { type SeenMap, seenStorageKey, parseSeen, reconcileSeen, jobBadge } from "@/lib/fieldSeen";
 import StuckOpsPanel from "@/components/field/StuckOpsPanel";
 import SyncStatusBar from "@/components/field/SyncStatusBar";
@@ -198,7 +199,11 @@ export default function FieldPage() {
   // Load personnel list on mount; auto-select if session user is a tech with a linked record
   useEffect(() => {
     Promise.all([
-      fetch("/api/field").then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      fetch("/api/field").then(async (r) => {
+        if (await isTrialExpiredResponse(r)) { window.location.href = "/trial-expired"; return new Promise(() => {}); }
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
         .then(data => { cacheApiResponse("/api/field", data); return data; })
         .catch(async () => {
           const cached = await getCachedApiResponse("/api/field");
@@ -262,6 +267,10 @@ export default function FieldPage() {
     const url = `/api/field?personnelId=${personnelId}`;
     try {
       const res = await fetch(url);
+      if (await isTrialExpiredResponse(res)) {
+        window.location.href = "/trial-expired";
+        return;
+      }
       if (!res.ok) throw new Error();
       const data = await res.json();
       setJobs(data.jobs ?? []);

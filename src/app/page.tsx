@@ -68,6 +68,7 @@ import AddInvoiceModal from "@/components/modals/AddInvoiceModal";
 import RecordPaymentModal from "@/components/modals/RecordPaymentModal";
 import SyncReviewModal from "@/components/modals/SyncReviewModal";
 import ConfirmDialog from "@/components/shared/ConfirmDialog";
+import TrialBanner from "@/components/trial/TrialBanner";
 import NotificationBell from "@/components/shared/NotificationBell";
 
 // ---------------------------------------------------------------------------
@@ -926,6 +927,8 @@ export default function Dashboard() {
             </button>
           </div>
         </header>
+
+        <TrialBanner />
 
         {/* Toast notification */}
         {toast && (

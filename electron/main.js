@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain, Menu } = require('electron');
 const path = require('path');
 const http = require('http');
 const net = require('net');
@@ -6,6 +6,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { ensurePostgres } = require('./postgres');
 const { startBackupScheduler } = require('./backup');
+const trial = require('./trial');
 const { machineIdSync } = require('node-machine-id');
 const { initializeApp } = require('firebase/app');
 const { getFirestore, doc, getDoc, updateDoc } = require('firebase/firestore');
@@ -212,11 +213,14 @@ async function createMainWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-function getLicensePath() {
-  const appDataPath = app.getPath('appData');
-  const wvoPath = path.join(appDataPath, 'whitevanops');
+function getWvoDir() {
+  const wvoPath = path.join(app.getPath('appData'), 'whitevanops');
   if (!fs.existsSync(wvoPath)) fs.mkdirSync(wvoPath, { recursive: true });
-  return path.join(wvoPath, 'license.json');
+  return wvoPath;
+}
+
+function getLicensePath() {
+  return path.join(getWvoDir(), 'license.json');
 }
 
 // Shared-database ("client mode") config. Absence of this file — the state of
@@ -317,33 +321,113 @@ async function verifyLicenseSilent() {
   }
 }
 
-// True when this packaged build was produced by `npm run electron:build:trial`.
-// scripts/electron-build.js writes WVO_IS_TRIAL="true" into
-// resources/nextjs/.env.local for trial builds. Read that file directly here:
-// this check runs before startServer() requires the standalone Next.js
-// server (which is what normally loads .env.local), and dev builds never
-// reach this function's caller because isDev already short-circuits.
-function isTrialBuild() {
+// One installer: whether this machine may run is decided at launch, not at
+// build time. Returns
+//   { kind: 'licensed' }                          — license.json or the offline trial-unlock
+//   { kind: 'trial', expired, daysRemaining }     — a 30-day trial was started here
+//   { kind: 'none' }                              — first launch: ask (key / trial / client)
+// A trial.json that exists but fails verification (hand-edited, copied from
+// another machine) counts as an expired trial — fail closed, like the server.
+async function getAccess() {
+  if (await verifyLicenseSilent()) return { kind: 'licensed' };
+  const hwid = machineIdSync();
+  const dir = getWvoDir();
+  if (trial.hasValidTrialUnlock(LICENSE_SIGNING_SECRET, dir, hwid)) return { kind: 'licensed' };
+  const anchor = trial.readAnchorFile(LICENSE_SIGNING_SECRET, dir, hwid);
+  if (anchor) return { kind: 'trial', ...trial.trialState(anchor.installedAt) };
+  if (trial.trialFileExists(dir)) return { kind: 'trial', expired: true, daysRemaining: 0 };
+  return { kind: 'none' };
+}
+
+// Mirrors the trial start date into the database so deleting trial.json alone
+// can't restart the clock (see electron/trial.js). Runs once the database is
+// up. A sync failure never blocks startup — the file-based state stands.
+async function reconcileTrialWithDb() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  const { Client } = require('pg');
+  const connUrl = new URL(url);
+  connUrl.searchParams.delete('schema'); // Prisma-only param; libpq rejects it
+  const client = new Client({ connectionString: connUrl.toString() });
   try {
-    const envPath = path.join(process.resourcesPath, 'nextjs', '.env.local');
-    if (!fs.existsSync(envPath)) return false;
-    return /^\s*WVO_IS_TRIAL\s*=\s*"?true"?\s*$/m.test(fs.readFileSync(envPath, 'utf8'));
-  } catch {
-    return false;
+    await client.connect();
+    return await trial.reconcileWithDb({
+      client, secret: LICENSE_SIGNING_SECRET, dir: getWvoDir(), machineId: machineIdSync(),
+    });
+  } catch (err) {
+    console.error('[trial] Could not sync the trial start date with the database:', err.message);
+    return null;
+  } finally {
+    try { await client.end(); } catch { /* never connected */ }
   }
 }
 
-// Resolves with { mode: 'host' } once a license is activated, or
-// { mode: 'client', host, port } if the operator instead chose "connect to an
-// existing office server" and completed the client-setup window. Only shown
-// when no valid license is already on disk — an already-activated machine
-// never sees this, which is what keeps every existing single-machine install
-// unaffected by client mode's existence.
-function showActivationWindow() {
+// While a trial is running, re-check hourly so an office PC left open past
+// day 30 still hits the activation screen (the server-side lock covers
+// phones and new logins).
+let trialTimer = null;
+function watchTrialExpiry() {
+  if (trialTimer) return;
+  trialTimer = setInterval(async () => {
+    const access = await getAccess();
+    if (access.kind !== 'trial') {
+      clearInterval(trialTimer);
+      trialTimer = null;
+      return;
+    }
+    if (!access.expired) return;
+    clearInterval(trialTimer);
+    trialTimer = null;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+    await showActivationWindow('expired'); // quits the app if closed without a key
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.reload();
+      mainWindow.show();
+    }
+  }, 60 * 60 * 1000);
+}
+
+// Help → "Enter activation key…": convert a running trial early.
+async function promptActivationFromMenu() {
+  const access = await getAccess();
+  if (access.kind === 'licensed') {
+    dialog.showMessageBox({ type: 'info', message: 'This installation is already activated.' });
+    return;
+  }
+  const result = await showActivationWindow('activate');
+  if (result.mode === 'host' && mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+}
+
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin';
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    { role: 'fileMenu' },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [{ label: 'Enter activation key…', click: () => { promptActivationFromMenu(); } }],
+    },
+  ]));
+}
+
+// `mode` decides what the window offers:
+//   'first'    — first launch: activation key, "Start 30-day trial", or
+//                "connect to an existing office server" (client mode).
+//   'expired'  — the trial has ended: activation key only. Closing quits.
+//   'activate' — Help menu, during a trial: activation key only. Closing
+//                just closes (resolves { mode: 'cancelled' }).
+// Resolves { mode: 'host' } once activated or a trial is started, or
+// { mode: 'client', host, port } from the client-setup hand-off. Never shown
+// on an already-activated machine, which is what keeps every existing install
+// unaffected by client mode and by the trial.
+function showActivationWindow(mode = 'first') {
   return new Promise((resolve) => {
     const activationWindow = new BrowserWindow({
       width: 500,
-      height: 400,
+      height: mode === 'first' ? 600 : 440,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -353,7 +437,7 @@ function showActivationWindow() {
       center: true
     });
 
-    activationWindow.loadFile(path.join(__dirname, 'activation.html'));
+    activationWindow.loadFile(path.join(__dirname, 'activation.html'), { query: { mode } });
 
     let settled = false;
 
@@ -392,8 +476,7 @@ function showActivationWindow() {
         event.reply('license-result', { success: true });
 
         setTimeout(() => {
-          ipcMain.removeListener('verify-license', licenseHandler);
-          ipcMain.removeListener('switch-to-client-setup', switchHandler);
+          removeListeners();
           if (!activationWindow.isDestroyed()) activationWindow.close();
           resolve({ mode: 'host' });
         }, 1500);
@@ -405,21 +488,46 @@ function showActivationWindow() {
     // The operator has an existing office server already and wants this
     // machine to be a client instead of activating its own license.
     const switchHandler = async () => {
+      if (mode !== 'first') return;
       settled = true;
-      ipcMain.removeListener('verify-license', licenseHandler);
-      ipcMain.removeListener('switch-to-client-setup', switchHandler);
+      removeListeners();
       if (!activationWindow.isDestroyed()) activationWindow.close();
       const target = await showClientSetupWindow();
       resolve({ mode: 'client', ...target });
     };
 
-    ipcMain.on('verify-license', licenseHandler);
-    ipcMain.on('switch-to-client-setup', switchHandler);
+    // "Start 30-day trial" — first launch only. Writes the signed trial.json;
+    // the database copy is added once Postgres is up (reconcileTrialWithDb),
+    // and an older date already in the database wins over this one.
+    const trialHandler = () => {
+      if (mode !== 'first') return;
+      const hwid = machineIdSync();
+      const dir = getWvoDir();
+      if (!trial.readAnchorFile(LICENSE_SIGNING_SECRET, dir, hwid)) {
+        trial.writeAnchorFile(LICENSE_SIGNING_SECRET, dir, new Date().toISOString(), hwid);
+      }
+      settled = true;
+      removeListeners();
+      if (!activationWindow.isDestroyed()) activationWindow.close();
+      resolve({ mode: 'host', trial: true });
+    };
 
-    activationWindow.on('closed', () => {
+    const removeListeners = () => {
       ipcMain.removeListener('verify-license', licenseHandler);
       ipcMain.removeListener('switch-to-client-setup', switchHandler);
-      if (!settled && !fs.existsSync(getLicensePath())) {
+      ipcMain.removeListener('start-trial', trialHandler);
+    };
+
+    ipcMain.on('verify-license', licenseHandler);
+    ipcMain.on('switch-to-client-setup', switchHandler);
+    ipcMain.on('start-trial', trialHandler);
+
+    activationWindow.on('closed', () => {
+      removeListeners();
+      if (settled) return;
+      if (mode === 'activate') {
+        resolve({ mode: 'cancelled' });
+      } else {
         app.quit();
       }
     });
@@ -526,15 +634,19 @@ app.whenReady().then(async () => {
   try {
     let hostConfig = readHostConfig();
 
+    buildAppMenu();
+
+    let access = null;
     if (hostConfig.mode === 'host') {
-      const isActivated = isTrialBuild() ? true : await verifyLicenseSilent();
-      if (!isActivated) {
+      access = await getAccess();
+      if (access.kind === 'none' || (access.kind === 'trial' && access.expired)) {
         if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
-        const choice = await showActivationWindow();
+        const choice = await showActivationWindow(access.kind === 'none' ? 'first' : 'expired');
         createLoadingWindow();
         if (choice.mode === 'client') {
           hostConfig = choice;
         }
+        access = await getAccess();
       }
     }
 
@@ -551,6 +663,19 @@ app.whenReady().then(async () => {
       await startServer();
       connectionTarget = { host: 'localhost', port: PORT };
       await waitForServer();
+
+      // The database is up: sync the trial start date with its copy there.
+      // An older date in the database (trial.json deleted and a "new" trial
+      // started) wins, which can mean the trial has in fact already ended.
+      if (access && access.kind === 'trial') {
+        const anchor = await reconcileTrialWithDb();
+        if (anchor && trial.trialState(anchor.installedAt).expired) {
+          if (loadingWindow && !loadingWindow.isDestroyed()) loadingWindow.close();
+          await showActivationWindow('expired');
+          createLoadingWindow();
+        }
+        watchTrialExpiry();
+      }
     }
 
     await createMainWindow();

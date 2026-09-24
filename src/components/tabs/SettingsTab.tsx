@@ -21,8 +21,8 @@ interface LicenseResponse {
 
 // v2.0: there is no Base/Plus plan any more — every activated install runs
 // the full feature set. This card is activation status only: the key, when
-// it was activated, and when (if ever) it expires. The trial mechanism
-// (30-day demo installers) is unrelated and still applies.
+// it was activated, and when (if ever) it expires — plus, on an install the
+// customer started as a 30-day trial, how long is left and how to activate.
 function LicenseSection() {
   const [license, setLicense] = useState<LicenseResponse | null>(null);
 
@@ -62,9 +62,18 @@ function LicenseSection() {
               Trial: {license.trial.daysRemaining} day{license.trial.daysRemaining === 1 ? "" : "s"} remaining
             </p>
             <p className="text-xs text-blue-700">
-              Purchased? Enter your activation key below to convert this install permanently.
+              Purchased? In the WhiteVanOps window on the office computer, choose{" "}
+              <span className="font-semibold">Help → Enter activation key…</span> and enter your{" "}
+              <span className="font-mono">WVO-</span> key. All data entered during the trial stays.
             </p>
-            <TrialUnlockForm machineId={license.trial.machineId} onUnlocked={fetchLicense} />
+            <details className="bg-white border border-blue-200 rounded">
+              <summary className="px-3 py-2 text-xs font-semibold text-blue-800 cursor-pointer">
+                No internet at the office? Use an offline unlock code
+              </summary>
+              <div className="px-3 pb-3">
+                <TrialUnlockForm machineId={license.trial.machineId} onUnlocked={fetchLicense} />
+              </div>
+            </details>
           </div>
         )}
 
