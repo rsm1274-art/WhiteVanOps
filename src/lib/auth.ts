@@ -11,7 +11,7 @@ export interface SessionUser {
   role: Role;
   personnelId?: string;
   mustChangePassword?: boolean;
-  /** Stamped at login for WVO_IS_TRIAL builds whose 30-day trial has expired with no unlock key applied. */
+  /** Stamped at login when this install's 30-day trial has ended and it isn't activated. */
   trialLocked?: boolean;
 }
 

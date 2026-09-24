@@ -158,15 +158,16 @@ trial) copy, and that's the whole job it does now.
 
 ## 6. Build the Desktop Installers
 
-Two installer variants — build vs. trial-or-not — per platform. There is no plan axis; every
-build runs the full feature set:
+**One installer per platform.** The same file serves paying customers and prospects on a 30-day
+trial; the choice is made by the customer on first launch, not at build time:
 
 ```bash
-npm run electron:build            # Windows installer   → dist-electron/WhiteVanOps-Setup.exe
-npm run electron:build:trial      # Windows 30-day trial → dist-electron/WhiteVanOps-Trial-Setup.exe
-npm run electron:build:mac        # macOS installer      → dist-electron/WhiteVanOps-Setup-{arm64,x64}.dmg
-npm run electron:build:mac:trial  # macOS 30-day trial   → dist-electron/WhiteVanOps-Trial-Setup-{arm64,x64}.dmg
+npm run electron:build            # Windows → dist-electron/WhiteVanOps-Setup.exe
+npm run electron:build:mac        # macOS   → dist-electron/WhiteVanOps-Setup-{arm64,x64}.dmg
 ```
+
+(The separate `electron:build:trial` / `-Trial-Setup` builds were removed on 2026-09-24; passing
+`--trial` to the build script now stops with an explanation.)
 
 **The activation key proves a legitimate install — it no longer selects a plan.** Keys are minted with:
 ```bash
@@ -174,25 +175,44 @@ node scripts/license-manager.js
 ```
 The key is stamped onto its Firestore record, read during activation, and baked into the machine-bound signed licence file on the customer's PC.
 
-### Trial/Demo Installers (Sales Demos)
+> **A download link for prospects must be a generic build:** build it with **no** `.env.local` in
+> the project folder. Each install then generates its own database password and `SESSION_SECRET`
+> on first launch (`<appData>/whitevanops/.env.local`). A build that bundles your `.env.local`
+> would hand the same secret to every prospect who downloads it (see §3).
 
-`electron:build:trial` and `electron:build:mac:trial` build time-limited demo installers for prospect evaluations, locked to 30 days after first launch.
+### First launch: activation key or 30-day trial
 
-* **First launch:** a trial install has no activation-key prompt at all — it boots directly to the WhiteVanOps login screen and runs the full feature set for 30 days. (This differs from a standard customer build, which always requires a `WVO-XXXX-XXXX-XXXX-XXXX` activation key before it will boot.)
-* **What the prospect sees:** during the trial, **Settings → License & Plan** shows license key `TRIAL-ACTIVE`, the note "30-Day Evaluation Period", and the expiry date (30 days after first launch) — so the end of the evaluation window is always visible in-app.
-* **At day 30:** the app locks and, after logging in with a password, shows an in-app activation-key screen.
-* **Converting a trial to a paid install:** Have the customer open **Settings → License & Plan** (or, once locked, the lockout screen itself) and copy their Machine ID. Generate their activation key on your machine:
-  ```bash
-  node scripts/license-manager.js --unlock-trial --machine <theirMachineId> [--notes "Order #1234"]
-  ```
-  Send the printed JSON block back to them to paste into the same screen. This is a one-time, permanent conversion — there's no way to re-trial a machine after this without deleting `%APPDATA%\whitevanops\` entirely, which is a customer-initiated action outside the app's control. **The good news to lead with:** all the data they entered during the trial stays — no reinstall, no migration, no re-entry.
+The first time WhiteVanOps opens, one window offers three things:
+
+* **Activate** — type a `WVO-XXXX-XXXX-XXXX-XXXX` key. Needs internet once; the key is bound to this computer. The app then runs with no time limit.
+* **Start 30-day free trial** — no key, no internet. Full feature set for 30 days from this moment.
+* **Connecting to an existing office server instead?** — client mode (§7A).
+
+During a trial:
+
+* A **"Trial: N days left"** strip shows across the top of the dashboard, and **Settings → License & Plan** shows `TRIAL-ACTIVE` with the end date.
+* To convert early, in the WhiteVanOps window choose **Help → Enter activation key…** and enter the `WVO-` key. Nothing is reinstalled and no data moves.
+
+When the 30 days are up:
+
+* The next time WhiteVanOps opens (or within the hour, if it's left open), it shows **"Your trial has ended"** with only the activation-key box. Closing that window closes the app. **The database is untouched** — the moment a key is entered, everything is exactly as they left it.
+* Field techs' phones and any other browser show a "trial has ended" page instead of data; once the office PC is activated, **Sign in again** on that page brings them back. Work a tech had queued offline is still accepted and kept.
+* The trial start date is kept both in `<appData>/whitevanops/trial.json` and inside the database, and the earlier of the two counts — deleting the file doesn't restart the trial.
+
+**Converting a site with no internet at all:** the old per-machine unlock code still works as a
+fallback. Have them open **Settings → License & Plan → "No internet at the office? Use an offline
+unlock code"** (or the same link on the trial-ended page), read you the Machine ID, and run:
+```bash
+node scripts/license-manager.js --unlock-trial --machine <theirMachineId> [--notes "Order #1234"]
+```
+Send the printed JSON block back for them to paste in (superuser account required).
 
 ---
 
 ### What the build commands do
 
 1. Compile the Next.js production build
-2. Copy `.env.local` into the Next.js standalone bundle (adding `WVO_IS_TRIAL="true"` for trial builds only)
+2. Copy `.env.local` into the Next.js standalone bundle, if one exists (leave it out for a generic/download build — see above)
 3. Bundle every Prisma migration into `migrations.json`. The installed app applies the pending ones on every launch (all of them on a new install, only the new ones on an upgrade)
 4. Package the server, credentials (if `.env.local` present), portable PostgreSQL (`pgsql/`), and Electron shell into a single installer (NSIS on Windows, `.dmg` on macOS)
 5. Output the resulting executable, named per the table above, in `dist-electron/`

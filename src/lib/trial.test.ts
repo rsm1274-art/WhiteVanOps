@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import crypto from "crypto";
 import { machineIdSync } from "node-machine-id";
 
-// trial.ts imports license.ts, which imports db.ts (opens a real pg.Pool at
-// import time and throws without DATABASE_URL) — mock it, same as license.test.ts.
+// trial.ts is file-based, but license.ts (imported below for the secret)
+// imports db.ts, which opens a real pg.Pool at import time — mock it.
 vi.mock("@/lib/db", () => ({
   prisma: {
     license: {
@@ -22,110 +22,102 @@ import { getTrialStatus, markTrialUnlocked } from "./trial";
 import { LICENSE_SIGNING_SECRET } from "./license";
 
 const NOW = new Date("2026-07-13T12:00:00Z");
+const hmac = (s: string) => crypto.createHmac("sha256", LICENSE_SIGNING_SECRET).update(s).digest("hex");
+
+/** Fakes the app-data directory: each key is a file name, its value the contents. */
+function fakeFiles(files: Record<string, string>) {
+  const find = (p: fs.PathLike | number) => Object.keys(files).find((name) => String(p).endsWith(`/${name}`) || String(p).endsWith(`\\${name}`));
+  vi.spyOn(fs, "existsSync").mockImplementation((p) => find(p as fs.PathLike) !== undefined);
+  vi.spyOn(fs, "readFileSync").mockImplementation(((p: fs.PathLike) => {
+    const name = find(p);
+    if (!name) throw new Error(`ENOENT ${String(p)}`);
+    return files[name];
+  }) as typeof fs.readFileSync);
+}
+
+const anchor = (installedAt: string, machineId = "test-machine-id") =>
+  JSON.stringify({ installedAt, machineId, sig: hmac(`${installedAt}:${machineId}`) });
 
 describe("getTrialStatus", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(machineIdSync).mockReturnValue("test-machine-id");
-    vi.unstubAllEnvs();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("is a no-op for non-trial builds", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "");
-    vi.spyOn(fs, "existsSync").mockReturnValue(true); // would blow up if read
-    const status = getTrialStatus(NOW);
-    expect(status).toEqual({ isTrial: false, daysRemaining: 0, isLocked: false, machineId: null });
-  });
-
-  it("creates a signed anchor file on first read", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+  it("is not a trial when no trial was ever started (office PM2 server, dev)", () => {
+    fakeFiles({});
     const writeSpy = vi.spyOn(fs, "writeFileSync").mockImplementation(() => {});
-    vi.spyOn(fs, "mkdirSync").mockImplementation(() => undefined as unknown as string);
-
-    const status = getTrialStatus(NOW);
-
-    expect(writeSpy).toHaveBeenCalledOnce();
-    const [writtenPath, writtenContent] = writeSpy.mock.calls[0];
-    expect(String(writtenPath)).toMatch(/trial\.json$/);
-    const anchor = JSON.parse(writtenContent as string);
-    expect(anchor.installedAt).toBe(NOW.toISOString());
-    expect(anchor.machineId).toBe("test-machine-id");
-    expect(status.isTrial).toBe(true);
-    expect(status.isLocked).toBe(false);
-    expect(status.daysRemaining).toBe(30);
+    expect(getTrialStatus(NOW)).toEqual({ isTrial: false, daysRemaining: 0, isLocked: false, machineId: "test-machine-id" });
+    expect(writeSpy).not.toHaveBeenCalled(); // never starts a trial on its own
   });
 
   it("is not locked within the 30-day window", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-    const installedAt = new Date("2026-07-01T12:00:00Z").toISOString();
-    const sig = crypto
-      .createHmac("sha256", LICENSE_SIGNING_SECRET)
-      .update(`${installedAt}:test-machine-id`)
-      .digest("hex");
-
-    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
-    vi.spyOn(fs, "readFileSync").mockReturnValue(
-      JSON.stringify({ installedAt, machineId: "test-machine-id", sig })
-    );
-
-    const status = getTrialStatus(NOW); // 12 days after install
+    fakeFiles({ "trial.json": anchor("2026-07-01T12:00:00.000Z") });
+    const status = getTrialStatus(NOW); // 12 days in
+    expect(status.isTrial).toBe(true);
     expect(status.isLocked).toBe(false);
     expect(status.daysRemaining).toBe(18);
   });
 
-  it("is locked once 30 days have elapsed with no unlock file", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-    const installedAt = new Date("2026-05-01T12:00:00Z").toISOString();
-    const sig = crypto
-      .createHmac("sha256", LICENSE_SIGNING_SECRET)
-      .update(`${installedAt}:test-machine-id`)
-      .digest("hex");
-
-    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
-    vi.spyOn(fs, "readFileSync").mockReturnValue(
-      JSON.stringify({ installedAt, machineId: "test-machine-id", sig })
-    );
-
+  it("is locked once 30 days have elapsed", () => {
+    fakeFiles({ "trial.json": anchor("2026-05-01T12:00:00.000Z") });
     const status = getTrialStatus(NOW);
     expect(status.isLocked).toBe(true);
     expect(status.daysRemaining).toBe(0);
   });
 
-  it("is never locked once a valid trial-unlock.json exists, regardless of elapsed time", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial-unlock.json"));
-
-    const status = getTrialStatus(NOW);
-    expect(status.isLocked).toBe(false);
+  it("an activation key (license.json) ends the trial, however old it is", () => {
+    const key = "WVO-TEST-1";
+    fakeFiles({
+      "trial.json": anchor("2026-01-01T12:00:00.000Z"),
+      "license.json": JSON.stringify({ key, machineId: "test-machine-id", sig: hmac(`${key}:test-machine-id`) }),
+    });
+    expect(getTrialStatus(NOW)).toMatchObject({ isTrial: false, isLocked: false });
   });
 
-  it("fails closed (locked) if the anchor file is corrupt/unparseable JSON", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
+  it("the offline unlock (trial-unlock.json) also ends the trial", () => {
+    fakeFiles({
+      "trial.json": anchor("2026-01-01T12:00:00.000Z"),
+      "trial-unlock.json": JSON.stringify({ machineId: "test-machine-id", expiresAt: null, notes: null, sig: hmac("test-machine-id:") }),
+    });
+    expect(getTrialStatus(NOW)).toMatchObject({ isTrial: false, isLocked: false });
+  });
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
-    vi.spyOn(fs, "readFileSync").mockReturnValue("{ this is not json");
+  it("ignores a license.json signed for another machine", () => {
+    const key = "WVO-TEST-1";
+    fakeFiles({
+      "trial.json": anchor("2026-05-01T12:00:00.000Z"),
+      "license.json": JSON.stringify({ key, machineId: "other", sig: hmac(`${key}:other`) }),
+    });
+    expect(getTrialStatus(NOW).isLocked).toBe(true);
+  });
 
+  it("fails closed (locked) if the anchor file is corrupt", () => {
+    fakeFiles({ "trial.json": "{ this is not json" });
     expect(() => getTrialStatus(NOW)).not.toThrow();
-    const status = getTrialStatus(NOW);
-    expect(status.isLocked).toBe(true);
+    expect(getTrialStatus(NOW).isLocked).toBe(true);
   });
 
-  it("fails closed (locked) if the anchor file signature has been tampered with", () => {
-    vi.stubEnv("WVO_IS_TRIAL", "true");
-    const installedAt = new Date("2026-07-01T12:00:00Z").toISOString();
+  it("fails closed if the anchor was tampered with (date moved forward)", () => {
+    const real = JSON.parse(anchor("2026-05-01T12:00:00.000Z"));
+    fakeFiles({ "trial.json": JSON.stringify({ ...real, installedAt: "2026-07-10T12:00:00.000Z" }) });
+    expect(getTrialStatus(NOW).isLocked).toBe(true);
+  });
 
-    vi.spyOn(fs, "existsSync").mockImplementation((p: fs.PathLike) => String(p).endsWith("trial.json"));
-    vi.spyOn(fs, "readFileSync").mockReturnValue(
-      JSON.stringify({ installedAt, machineId: "test-machine-id", sig: "tampered" })
-    );
-
-    const status = getTrialStatus(NOW);
-    expect(status.isLocked).toBe(true);
+  it("fails closed if the anchor was copied from another machine", () => {
+    fakeFiles({ "trial.json": anchor("2026-07-10T12:00:00.000Z", "other-machine") });
+    expect(getTrialStatus(NOW).isLocked).toBe(true);
   });
 });
 
 describe("markTrialUnlocked", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("writes trial-unlock.json with the given payload", () => {
     vi.spyOn(fs, "existsSync").mockReturnValue(true);
     const writeSpy = vi.spyOn(fs, "writeFileSync").mockImplementation(() => {});

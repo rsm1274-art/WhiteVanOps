@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getLicense } from "@/lib/license";
+import { trialExpiredResponse } from "@/lib/trialGuard";
 
 export async function GET() {
+  const expired = trialExpiredResponse();
+  if (expired) return expired;
+
   try {
     const license = await getLicense();
 

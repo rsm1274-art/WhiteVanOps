@@ -80,18 +80,17 @@ Before diving in, these four answers eliminate most of the search space. Ask the
 
 ### 1.6 ✅ "The trial expired but they already paid"
 
-**Symptom:** Prospect converted to a paying customer, but the install is showing the trial-expired lock screen.
+**Symptom:** Prospect converted to a paying customer, but WhiteVanOps shows "Your trial has ended" (office PC) or the trial-ended page (phones/browsers).
 
-**What's actually happening:** the trial lock is stamped into the login session and enforced independently of activation. Paying you doesn't unlock it — the conversion key does.
+**What's actually happening:** a trial only ends when an activation key is entered on the office computer. Paying you doesn't unlock it by itself.
 
 **Fix:**
 
-1. Get the **machine ID** from the trial-expired screen (they can read it to you or send a photo).
-2. Mint the unlock key:
-   ```bash
-   node scripts/license-manager.js --unlock-trial --machine <machineId>
-   ```
-3. They paste it into Settings → License & Plan or the trial-expired screen.
+1. Mint a normal activation key: `node scripts/license-manager.js`.
+2. They type it into the "Your trial has ended" window that appears when WhiteVanOps opens on the office PC. During the trial they can use **Help → Enter activation key…** instead. It needs internet once.
+3. Techs tap **Sign in again** on the trial-ended page on their phones.
+
+**No internet at the office?** Use the offline fallback instead of step 1–2. Get the **Machine ID** from **Settings → License & Plan → "No internet at the office?"** or the same link on the trial-ended page. Run `node scripts/license-manager.js --unlock-trial --machine <machineId>`, and have a superuser paste the JSON block there.
 
 **The good news to lead with:** all the data they entered during the trial stays. No reinstall, no migration, no re-entry. Say this out loud on the conversion call — it's the reason they're not hesitating.
 
@@ -430,7 +429,7 @@ When you hit something not in this manual, write it down here. The entry costs t
 |---|---|
 | "Already in use on another machine" | §1.1 — clear `machineId` in Firestore |
 | Activation can't reach server | §1.3 — needs internet, one time only |
-| Trial locked but they paid | §1.6 — mint the unlock key |
+| Trial locked but they paid | §1.6 — mint a normal activation key |
 | Tech's work isn't reaching the office | §2.0 — check office WiFi, LAN address, firewall, session |
 | No Add to Home Screen | §2.1 — must be Safari on iOS |
 | Everything stopped this afternoon | §3.1 — **PC went to sleep** |
