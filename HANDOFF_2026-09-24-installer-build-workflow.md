@@ -4,6 +4,10 @@
 
 Follows `HANDOFF_2026-09-24-single-installer-trial.md` (merged to main with PR #7). That handoff's real-device checklist is still open, and it can now be worked because installers exist.
 
+## Status
+
+Merged to main as [PR #9](https://github.com/rsm1274-art/WhiteVanOps/pull/9). The workflow now lives on the default branch, so **Actions → Build installers → Run workflow** (branch: `main`) works. Installers from the validation run are downloadable until 2026-10-24; for anything after that, run the workflow again.
+
 ## What the owner asked for
 
 Build both installers (Windows and Mac) with GitHub Actions, so nobody needs a local build setup.
@@ -34,6 +38,8 @@ Validation run [35943854949](https://github.com/rsm1274-art/WhiteVanOps/actions/
 - Each job takes about 5 minutes.
 
 ## Not done / needs attention
+
+**Next step for the owner:** download the artifacts, install them on a Windows PC and a Mac, and work through the checklist below together with the previous handoff's.
 
 - **Install the built artifacts on real machines.** Run the checklist in the previous handoff: first launch → trial / activation / client mode, the upgrade migration, and field access.
 - On a Mac, confirm the ad-hoc-signed app opens after right-click → Open (or System Settings → Privacy & Security → Open Anyway), and that the bundled Postgres starts.
