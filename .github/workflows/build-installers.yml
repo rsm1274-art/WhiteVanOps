@@ -21,7 +21,6 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
-    branches: ["claude/bold-ramanujan-4iw2e8"] # TEMPORARY: validate before merge; removed before the PR
 
 concurrency:
   group: build-installers-${{ github.ref }}
