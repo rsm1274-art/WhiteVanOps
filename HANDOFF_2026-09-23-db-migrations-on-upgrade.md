@@ -46,7 +46,7 @@ Read `HANDOFF_2026-09-23-dispatch-improvements.md` first. It found the gap fixed
   1. Install an **older** build and add data.
   2. Install the new build over it.
   3. Confirm the startup succeeds, the data survives, a `.dump` appears in `pre-upgrade-backups`, and the dispatch features (arrival time, client phone) save.
-- Windows line endings: if the build machine checks migrations out with CRLF, the recorded checksums differ from a Unix checkout's. The runner doesn't care, but `prisma migrate status` run elsewhere against that database would report them as modified. Consider a `.gitattributes` `*.sql text eol=lf` rule if that ever shows up.
+- Windows line endings: handled. `.gitattributes` (`*.sql text eol=lf`) makes every machine check migration files out with Unix line endings, so a Windows-built installer records the same checksums Prisma computes elsewhere and `prisma migrate status` won't report shipped migrations as modified.
 - The office PM2 database and any external database still need `npx prisma migrate deploy` by hand (documented in §12).
 
 ## Next session should
