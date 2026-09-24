@@ -73,6 +73,7 @@
       "shortcutName": "WhiteVanOps"
     },
     "mac": {
+      "identity": "-",
       "target": [
         {
           "target": "dmg",
